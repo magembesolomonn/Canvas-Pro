@@ -1,4 +1,4 @@
-.notes-section { margin-top: 21px; }
+.notes-section { margin-top: 0; }
 #notes-tree > summary { color: var(--muted); }
 #note-pages { padding-left: 13px; padding-bottom: 2px; }
 #note-pages button { min-width: 0; padding: 6px 8px; }

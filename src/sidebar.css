@@ -41,11 +41,14 @@ body.light-mode .sidebar nav button.active {
 .sidebar .window-space {
   position: sticky; top: 0; z-index: 4;
   margin-inline: -12px; padding-inline: 12px;
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 96%, transparent) 0 72%, color-mix(in srgb, var(--bg) 76%, transparent) 88%, transparent 100%);
+  background: linear-gradient(to bottom, rgb(41 42 44 / 82%) 0 64%, rgb(41 42 44 / 58%) 82%, transparent 100%);
   backdrop-filter: blur(15px) saturate(130%);
 }
 body.light-mode .sidebar .window-space {
-  background: linear-gradient(to bottom, rgb(241 241 243 / 97%) 0 72%, rgb(241 241 243 / 76%) 88%, transparent 100%);
+  background: linear-gradient(to bottom, rgb(241 241 243 / 90%) 0 64%, rgb(241 241 243 / 66%) 82%, transparent 100%);
+}
+body.native-glass .sidebar .window-space {
+  background: linear-gradient(to bottom, rgb(35 36 42 / 66%) 0 64%, rgb(35 36 42 / 42%) 82%, transparent 100%);
 }
 .sidebar #navigation,.sidebar [data-section="media"] { position: relative; padding-bottom: 12px; margin-bottom: 10px; }
 .sidebar #navigation::after,.sidebar [data-section="media"]::after {
