@@ -6,3 +6,7 @@ dist/
 
 .prototype/
 /bin/
+.agents/
+/audits/
+/Canvas Pro Capture.zip
+/skills-lock.json
