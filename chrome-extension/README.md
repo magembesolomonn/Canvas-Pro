@@ -2,18 +2,18 @@
 
 A Manifest V3 Chrome extension for the Canvas Pro Mac app. It also passed an isolated Chromium-based Helium test on this Mac.
 
-## One-time setup on this Mac
+## Install
 
-The native bridge is installed by the project setup. Quit the old Asset Library app and open **Canvas Pro** from Applications.
+Install **Canvas Pro** in Applications and open it once to register the browser connection and install the app-managed extension copy.
 
 1. Open `chrome://extensions` in Chrome or Helium.
 2. Enable **Developer mode**.
 3. Click **Load unpacked** and select `~/Library/Application Support/Canvas Pro/Browser Extension`.
 4. Pin **Canvas Pro Capture**, click its toolbar icon and look for **Connected**.
 
-Development copy: `/Users/solomon/Documents/eagle/chrome-extension`. Stable extension ID: `lgcmnmpcbfdjmhjkejjkbimaiipobfkn`. The manifest public key keeps this ID stable when the folder is moved.
+For a development checkout, load the `chrome-extension` folder containing `manifest.json`. The extension ID remains stable because the manifest contains its public key.
 
-If the bridge needs reinstalling, run `npm run install:extension` from `/Users/solomon/Documents/eagle`. This registers `com.canvaspro.capture` for this extension ID in Chrome, and in Helium when its profile directory exists. It does not change browser preferences or automatically enable an extension.
+If the browser connection needs reinstalling, run `npm run install:extension` from the project root after installing Canvas Pro in Applications. This registers `com.canvaspro.capture` for Chrome and Helium. It does not change browser preferences or automatically enable an extension.
 
 ## Capture
 
@@ -43,16 +43,8 @@ No account, analytics, cloud service or paid API. Page inspection uses `activeTa
 
 The test suite validates native-message framing, rejected input, streamed file imports, source metadata, screenshot and text captures, duplicate detection and partial failures. `npm run test:browser` creates an isolated Helium profile and a local fixture website, then verifies actual native messaging, image/video downloads, screenshots/crops, page text, collection and the connected popup. Only that disposable test copy receives broad host access so automated fixture inspection does not require a real toolbar click; the shipped extension retains its `activeTab` permission model.
 
-## Updating to extension 0.5.0 / app 0.8.1
+## Update
 
-Quit and reopen Canvas Pro after the app update. In `chrome://extensions`, reload Canvas Pro Capture (the circular arrow). The unpacked extension retains its stable ID. Then refresh open pages. For deep media discovery, enable the scan before playing the video; return to **Find videos & animated media** after it has loaded.
+After updating Canvas Pro, quit and reopen the app, then click **Reload** on Canvas Pro Capture in `chrome://extensions` and refresh open pages. For development updates, run `npm run install:extension` again before reloading the extension.
 
 Social adapter reference: [X extraction implementation maintained by yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/twitter.py) and [Reddit video fields](https://developers.reddit.com/docs/api/public-api/type-aliases/RedditVideo).
-
-### 0.5.1 / app 0.8.2
-
-Fixed Electron rejecting the raw Referer header on Twitter and other captures. Successful capture rows dismiss after two seconds; the panel disappears when empty. Failed rows remain visible and identify the failure directly. Reload the extension and reopen Canvas Pro after updating.
-
-### 0.5.2 / app 0.9.0
-
-Save web link now creates a portable `.url` bookmark. Page title, exposed cover and site icon are passed to the app; covers/icons are cached locally and pages open in the app when previewed. Direct right-click image/video capture remains available. Reload the extension after updating.
