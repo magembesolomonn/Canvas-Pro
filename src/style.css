@@ -106,6 +106,8 @@ dialog{background:#2a2b2e;backdrop-filter:none;border-color:#ffffff22;box-shadow
 .settings-row+.settings-row{border-top:1px solid #ffffff0c}.settings-row:hover{background:#ffffff06}
 .settings-row-icon{display:grid;place-items:center;width:22px;flex-shrink:0;color:#aeb0b6}.settings-row-icon svg{width:20px;height:20px}
 .settings-row-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}.settings-row-copy strong{font-size:12px;font-weight:500}.settings-row-copy small{font-size:10px;line-height:1.5;color:#929297}.settings-chevron{font-size:22px;font-weight:300;color:#85858a}
+.settings-toggle{display:grid;grid-template-columns:minmax(0,1fr) 16px;align-items:center;cursor:pointer}
+.settings-toggle input{width:16px;height:16px;margin:0;justify-self:end;accent-color:#91a9c5}
 .settings-footnote{margin:16px 2px 0;font-size:10px;color:#85858a}
 @media(prefers-contrast:more){.settings-options,.settings-row+.settings-row{border-color:#888}.preview #previous,.preview #next,.preview #close-preview{color:#ddd}}
 

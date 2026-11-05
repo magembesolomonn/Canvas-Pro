@@ -6,7 +6,7 @@ A personal, local-first macOS asset library. The dark three-panel interface take
 
 ### Build from a clean clone
 
-On an Apple Silicon Mac with Node.js and Xcode Command Line Tools installed:
+On an Apple Silicon Mac with Node.js, Python 3.9+, and Xcode Command Line Tools installed:
 
 ```sh
 git clone <repository-url> canvas-pro
@@ -16,7 +16,7 @@ npm run build:native
 npm start
 ```
 
-`npm run build:native` compiles the media and analysis helpers from `native/` into the ignored `bin/` directory. The helpers are generated locally and are not uploaded to GitHub. To build a double-clickable app instead of starting the development app, run `npm run build:mac`; it compiles the helpers automatically and creates `dist/Canvas Pro.app`. The app is signed locally for development and is not notarized for public distribution. Building does not modify the source files or your personal library. `npm ci` installs the exact dependencies from `package-lock.json`; it may download Electron during installation.
+`npm start` builds the RSS parser and a standalone Trafilatura helper before launching. The helper is built in a local ignored Python virtual environment from `requirements-rss.txt`; the first build needs internet access to download the pinned Python packages. Python is only needed to build the helper—the bundled app runs it without a separate Python installation. The media and analysis helpers are generated in ignored `bin/` too. To build a double-clickable app instead of starting the development app, run `npm run build:mac`; it compiles the helpers automatically and creates `dist/Canvas Pro.app`. The app is signed locally for development and is not notarized for public distribution. Building does not modify the source files or your personal library. `npm ci` installs the exact dependencies from `package-lock.json`; it may download Electron during installation.
 
 ## Import and browse
 
@@ -38,9 +38,17 @@ Imports copy originals, never move source files. SHA-256 detects exact duplicate
 
 The library is in Electron's application-data directory (normally `~/Library/Application Support/Asset Library/Library`). Use **Library on this Mac** to find the actual location. It contains `originals/`, `thumbnails/`, and `library.sqlite`. Quit the app before copying the entire Library folder as a backup. Never edit the managed originals or database directly. **Export copy** saves an individual original to a chosen location. Trash is reversible; there is no permanent-delete operation yet.
 
+## RSS reader
+
+The **RSS Feed** sidebar section accepts RSS and Atom URLs, Google News RSS links, or a website address. It discovers advertised feeds and common endpoints such as `/rss`; if a publisher homepage returns HTTP 403, it can subscribe to that publisher's public Google News RSS search instead. When a website has no feed but is accessible, it can create a reader-only subscription from recent article links. Right-click a feed in the sidebar to unsubscribe. It refreshes subscriptions every 30 minutes and stores feeds, articles, read/unread state, stars and extracted article caches in the active library's SQLite database.
+
+**Automatically Extract Full Articles** is enabled by default in Settings. RSS excerpts are shown immediately while up to two article pages are fetched in the background; opening an article moves it ahead of unstarted extraction work. Trafilatura is the primary extractor; Mozilla Readability is used if Trafilatura errors, returns no useful content, or produces structurally insufficient content. Successful HTML, title, author, publication date, description, image, extraction method and timestamp are cached locally. If a feed item lacks an image, the app checks recent article pages in the background for Open Graph/Twitter image metadata or an image in the article body—even when the RSS body is already complete. Failures are retained with their status and error and are not automatically retried on each refresh; the reader offers retry and cache refresh actions. A feed's explicit full-content field is used without fetching its article text, while descriptions and content marked as truncated are treated as excerpts. Pages with paywall/login signals or HTTP errors fall back to the original feed text and publisher link; the reader does not bypass access restrictions. Google News search feeds provide headlines and excerpts only when the publisher URL cannot be reached; article pages are still fetched directly from publishers and are not extracted from Google News pages. Pages that require JavaScript are not browser-rendered, so extraction may fail and show the feed excerpt instead.
+
+`npm run build:rss-extractor` can build the standalone helper separately. `npm run test:rss` tests the asynchronous queue, cache, failure/retry behavior, extraction metadata, paywall policy, and Electron UI with deterministic fixtures; it does not depend on live publisher sites.
+
 ## Validation
 
-`npm run check` checks JavaScript syntax. `npm test` verifies byte-preserving import, exact duplicate detection, cross-collection duplicate membership, metadata persistence, rating validation and reversible Trash. These checks do not replace macOS interaction testing.
+`npm run check` checks JavaScript syntax. `npm test` verifies byte-preserving import, exact duplicate detection, cross-collection duplicate membership, metadata persistence, rating validation and reversible Trash. `npm run test:rss` builds the RSS parser and tests feed discovery/parsing, library persistence, article state, paywall fallback and the Electron reader UI. These checks do not replace macOS interaction testing.
 
 Manual acceptance checklist:
 

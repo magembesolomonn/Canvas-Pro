@@ -22,6 +22,7 @@ const {contextTemplate}=require('./file-menu.cjs');
 const {ImportQueue}=require('./import-queue.cjs');
 const {Workbench}=require('./workbench.cjs');
 const {HealthService}=require('./health-service.cjs');
+const {RSSService,validURL}=require('./rss-reader.cjs');
 app.setName(process.env.CANVAS_PROTOTYPE?'Canvas Pro Prototype':'Canvas Pro');
 const legacyData=path.join(app.getPath('appData'),'Asset Library');
 if(fs.existsSync(path.join(legacyData,'Library/library.sqlite')))app.setPath('userData',legacyData);
@@ -31,7 +32,7 @@ if (process.env.AGAGWU_DATA_DIR) {
   app.setPath('userData', process.env.AGAGWU_DATA_DIR);
 }
 if(!process.env.ASSET_TEST_MODE&&!app.requestSingleInstanceLock()){app.quit();return;}
-let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench;
+let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,rssService;
 let notesStore;
 let assistantService;
 const getAssistant = () => assistantService ??= new (require('./assistant.cjs').Assistant)(
@@ -261,6 +262,10 @@ app.whenReady().then(async () => {
   }
   if(!process.env.ASSET_TEST_MODE&&(savedLibrary?.root!==libraryRoot||savedLibrary.recent[0]!==libraryRoot))locations.remember(libraryRoot);
   library = new Library(libraryRoot);
+  rssService = new RSSService(library.db, {
+    fetcher: process.env.ASSET_TEST_MODE ? (url, options) => net.fetch(url, options) : publicFetch,
+    onUpdate: () => { if (win && !win.isDestroyed()) win.webContents.send('rss-changed'); }
+  });
   workbench=new Workbench(library);
   let switchingLibrary=false;
   async function changeLibrary(mode){if(switchingLibrary)return;switchingLibrary=true;try{await flushWorkspaces();const target=await chooseLibrary(mode);if(!target||target===library.root)return;pendingLibrarySwitch=()=>{locations.remember(target);app.relaunch();};app.quit();}catch(error){dialog.showErrorBox('Could not switch library',error.message);}finally{switchingLibrary=false;}}
@@ -311,6 +316,21 @@ app.whenReady().then(async () => {
     try {
       const u = new URL(request.url);
       if(u.hostname==='ai'){const file=localModel.file(decodeURIComponent(u.pathname));return file?await fileResponse(file,request):new Response('',{status:404});}
+      if(u.hostname==='rss-image'){
+        const url=validURL(u.searchParams.get('url')||'');
+        const image=await publicFetch(url);
+        const type=(image.headers.get('content-type')||'').split(';')[0].toLowerCase();
+        if(!image.ok||!['image/jpeg','image/png','image/webp','image/gif','image/avif','image/x-icon','image/vnd.microsoft.icon'].includes(type))return new Response(null,{status:415});
+        const size=Number(image.headers.get('content-length'));
+        if(Number.isFinite(size)&&size>4*1024*1024)return new Response(null,{status:413});
+        const reader=image.body?.getReader();
+        if(!reader)return new Response(null,{status:404});
+        const chunks=[];let total=0;
+        try{while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>4*1024*1024){await reader.cancel();return new Response(null,{status:413});}chunks.push(value);}}
+        finally{reader.releaseLock();}
+        const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+        return new Response(bytes,{headers:{'Content-Type':type,'Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'}});
+      }
       const id = u.pathname.slice(1);
       if (!/^[a-f0-9-]{36}$/.test(id)) return new Response('', { status: 400 });
       if(u.hostname==='note-cover'){
@@ -345,6 +365,26 @@ app.whenReady().then(async () => {
   });
   const trusted=event=>{if(event.sender!==win?.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Unavailable outside the library.');};
   ipcMain.handle('notes-emoji',(event,id,emoji)=>{trusted(event);return getNotesStore().setEmoji(id,emoji);});
+  ipcMain.handle('rss-feeds',event=>{trusted(event);return rssService.feeds();});
+  ipcMain.handle('rss-summary',event=>{trusted(event);return rssService.summary();});
+  ipcMain.handle('rss-articles',(event,options)=>{trusted(event);return rssService.articles(options||{});});
+  ipcMain.handle('rss-add-feed',(event,url)=>{trusted(event);return rssService.add(url);});
+  ipcMain.handle('rss-remove-feed',(event,id)=>{trusted(event);return rssService.remove(id);});
+  ipcMain.handle('rss-feed-context-menu',(event,id)=>{
+    trusted(event);
+    const feed=rssService.feed(id);
+    const requestUnsubscribe=()=>win.webContents.send('rss-unsubscribe-requested',id);
+    const menu=Menu.buildFromTemplate([{label:'Unsubscribe from “'+feed.title+'”…',click:requestUnsubscribe}]);
+    if(process.env.ASSET_TEST_MODE){global.rssFeedMenu=menu;global.rssFeedMenuAction=requestUnsubscribe;return;}
+    menu.popup({window:win});
+  });
+  ipcMain.handle('rss-refresh',async event=>{trusted(event);return rssService.refreshAll();});
+  ipcMain.handle('rss-read',(event,id)=>{trusted(event);return rssService.read(id);});
+  ipcMain.handle('rss-extraction-settings',event=>{trusted(event);return {enabled:rssService.automaticExtraction()};});
+  ipcMain.handle('rss-set-automatic-extraction',(event,enabled)=>{trusted(event);return rssService.setAutomaticExtraction(enabled);});
+  ipcMain.handle('rss-retry-extraction',(event,id,options)=>{trusted(event);return rssService.retryExtraction(id,options||{});});
+  ipcMain.handle('rss-set-state',(event,id,state)=>{trusted(event);return rssService.setState(id,state);});
+  ipcMain.handle('rss-open-url',(event,value)=>{trusted(event);return shell.openExternal(validURL(value));});
   ipcMain.handle('notes-show-emoji-picker',event=>{trusted(event);if(process.platform==='darwin')app.showEmojiPanel();});
   ipcMain.handle('notes-list',event=>{trusted(event);return getNotesStore().list();});
   ipcMain.handle('notes-get',(event,id)=>{trusted(event);return getNotesStore().get(id);});
@@ -730,6 +770,8 @@ app.whenReady().then(async () => {
     {label:'Edit',submenu:[{label:'Undo',accelerator:'CmdOrCtrl+Z',click:()=>win?.webContents.send('history-command',false)},{label:'Redo',accelerator:'CmdOrCtrl+Shift+Z',click:()=>win?.webContents.send('history-command',true)},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]}, { role: 'viewMenu' }, { role: 'windowMenu' }
   ]));
   createWindow();
+  rssService.start();
+  app.on('before-quit',()=>rssService?.close());
   const bridgeDirectory=(process.env.ASSET_TEST_MODE||process.env.CANVAS_PROTOTYPE)?path.join(app.getPath('userData'),'Bridge'):path.join(app.getPath('appData'),'Canvas Pro/Bridge');
   captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>{if(win&&!win.isDestroyed())win.webContents.send('library-changed',ids);},onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);}});
   try{await captureBridge.start();}catch(e){console.error('Browser capture bridge:',e.message);}
@@ -746,7 +788,7 @@ let shutdownStarted=false,shutdownComplete=false;
 app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;
-  flushWorkspaces().then(()=>Promise.allSettled([bookmarks?.close(),webPreview?.close(),importQueue?.close(),captureBridge?.close(),smartIndex?.close(),localModel?.close(),assistantService?.close(),workbench?.close(),healthService?.cancel(),mediaCache?.cancelAndDrain([...mediaCache.pending.keys()])])).then(()=>{pendingLibrarySwitch?.();pendingLibrarySwitch=null;shutdownComplete=true;app.quit();}).catch(error=>{shutdownStarted=false;dialog.showErrorBox('Workspace could not be saved',error.message);});
+  flushWorkspaces().then(()=>Promise.allSettled([rssService?.close(),bookmarks?.close(),webPreview?.close(),importQueue?.close(),captureBridge?.close(),smartIndex?.close(),localModel?.close(),assistantService?.close(),workbench?.close(),healthService?.cancel(),mediaCache?.cancelAndDrain([...mediaCache.pending.keys()])])).then(()=>{pendingLibrarySwitch?.();pendingLibrarySwitch=null;shutdownComplete=true;app.quit();}).catch(error=>{shutdownStarted=false;dialog.showErrorBox('Workspace could not be saved',error.message);});
 });
 app.on('will-quit', () => {library?.close();});
 module.exports = { importBuffer, importURL };

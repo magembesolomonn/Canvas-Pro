@@ -22,7 +22,7 @@ const plist = path.join(output, 'Contents/Info.plist');
 for (const [key, value] of Object.entries({CFBundleIconFile:'AssetLibrary.icns',CFBundleName:'Canvas Pro',CFBundleDisplayName:'Canvas Pro',CFBundleIdentifier:'local.assetlibrary.desktop',CFBundleShortVersionString:pkg.version,CFBundleVersion:'1'})) {
   execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} ${value}`, plist]);
 }
-for (const helper of ['media-tool','analysis-tool']) execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', path.join(appDir, 'bin',helper)]);
+for (const helper of ['media-tool','analysis-tool','rss-extractor']) execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', path.join(appDir, 'bin',helper)]);
 execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', output], { stdio: 'inherit' });
 execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', output], { stdio: 'inherit' });
 console.log('Created ' + output);

@@ -6,6 +6,7 @@ dist/
 
 .prototype/
 /bin/
+electron/rss-engine.cjs
 .agents/
 /audits/
 /Canvas Pro Capture.zip

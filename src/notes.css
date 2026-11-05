@@ -47,7 +47,7 @@
 .note-block textarea { field-sizing: content; resize: none; min-height: 30px; overflow-wrap: anywhere; }
 .note-block-heading .note-block-content > input:not([type="checkbox"]) { font-size: 21px; font-weight: 650; }
 .note-format-toolbar {
-  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 3;
+  position: absolute; left: 0; bottom: 100%; z-index: 3;
   display: flex; align-items: center; gap: 6px; padding: 6px;
   border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--panel) 92%, transparent);
   box-shadow: 0 5px 18px #0002; backdrop-filter: blur(12px) saturate(130%);

@@ -55,7 +55,14 @@ async function insertBlock(type) {
   await run("setView('notes')");
   await until(() => run("!$('#notes-workspace').hidden && !$('#notes-editor').inert"));
   assert.equal(await run("$('#notes-tree').open && !$('#notes-empty').hidden"), true);
+  assert.equal(await run(`(() => {
+    const add=$('#new-note'),icon=add.querySelector('.sf-symbol');
+    return add.getAttribute('aria-label')==='New note' &&
+      getComputedStyle(icon).getPropertyValue('--symbol').includes('plus.png');
+  })()`),true);
   await run("$('#new-note').click();$('#note-template').focus()");
+  assert.deepEqual(await run("Array.from($('#note-template').options,option=>option.value)"),['blank','movies','finance','product','youtube']);
+  assert.equal(await run("$('#note-template-dialog').open && $('#notes-tree').open"),true);
   assert.ok(await run("$('#note-template-form .dialog-actions').getBoundingClientRect().top - $('#note-template').getBoundingClientRect().bottom >= 16"));
   await run("$('#note-template-dialog').close()");
   await create('finance');
@@ -179,6 +186,27 @@ async function insertBlock(type) {
   await create('product');
   assert.equal(await run("$('#note-blocks input[aria-label=Heading]').value"), 'Product spec');
   assert.deepEqual(await run(`(() => {
+    let input = $('#note-blocks input[aria-label=Heading]');
+    input.focus();
+    let row = input.closest('.note-block');
+    let toolbar = row.querySelector('.note-format-toolbar');
+    const focused = toolbar.classList.contains('is-visible');
+    toolbar.querySelector('.note-format-bold').click();
+    const bold = toolbar.classList.contains('is-visible') &&
+      toolbar.querySelector('.note-format-bold').getAttribute('aria-pressed')==='true';
+    toolbar.querySelector('[aria-label="Text style"]').value='paragraph';
+    toolbar.querySelector('[aria-label="Text style"]').dispatchEvent(new Event('change'));
+    row = $('#note-blocks').firstElementChild;
+    toolbar = row.querySelector('.note-format-toolbar');
+    const paragraph = row.classList.contains('note-block-paragraph') && toolbar.classList.contains('is-visible');
+    toolbar.querySelector('[aria-label="Text style"]').value='heading-2';
+    toolbar.querySelector('[aria-label="Text style"]').dispatchEvent(new Event('change'));
+    row = $('#note-blocks').firstElementChild;
+    toolbar = row.querySelector('.note-format-toolbar');
+    const heading = row.classList.contains('note-block-heading') && toolbar.classList.contains('is-visible');
+    return {focused,bold,paragraph,heading};
+  })()`),{focused:true,bold:true,paragraph:true,heading:true});
+  assert.deepEqual(await run(`(() => {
     const row = $('.note-block-heading');
     row.querySelector('details').open = true;
     const size = row.querySelector('[aria-label="Heading size"]');
@@ -206,14 +234,29 @@ async function insertBlock(type) {
   })()`),true);
   await run("$('#note-add-paragraph').click();$('#note-add-paragraph').click()");
   await run(`(() => {
+    document.activeElement.blur?.();
+    for (const row of document.querySelectorAll('.note-block-paragraph')) {
+      row.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse',relatedTarget:document.body}));
+    }
     const inputs=[...document.querySelectorAll('.note-block-paragraph textarea')];
     inputs.at(-1).blur();
+    for (const row of document.querySelectorAll('.note-block-paragraph')) {
+      row.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse',relatedTarget:document.body}));
+    }
     inputs.at(-2).closest('.note-block').dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
   })()`);
   await new Promise(resolve=>setTimeout(resolve,250));
   assert.equal(await run("[...document.querySelectorAll('.note-block-paragraph')].at(-2).querySelector('.note-format-toolbar').classList.contains('is-visible')"),false);
   await new Promise(resolve=>setTimeout(resolve,400));
   assert.equal(await run("[...document.querySelectorAll('.note-block-paragraph')].at(-2).querySelector('.note-format-toolbar').classList.contains('is-visible')"),true);
+  const toolbarGap = await run(`(() => {
+    const row=[...document.querySelectorAll('.note-block-paragraph')].at(-2);
+    const toolbar=row.querySelector('.note-format-toolbar');
+    const a=toolbar.getBoundingClientRect(),b=row.getBoundingClientRect();
+    row.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse',relatedTarget:toolbar}));
+    return {touching:Math.abs(a.bottom-b.top)<2,visible:toolbar.classList.contains('is-visible')};
+  })()`);
+  assert.deepEqual(toolbarGap,{touching:true,visible:true});
   const singleToolbar = await run(`(() => {
     const inputs=[...document.querySelectorAll('.note-block-paragraph textarea')];
     inputs.at(-2).closest('.note-block').dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));
@@ -354,6 +397,14 @@ async function insertBlock(type) {
   await until(() => run("$('.tracker-results')?.textContent.includes('Converted example')"));
   console.log('NOTES_TRACKER_BOARD_UNDO_RECORD_DETAILS_AND_SUBPAGE_OK');
   console.log('NOTES_TEMPLATES_REORDER_COVERS_AND_CLOSE_FLUSH_OK');
+  await run("localStorage.setItem('sidebar-section-notes','true');$('#notes-tree').open=true");
+  await new Promise(resolve => {
+    win.webContents.once('did-finish-load',resolve);
+    win.reload();
+  });
+  await until(() => run("typeof NotesWorkspace !== 'undefined' && $('#note-pages').children.length>0"));
+  assert.equal(await run("$('#notes-tree').open && document.querySelectorAll('#note-pages button').length>0"),true);
+  console.log('NOTES_SIDEBAR_POPULATES_ON_STARTUP_OK');
   app.quit();
 })().catch(error => { console.error(error); app.exit(1); });
 app.on('quit', () => fs.rmSync(data, { recursive: true, force: true }));

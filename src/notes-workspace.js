@@ -400,10 +400,10 @@ const NotesWorkspace = (() => {
   function scheduleFormatToolbar(row) {
     clearTimeout(formatTimer);
     formatPendingRow = row;
-    setFormatOwner(null);
     formatTimer = setTimeout(() => {
-      if (formatPendingRow !== row || formatHoveredRow !== row || !row.isConnected) return;
+      if (formatPendingRow !== row) return;
       formatPendingRow = null;
+      if (formatHoveredRow !== row || !row.isConnected) return;
       setFormatOwner(row);
     },600);
   }
@@ -657,7 +657,19 @@ const NotesWorkspace = (() => {
   }
   function redrawBlock(index) {
     changed();
-    $('#note-blocks').children[index].replaceWith(blockNode(note.blocks[index], index));
+    const previous = $('#note-blocks').children[index];
+    const wasOwner = formatOwner === previous;
+    const wasHovered = formatHoveredRow === previous;
+    const wasPending = formatPendingRow === previous;
+    if (wasPending) {
+      clearTimeout(formatTimer);
+      formatPendingRow = null;
+    }
+    const replacement = blockNode(note.blocks[index], index);
+    previous.replaceWith(replacement);
+    if (wasHovered) formatHoveredRow = replacement;
+    if (wasPending && wasHovered) scheduleFormatToolbar(replacement);
+    if (wasOwner) setFormatOwner(replacement);
   }
   function renderBlocks() {
     $('#note-blocks').replaceChildren(...note.blocks.map(blockNode));
@@ -789,6 +801,7 @@ const NotesWorkspace = (() => {
       document.execCommand(event.shiftKey ? 'redo' : 'undo');
     });
     $('#notes-tree').ontoggle = () => { if ($('#notes-tree').open) safe(loadList); };
+    safe(loadList);
     $('#note-template-form').onsubmit = event => {
       event.preventDefault();
       run(async () => {
