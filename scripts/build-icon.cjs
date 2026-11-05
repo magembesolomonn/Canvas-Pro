@@ -1,0 +1,3 @@
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os');const{execFileSync}=require('node:child_process');
+const root=path.resolve(__dirname,'..'),set=fs.mkdtempSync(path.join(os.tmpdir(),'asset-icon-'))+'/AssetLibrary.iconset';fs.mkdirSync(set);for(const size of [16,32,128,256,512])for(const scale of [1,2]){const pixels=size*scale;execFileSync('/usr/bin/sips',['--resampleHeightWidth',String(pixels),String(pixels),path.join(root,'src/assets/app-icon.png'),'--out',path.join(set,`icon_${size}x${size}${scale===2?'@2x':''}.png`)]);}
+execFileSync('/usr/bin/iconutil',['-c','icns',set,'-o',path.join(root,'assets/AssetLibrary.icns')]);console.log('Built assets/AssetLibrary.icns (16–1024 pixels).');

@@ -1,0 +1,4 @@
+// Source-only prototype. Uses a separate persistent library; never updates an installed app.
+const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process'),root=path.resolve(__dirname,'..'),profile=path.join(root,'.prototype/Profile'),libraryRoot=path.join(root,'.prototype/Library.canvaslibrary');
+fs.mkdirSync(profile,{recursive:true});const {Library}=require('../electron/library.cjs'),{LibraryLocation}=require('../electron/library-location.cjs');const library=new Library(libraryRoot);library.close();const locations=new LibraryLocation(path.join(profile,'libraries.json'));if(!locations.read().root)locations.remember(libraryRoot);
+const child=spawn(require('electron'),[root],{env:{...process.env,AGAGWU_DATA_DIR:profile,CANVAS_PROTOTYPE:'1'},stdio:'inherit'});child.on('exit',code=>process.exitCode=code||0);

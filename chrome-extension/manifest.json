@@ -1,0 +1,114 @@
+{
+  "manifest_version": 3,
+  "name": "Canvas Pro Capture",
+  "version": "0.7.7",
+  "description": "Save images, GIFs, discovered videos and screenshots to Canvas Pro with live capture activity.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwSXvHIlTct+NBOsO/MkxZ0XFWlbf7vHV3SA354pYADE3vKaUmbnePji4DBXJ1ut6DV0bTllLpPO1moi1UbLnO+U/zOtVjJ6A5mmHMckCfoGu4qQ3iwPcDETsfddqSTwPmGG1d7dimNme9HXxB/NZy5h3m9rfMQjQ24LhWdHfAAZarYewdpsx794wHJ8uwqC13urFCZNcRUOkQ3bCH/AUrtI1KeLbk+cuvTrdXravm1MIZJFAU2cMLyQy3PRGv7w2jbmB0bVO7xrDN1rVlSjzjkCxtCcJ2IPKwFue90Fe4AVimol/GhDbedAiOjEY3UkVS7UU2vNYfqcz4jhc+1rRAwIDAQAB",
+  "permissions": [
+    "activeTab",
+    "contextMenus",
+    "scripting",
+    "storage",
+    "nativeMessaging",
+    "webRequest",
+    "sidePanel"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Capture to Canvas Pro"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "commands": {
+    "capture-viewport": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Capture visible page to Canvas Pro"
+    },
+    "capture-area": {
+      "suggested_key": {
+        "default": "Alt+Shift+C"
+      },
+      "description": "Capture selected area to Canvas Pro"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' data: http: https:; connect-src 'self' data: https://cdn.syndication.twimg.com https://*.reddit.com https://reddit.com https://*.instagram.com https://instagram.com https://*.pinterest.com https://pinterest.com"
+  },
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.instagram.com/*"
+      ],
+      "js": [
+        "instagram-media.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://*.x.com/*",
+        "https://*.twitter.com/*",
+        "https://*.instagram.com/*",
+        "https://*.reddit.com/*",
+        "https://*.pinterest.com/*",
+        "https://*.facebook.com/*",
+        "https://*.tiktok.com/*",
+        "https://*.threads.com/*",
+        "https://*.threads.net/*",
+        "https://*.bsky.app/*",
+        "https://*.linkedin.com/*",
+        "https://*.youtube.com/*"
+      ],
+      "js": [
+        "social-core.js",
+        "social.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/32.png"
+      ],
+      "matches": [
+        "https://*.x.com/*",
+        "https://*.twitter.com/*",
+        "https://*.instagram.com/*",
+        "https://*.reddit.com/*",
+        "https://*.pinterest.com/*",
+        "https://*.facebook.com/*",
+        "https://*.tiktok.com/*",
+        "https://*.threads.com/*",
+        "https://*.threads.net/*",
+        "https://*.bsky.app/*",
+        "https://*.linkedin.com/*",
+        "https://*.youtube.com/*"
+      ]
+    }
+  ],
+  "host_permissions": [
+    "https://cdn.syndication.twimg.com/*",
+    "https://*.reddit.com/*",
+    "https://*.instagram.com/*",
+    "https://*.pinterest.com/*"
+  ],
+  "side_panel": {
+    "default_path": "collector.html"
+  },
+  "version_name": "0.7.7"
+}

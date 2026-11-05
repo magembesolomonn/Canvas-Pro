@@ -1,0 +1,5 @@
+const fs=require('node:fs'),path=require('node:path'),esbuild=require('esbuild'),root=path.resolve(__dirname,'..');
+esbuild.buildSync({entryPoints:[path.join(root,'scripts/smart/page.cjs')],bundle:true,platform:'node',format:'cjs',minify:true,external:['canvas'],outfile:path.join(root,'electron/smart-page.cjs')});
+esbuild.buildSync({entryPoints:[path.join(root,'scripts/smart/semantic-worker.mjs')],bundle:true,platform:'browser',format:'esm',minify:true,outfile:path.join(root,'src/semantic-worker.js')});
+const dest=path.join(root,'src/vendor/onnx');fs.mkdirSync(dest,{recursive:true});for(const file of ['ort-wasm-simd-threaded.jsep.mjs','ort-wasm-simd-threaded.jsep.wasm'])fs.copyFileSync(path.join(root,'node_modules/onnxruntime-web/dist',file),path.join(dest,file));
+for(const [pkg,name] of [['@mozilla/readability','LICENSE.md'],['linkedom','LICENSE'],['@huggingface/transformers','LICENSE'],['onnxruntime-web','LICENSE']]){const from=path.join(root,'node_modules',pkg,name);if(fs.existsSync(from))fs.copyFileSync(from,path.join(root,'src/vendor',pkg.replaceAll('/','-')+'-'+name));}

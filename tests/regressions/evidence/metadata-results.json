@@ -1,0 +1,38 @@
+{
+  "events": [
+    {
+      "boundary": "renderer -> media-info -> renderer",
+      "id": "temporary-audio",
+      "priority": true,
+      "result": {
+        "unavailable": true,
+        "peaks": []
+      }
+    },
+    {
+      "boundary": "renderer -> media-info -> renderer",
+      "id": "temporary-audio",
+      "priority": true,
+      "result": {
+        "duration": 12,
+        "peaks": [
+          0.1,
+          0.5
+        ],
+        "artwork": true
+      }
+    }
+  ],
+  "first": {
+    "unavailable": true,
+    "peaks": []
+  },
+  "second": {
+    "duration": 12,
+    "peaks": [
+      0.1,
+      0.5
+    ],
+    "artwork": true
+  }
+}

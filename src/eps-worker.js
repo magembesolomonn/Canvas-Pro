@@ -1,0 +1,3 @@
+// Decode PostScript in an isolated, disposable virtual filesystem.
+importScripts('vendor/ghostscript/gs.js');
+self.onmessage=async event=>{try{const gs=await Module({noInitialRun:true,locateFile:name=>new URL('vendor/ghostscript/'+name,self.location.href).href,print:()=>{},printErr:()=>{}});gs.FS.writeFile('/input.eps',new Uint8Array(event.data));try{gs.callMain(['-dSAFER','-dBATCH','-dNOPAUSE','-dEPSCrop','-dMaxBitmap=16777216','-sDEVICE=pngalpha','-r120','-sOutputFile=/output.png','/input.eps']);}catch(e){if(e.status!==0)throw e;}const png=gs.FS.readFile('/output.png');if(png.length>32*1024*1024)throw Error('EPS preview is too large.');postMessage({png},[png.buffer]);}catch(error){postMessage({error:error.message||'EPS decoding failed.'});}};

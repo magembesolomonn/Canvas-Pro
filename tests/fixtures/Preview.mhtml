@@ -1,0 +1,9 @@
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="test-boundary"
+
+--test-boundary
+Content-Type: text/html
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><h1>Saved archive fixture</h1></body></html>
+--test-boundary--

@@ -1,0 +1,25 @@
+// Launch the actual packaged binary twice; remote debugging is confined to a disposable profile.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{spawn,execFileSync}=require('node:child_process');const appPath=process.argv[2];if(!appPath)throw Error('Pass the mounted app path.');const root=fs.mkdtempSync('/private/tmp/canvas-package-launch-');const browserHome=path.join(root,'Browser Account');let child,ws,sequence=0;const pending=new Map(),wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function launch(){let log='';child=spawn(path.join(appPath,'Contents/MacOS/Electron'),['--remote-debugging-port=0'],{env:{...process.env,ASSET_TEST_MODE:'1',CANVAS_TEST_BROWSER_HOME:browserHome,AGAGWU_DATA_DIR:path.join(root,'Profile')},stdio:['ignore','pipe','pipe']});child.stdout.on('data',d=>log+=d);child.stderr.on('data',d=>log+=d);let port;for(let i=0;i<300;i++){port=log.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)/)?.[1];if(port)break;if(child.exitCode!==null)throw Error('App exited: '+log);await wait(30);}if(!port)throw Error('No debugging port: '+log);let page;for(let i=0;i<200;i++){const pages=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();page=pages.find(p=>p.type==='page'&&p.url.includes('/src/index.html'));if(page)break;await wait(30);}assert.ok(page,'Packaged page did not load');ws=new WebSocket(page.webSocketDebuggerUrl);await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j;});ws.onmessage=e=>{const m=JSON.parse(e.data),p=pending.get(m.id);if(p){pending.delete(m.id);m.error?p.reject(Error(JSON.stringify(m.error))):p.resolve(m.result);}};for(let i=0;i<200;i++){if(await run("typeof CanvasWorkspace!=='undefined'&&typeof api!=='undefined'"))return;await wait(30);}throw Error('Packaged UI did not initialize');}
+async function run(expression){const id=++sequence;const response=await new Promise((resolve,reject)=>{pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression,awaitPromise:true,returnByValue:true}}));});if(response.exceptionDetails)throw Error(JSON.stringify(response.exceptionDetails));return response.result.value;}
+async function stop(){ws?.close();if(child&&child.exitCode===null){const exited=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await exited;}child=null;}
+(async()=>{const helium=path.join(browserHome,'Library/Application Support/net.imput.helium/NativeMessagingHosts/com.canvaspro.capture.json');
+ await launch();
+ const chrome=path.join(browserHome,'Library/Application Support/Google/Chrome/NativeMessagingHosts/com.canvaspro.capture.json');
+ for(let i=0;i<200&&(!fs.existsSync(chrome)||!fs.existsSync(helium));i++)await wait(30);
+ assert.ok(fs.existsSync(chrome),'Packaged app did not automatically register the Chrome connection');
+ assert.ok(fs.existsSync(helium),'Packaged app did not automatically register the Helium connection');
+ const host=JSON.parse(fs.readFileSync(chrome,'utf8'));
+ assert.ok(fs.existsSync(host.path));
+ assert.deepEqual(host.allowed_origins,['chrome-extension://lgcmnmpcbfdjmhjkejjkbimaiipobfkn/']);
+ assert.ok(fs.existsSync(path.join(browserHome,'Library/Application Support/Canvas Pro/Browser Extension/manifest.json')));
+ assert.deepEqual(JSON.parse(fs.readFileSync(helium,'utf8')),host);
+ const {encodeFrame}=require('../electron/framing.cjs');
+ const response=execFileSync(host.path,[],{
+  input:encodeFrame({version:1,op:'ping'}),timeout:12000,
+  env:{...process.env,CANVAS_NO_LAUNCH:'1',CANVAS_BRIDGE_DIR:path.join(root,'Profile','Bridge')}
+ });
+ const reply=JSON.parse(response.subarray(4,4+response.readUInt32LE()).toString());
+ assert.equal(reply.ok,true);assert.equal(reply.version,require('../package.json').version);
+ console.log('PACKAGED_AUTOMATIC_BROWSER_REGISTRATION_OK');
+ await run('refresh()');const fixture=path.join(root,'Fixture.png');fs.copyFileSync(path.join(__dirname,'fixtures/Portrait.png'),fixture);const saved=await run(`(async()=>{const result=await api.importPaths([${JSON.stringify(fixture)}],null);await refresh();const b=await api.canvasCreate('Packaged board');await refresh();await CanvasWorkspace.open(b.id);await CanvasWorkspace.addAssets(b.id,result.ids);CanvasWorkspace.add('text',{x:300,y:40});await CanvasWorkspace.flushAll();return {id:b.id,asset:result.ids[0],root:(await api.list()).root};})()`);assert.ok(saved.root.startsWith(root));assert.equal(await run('CanvasWorkspace.doc.items.size'),2);console.log('ACTUAL_PACKAGED_BINARY_IMPORT_CANVAS_OK');await stop();await launch();await run('refresh()');assert.ok(await run(`assetById.has('${saved.asset}')`));const board=await run(`api.canvasGet('${saved.id}')`);assert.equal(board.items.length,2);await run(`CanvasWorkspace.open('${saved.id}')`);assert.equal(await run("$('main').inert"),false);console.log('ACTUAL_PACKAGED_BINARY_RELAUNCH_PERSISTENCE_OK');await stop();})().catch(async error=>{console.error(error);await stop();process.exitCode=1;}).finally(()=>fs.rmSync(root,{recursive:true,force:true}));

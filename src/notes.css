@@ -1,0 +1,239 @@
+.notes-section { margin-top: 21px; }
+#notes-tree > summary { color: var(--muted); }
+#note-pages { padding-left: 13px; padding-bottom: 2px; }
+#note-pages button { min-width: 0; padding: 6px 8px; }
+#note-pages button span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#note-pages :is(.note-emoji,.sf-symbol), .notes-app-icon { flex: none; width: 22px; height: 22px; }
+#note-pages .note-emoji { display: grid; place-items: center; font: 17px/1 "Apple Color Emoji", sans-serif; }
+#note-pages .note-drop-target { outline: 1px solid currentColor; outline-offset: -2px; }
+.notes-footer { display: none; }
+.notes-active { --inspector: 0px; }
+.notes-active > #inspector,
+.notes-active main > :is(.filter-bar,#tags-bar,#gallery,#empty,footer) { display: none; }
+#notes-workspace { flex: 1; min-height: 0; overflow: auto; }
+.notes-document { width: min(100%, 820px); padding: 28px clamp(20px, 5vw, 60px) 60px; margin: 0 auto; }
+.notes-empty { padding-top: 12vh; }
+.notes-empty p { color: var(--muted); }
+.notes-active .notes-footer { display: flex; min-height: 34px; align-items: center; gap: 10px; padding: 5px 16px; border-top: 1px solid var(--line); color: var(--muted); }
+.notes-page-tools,.notes-add-block,.notes-table-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.notes-page-tools { margin-bottom: 14px; }
+.notes-page-tools button,.notes-table-actions button { font-size: 12px; }
+.notes-page-menu,.note-block-actions { position: relative; }
+.notes-page-menu summary,.note-block-actions summary { cursor: pointer; padding: 5px 8px; }
+.notes-page-menu > div,.note-block-actions > div {
+  position: absolute; top: 100%; right: 0; z-index: 2; min-width: max-content;
+  display: grid; gap: 4px; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+}
+.note-block-actions summary { list-style: none; font-size: 16px; line-height: 1; }
+.note-block-actions summary::-webkit-details-marker { display: none; }
+#note-cover img { display: block; width: 100%; height: clamp(135px, 24vh, 255px); object-fit: cover; border-radius: 8px; }
+#note-title {
+  display: block; width: 100%; font: 700 clamp(26px, 4vw, 40px)/1.2 var(--app-font);
+  padding: 9px 5px; margin: 14px 0; border: 1px solid transparent; background: transparent; color: var(--text);
+}
+.note-block { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px; align-items: start; margin: 3px 0; }
+.note-block-content,.note-toggle { display: flex; gap: 6px; align-items: flex-start; min-width: 0; }
+.note-block-toggle .note-block-content { display: grid; grid-template-columns: minmax(0,1fr); }
+.note-block-toggle .note-block-content > textarea { margin-left: 30px; width: calc(100% - 30px); }
+.note-block :is(textarea,input:not([type="checkbox"])):not(.note-tracker input) {
+  min-width: 0; width: 100%; padding: 5px; font: inherit; border: 1px solid transparent;
+  border-radius: 4px; background: transparent; color: var(--text);
+}
+.note-block textarea { field-sizing: content; resize: none; min-height: 30px; overflow-wrap: anywhere; }
+.note-block-heading .note-block-content > input:not([type="checkbox"]) { font-size: 21px; font-weight: 650; }
+.note-format-toolbar {
+  position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 3;
+  display: flex; align-items: center; gap: 4px; padding: 4px;
+  border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--panel) 92%, transparent);
+  box-shadow: 0 5px 18px #0002; backdrop-filter: blur(12px) saturate(130%);
+  opacity: 0; pointer-events: none; transform: translateY(3px);
+}
+.note-block:hover > .note-format-toolbar,.note-block:focus-within > .note-format-toolbar { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.note-format-toolbar select { min-width: 106px; padding: 3px 22px 3px 6px; font-size: 11px; }
+.note-format-toolbar button { width: 25px; min-width: 25px; height: 24px; padding: 0; border: 0; background: transparent; font-size: 12px; }
+.note-format-toolbar button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.note-format-bold { font-weight: 700; }
+.note-format-align { display: flex; border-left: 1px solid var(--line); padding-left: 3px; }
+.note-format-center { text-align: center; }
+.note-format-right { text-align: right; }
+@media (prefers-reduced-motion: no-preference) {
+  .note-format-toolbar { transition: opacity 120ms ease-out, transform 120ms ease-out; }
+}
+.note-bullet,.note-block .note-spring-check { margin: 7px 2px 0 5px; }
+.note-bullet { flex: none; color: var(--muted); }
+.note-block-content:focus-within > .note-bullet { color: var(--text); }
+.note-spring-check {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--muted);
+  cursor: pointer;
+}
+.note-spring-check:has(input:focus-visible) {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}
+.note-spring-check input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.note-spring-check::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--text);
+  transform: scale(0);
+}
+.note-spring-check svg {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--panel);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.note-spring-check:has(input:checked)::before { transform: scale(1); }
+.note-spring-check:has(input:checked) svg { stroke-dashoffset: 0; }
+.note-spring-check + :is(textarea,input) {
+  text-decoration: line-through;
+  text-decoration-color: transparent;
+}
+.note-spring-check:has(input:checked) + :is(textarea,input) {
+  color: color-mix(in srgb, var(--text) 67%, var(--bg));
+  text-decoration-color: currentColor;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .note-spring-check { transition: transform 120ms ease-out; }
+  .note-spring-check:active { transform: scale(.92); }
+  .note-spring-check::before { transition: transform 180ms cubic-bezier(.2,.85,.35,1.12); }
+  .note-spring-check svg { transition: stroke-dashoffset 145ms ease-out; }
+  .note-spring-check + :is(textarea,input) { transition: color 160ms ease, text-decoration-color 160ms ease; }
+}
+.notes-table-wrap { width: 100%; overflow-x: auto; padding: 3px; }
+.notes-table-wrap table { border-collapse: collapse; min-width: 100%; }
+.notes-table-wrap :is(th,td) { border: 1px solid var(--line); min-width: 78px; text-align: left; }
+.notes-table-wrap th { background: var(--panel); }
+.notes-table-wrap td:has(>button) { min-width: 0; width: 30px; }
+.notes-table-actions { padding: 7px 0; }
+.notes-add-block { margin-top: 20px; }
+#note-template-form label { display: block; margin-bottom: 5px; }
+#note-template { width: 100%; }
+
+.notes-active { grid-template-rows: minmax(0, 1fr); }
+.notes-active > main { min-height: 0; }
+#notes-workspace { overscroll-behavior: contain; }
+#note-template-form > .dialog-actions { margin-top: 18px; }
+#note-image-dialog { width: min(640px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow: auto; }
+#note-image-search { width: 100%; margin-bottom: 12px; }
+.note-image-results {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px; max-height: min(42vh, 320px); overflow: auto; padding: 4px;
+}
+.note-image-results button { display: grid; gap: 5px; min-width: 0; text-align: left; padding: 5px; }
+.note-image-results img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; background: var(--panel); }
+.note-image-results span { overflow: hidden; text-overflow: ellipsis; }
+.note-inline-image { max-width: 100%; max-height: 65vh; object-fit: contain; border-radius: 6px; }
+
+.note-block { position: relative; }
+.note-block-actions summary { cursor: grab; touch-action: none; }
+.note-block-actions summary:active { cursor: grabbing; }
+.note-block[data-note-drop]::after {
+  content: ''; position: absolute; inset-inline: 0; height: 2px;
+  border-radius: 2px; background: var(--accent); pointer-events: none;
+}
+.note-block[data-note-drop="before"]::after { top: -2px; }
+.note-block[data-note-drop="after"]::after { bottom: -2px; }
+
+#note-pages button { padding-inline-start: calc(8px + 10px * var(--note-depth, 0)); }
+#note-breadcrumbs { flex-direction: row; flex-wrap: wrap; margin-bottom: 8px; }
+#note-breadcrumbs[hidden] { display: none; }
+.note-tracker { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.note-tracker h3 { margin: 0 0 10px; }
+.tracker-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.tracker-tools input[type="search"] { flex: 1 1 130px; padding: 5px 7px; }
+.tracker-tools [aria-pressed="true"] { background: var(--selection, var(--panel)); border-color: var(--accent); }
+.tracker-results { overflow: auto; max-height: 560px; }
+.tracker-results table { width: 100%; border-collapse: collapse; }
+.tracker-results :is(th,td) { text-align: left; padding: 7px; border-bottom: 1px solid var(--line); }
+.tracker-results td button { white-space: normal; text-align: left; }
+.tracker-gallery { display: grid; grid-template-columns: repeat(auto-fill,minmax(125px,1fr)); gap: 8px; }
+.tracker-card { display: grid; gap: 4px; width: 100%; min-width: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.tracker-card img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 5px; }
+.tracker-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 8px; }
+.tracker-lane { min-height: 100px; display: grid; align-content: start; gap: 6px; padding: 8px; background: var(--panel); border-radius: 6px; }
+.tracker-lane .tracker-card { cursor: grab; }
+.tracker-totals { margin-top: 8px; font-variant-numeric: tabular-nums; }
+.note-tracker-dialog { width: min(550px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; }
+.note-tracker-dialog > :is(input,select), .note-tracker-dialog form > input { width: 100%; margin-bottom: 10px; }
+.tracker-record-panel { margin: auto 20px auto auto; }
+.tracker-property { display: grid; grid-template-columns: minmax(95px, 1fr) minmax(0, 2fr); gap: 8px; align-items: start; margin-bottom: 10px; }
+.tracker-property > textarea { min-height: 110px; resize: vertical; }
+.tracker-property .tracker-tools button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tracker-reference-results { display: grid; gap: 5px; max-height: 42vh; overflow: auto; margin-bottom: 10px; }
+.tracker-reference-results button { overflow: hidden; text-overflow: ellipsis; text-align: left; }
+
+.tracker-thumbnail-cell, .tracker-thumbnail-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.tracker-thumbnail-cell span, .tracker-thumbnail-choice span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tracker-thumbnail-cell { max-width: 190px; padding: 3px 6px; }
+.tracker-thumbnail {
+  width: 72px;
+  aspect-ratio: 16 / 9;
+  flex: none;
+  object-fit: contain;
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.note-tracker-dialog form > input[aria-label="Note emoji"] { display: block; }
+
+.tracker-options { position: relative; margin-inline-start: auto; }
+.tracker-options summary { cursor: pointer; padding: 4px 8px; }
+.tracker-option-menu {
+  position: absolute;
+  right: 0;
+  z-index: 3;
+  display: grid;
+  gap: 4px;
+  min-width: max-content;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.tracker-option-menu button { text-align: left; }
+.tracker-option-menu button[hidden] { display: none; }
+
+.note-heading-setting {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 6px;
+}
+.note-block .note-heading-setting input[type="number"] { width: 64px; border-color: var(--line); }
+.note-block .note-heading-setting input[type="color"] { width: 64px; height: 28px; padding: 2px; cursor: pointer; }
+.note-block[tabindex]:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: 4px; }

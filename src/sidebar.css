@@ -1,0 +1,187 @@
+/* Sidebar movement uses one shared active surface and one hover surface. */
+.sidebar .sidebar-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 8px;
+}
+.sidebar-active-pill { background: #ffffff13; }
+.sidebar-hover-pill { background: #ffffff0b; }
+body.light-mode .sidebar-active-pill { background: var(--selection, #dce9fa); }
+body.light-mode .sidebar-hover-pill { background: #263d6810; }
+.sidebar nav, .sidebar .section-label, .sidebar .notes-nav, .sidebar .sidebar-bottom {
+  position: relative;
+  z-index: 1;
+}
+.sidebar nav button { position: relative; min-height: 32px; }
+.sidebar nav button:is(:hover,.active),
+body.light-mode .sidebar nav button.active {
+  background: transparent;
+}
+.sidebar .sidebar-section { flex: none; }
+.sidebar .sidebar-section > summary {
+  justify-content: flex-start;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+.sidebar .sidebar-section > summary::-webkit-details-marker { display: none; }
+.sidebar .sidebar-section > summary::before {
+  content: '›';
+  display: inline-block;
+  font-size: 15px;
+  line-height: 1;
+  transform: rotate(0deg);
+}
+.sidebar .sidebar-section[open] > summary::before { transform: rotate(90deg); }
+.sidebar .sidebar-section > summary .section-add { margin-left: auto; }
+/* Keep the window controls legible while sidebar content scrolls behind them. */
+.sidebar .window-space {
+  position: sticky; top: 0; z-index: 4;
+  margin-inline: -12px; padding-inline: 12px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 96%, transparent) 0 72%, color-mix(in srgb, var(--bg) 76%, transparent) 88%, transparent 100%);
+  backdrop-filter: blur(15px) saturate(130%);
+}
+body.light-mode .sidebar .window-space {
+  background: linear-gradient(to bottom, rgb(241 241 243 / 97%) 0 72%, rgb(241 241 243 / 76%) 88%, transparent 100%);
+}
+.sidebar #navigation,.sidebar [data-section="media"] { position: relative; padding-bottom: 12px; margin-bottom: 10px; }
+.sidebar #navigation::after,.sidebar [data-section="media"]::after {
+  content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 1px;
+  background: linear-gradient(to right, transparent, var(--line) 14%, var(--line) 86%, transparent);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar .window-space { background: var(--bg); backdrop-filter: none; }
+  body.light-mode .sidebar .window-space { background: #f1f1f3; }
+}
+body.hide-sidebar { --sidebar: 0px; }
+body.hide-sidebar .sidebar {
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-100%);
+  opacity: 0;
+}
+body.hide-sidebar .library-header { padding-left: 104px; }
+body.hide-sidebar #show-sidebar { display: inline-flex; }
+.sidebar-backdrop,.sidebar-drawer-edge,.sidebar-drawer-handle { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .sidebar .sidebar-pill { transition: transform 180ms cubic-bezier(.22,1,.36,1); }
+  .sidebar .sidebar-section > summary::before { transition: transform 160ms ease-out; }
+}
+@media (max-width: 1040px) {
+  body,body.hide-sidebar { --sidebar: 0px; }
+  body > main { grid-column: 2; grid-row: 1; }
+  body > #inspector { grid-column: 3; grid-row: 1; }
+  body .sidebar,body.hide-sidebar .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 32;
+    height: 100%;
+    width: 248px;
+    padding-inline: 12px;
+    background: #292a2c;
+    border-right: 1px solid var(--line);
+    transform: translateX(-100%);
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 1;
+  }
+  body.native-glass > .sidebar { background: #292a2c; }
+  body.light-mode .sidebar { background: #e9edf3; }
+  body.sidebar-drawer-open .sidebar {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+  body .library-header,body.hide-sidebar .library-header { padding-left: 104px; }
+  body #show-sidebar,body.hide-sidebar #show-sidebar { display: inline-flex; }
+  body.hide-sidebar .sidebar .window-space {
+    height: 52px;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 3px 2px 0;
+  }
+  body.hide-sidebar .sidebar .brand { display: flex; }
+  body.hide-sidebar .sidebar nav button {
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+  body.hide-sidebar .sidebar nav button > :is(.badge,span:not(.sf-symbol):not(.emoji-icon):not(.note-emoji)) { display: initial; }
+  body.hide-sidebar .sidebar :is(#notes-tree,#new-note) { display: block; }
+  body.hide-sidebar .sidebar .sidebar-section > summary {
+    margin: 21px 10px 7px;
+    min-height: 0;
+    padding: 0;
+    justify-content: flex-start;
+  }
+  body.hide-sidebar .sidebar .sidebar-section > summary:not(:has(.section-add)) { display: flex; }
+  body.hide-sidebar .sidebar .sidebar-section > summary::before,
+  body.hide-sidebar .sidebar .sidebar-section > summary > span { display: inline-block; }
+  body.hide-sidebar .sidebar .sidebar-section > summary .section-add { margin-left: auto; }
+  body.hide-sidebar .sidebar .settings-button { display: flex; justify-content: flex-start; gap: 10px; }
+  body.hide-sidebar .sidebar .settings-button > span:not(.settings-icon) { display: initial; }
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 31;
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: #0006;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .sidebar-backdrop:hover { background: #0006; }
+  .sidebar-drawer-open .sidebar-backdrop {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .sidebar-drawer-edge {
+    display: block;
+    position: fixed;
+    left: 0;
+    top: 54px;
+    bottom: 0;
+    z-index: 4;
+    width: 12px;
+    touch-action: pan-y;
+  }
+  .sidebar-drawer-open .sidebar-drawer-edge { display: none; }
+  .sidebar .sidebar-drawer-handle {
+    position: absolute;
+    display: block;
+    top: 6px;
+    left: 110px;
+    width: 80px;
+    height: 40px;
+    cursor: grab;
+    touch-action: none;
+    -webkit-app-region: no-drag;
+  }
+  .sidebar-drawer-handle::after {
+    content: '';
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    top: 19px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--muted);
+    opacity: .5;
+  }
+  body.sidebar-dragging .sidebar { transition: none; cursor: grabbing; }
+  body.sidebar-dragging { user-select: none; }
+}
+@media (max-width: 1040px) {
+  body .sidebar, body.hide-sidebar .sidebar { transition: none; }
+}

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' asset: data: blob:; media-src asset:; frame-src asset:; object-src 'none'; style-src 'self' 'sha256-ZkgLurYRxhAKQETPII5RdGEXa9N3yPUbF48odoi9Cns=' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' asset: data: blob:; worker-src 'self' blob:;"><title>Canvas Pro</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="notes.css"><link rel="stylesheet" href="assistant.css"><link rel="stylesheet" href="sidebar.css"></head>
+<body>
+<aside class="sidebar">
+ <div class="window-space"><button id="toggle-sidebar" class="icon-button sidebar-toggle" title="Toggle sidebar · ⌘B" aria-label="Toggle sidebar" aria-pressed="true"></button></div><div class="brand"><span class="brand-icon">▦</span><strong>Canvas Pro</strong></div>
+ <nav id="navigation"></nav>
+ <details class="sidebar-section" data-section="media" open><summary class="section-label media-label"><span>MEDIA</span></summary><nav id="media-navigation" aria-label="Media"></nav></details>
+ <details class="sidebar-section" data-section="canvas" open><summary class="section-label"><span>CANVAS</span><button id="add-canvas" class="section-add" title="New canvas" aria-label="New canvas"></button></summary><nav id="canvas-navigation" aria-label="Canvases"></nav></details>
+ <details class="sidebar-section" data-section="collections" open><summary class="section-label"><span>COLLECTIONS</span><button id="add-folder" class="section-add" title="New collection" aria-label="New collection"></button></summary><nav id="folders" aria-label="Collections"></nav></details>
+ <details id="notes-tree" class="sidebar-section notes-section" data-section="notes" open>
+  <summary class="section-label"><span>NOTES</span><button id="new-note" class="section-add" type="button" aria-label="New note" title="New note"></button></summary>
+  <nav id="note-pages" aria-label="Note pages"></nav>
+ </details>
+ <div class="sidebar-bottom"><button id="show-settings" class="settings-button"><span class="settings-icon" aria-hidden="true"></span><span>Settings</span></button></div>
+</aside>
+<main>
+ <header class="library-header"><button id="show-sidebar" class="icon-button" title="Show sidebar · ⌘B" aria-label="Show sidebar"></button><div><h1 id="view-title">All files</h1></div></header>
+ <div class="filter-bar"><div class="filter-options"><span id="count">0 items</span><span id="selection-count" aria-live="polite"></span><select id="type" aria-label="File type"><option value="all">All types</option><option value="image">Images</option><option value="video">Videos</option><option value="pdf">PDFs</option><option value="audio">Audio</option><option value="link">Web links</option><option value="other">Design & other</option></select><select id="sort" aria-label="Sort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="name">Name A–Z</option><option value="size">Largest first</option></select></div><div class="toolbar"><button id="toggle-inspector" class="icon-button" title="Toggle details · ⌘I" aria-label="Toggle file details">◧</button><button id="layout-button" class="icon-button" popovertarget="layout-menu" aria-haspopup="menu" aria-controls="layout-menu" aria-expanded="false" aria-label="Choose gallery layout" title="Gallery layout"></button><label class="zoom-label" title="Thumbnail size"><input id="zoom" type="range" min="140" max="360" value="230" aria-label="Thumbnail size"></label><button id="empty-trash" class="danger" hidden>Empty Trash…</button><button id="import-folder" title="Import a folder">Import folder</button><button id="import" class="primary">Import files</button></div><div class="search">⌕ <input id="search" type="search" placeholder="Search names, tags, notes…" aria-label="Search library"><kbd>⌘ K</kbd><button id="visual-search" type="button" title="Include AI visual matches" aria-label="Include AI visual matches" aria-pressed="false" hidden></button></div></div>
+ <div id="tags-bar" class="tags-bar" hidden></div>
+ <div id="gallery" class="gallery" tabindex="0" role="listbox" aria-multiselectable="true" aria-label="File library"><div id="gallery-layer"></div></div>
+ <div id="empty" class="empty" hidden><div class="empty-icon">▧</div><h2>Bring your files together</h2><p>Drop files or folders here, import them,<br>or copy in Finder and press <kbd>⌘ V</kbd>.</p><button id="empty-import" class="primary">Import your first files</button><small>Images · videos · PDFs · design files · and everything else</small></div>
+ <section id="canvas-workspace" class="canvas-workspace" hidden aria-label="Canvas workspace">
+  <div class="canvas-toolbar" role="toolbar" aria-label="Canvas tools">
+   <div class="canvas-tool-group"><button data-canvas-tool="select" title="Select · V" aria-label="Select tool" aria-pressed="true"></button><button data-canvas-tool="hand" title="Pan · H or hold Space" aria-label="Hand tool" aria-pressed="false"></button></div>
+   <div class="canvas-tool-group"><button data-canvas-tool="text" title="Text · T" aria-label="Add text" aria-pressed="false"></button><button data-canvas-tool="rectangle" title="Rectangle · R" aria-label="Add rectangle" aria-pressed="false"></button><button data-canvas-tool="ellipse" title="Ellipse · O" aria-label="Add ellipse" aria-pressed="false"></button></div>
+   <div class="canvas-tool-group">
+    <button data-canvas-tool="draw" title="Pencil · P" aria-label="Pencil" aria-pressed="false">✎</button>
+    <button data-canvas-tool="arrow" title="Arrow · A" aria-label="Arrow" aria-pressed="false">↗</button>
+    <button data-canvas-tool="sticky" title="Sticky note · N" aria-label="Sticky note" aria-pressed="false">▣</button>
+    <button data-canvas-tool="list" title="Bulleted list · L" aria-label="Bulleted list" aria-pressed="false">☷</button>
+   </div>
+   <button id="canvas-save-files">Save to Files</button><button id="canvas-export" title="Export canvas">Export…</button>
+   <button id="canvas-library" aria-controls="canvas-tray" aria-expanded="false" title="Drag files, collections and bookmarks onto this canvas">Library</button><button id="canvas-import">Import files</button>
+   <div class="canvas-tool-group canvas-history"><button id="canvas-undo" title="Undo · ⌘Z" aria-label="Undo"></button><button id="canvas-redo" title="Redo · ⇧⌘Z" aria-label="Redo"></button></div>
+   <span id="canvas-save-state" class="canvas-save-state" role="status">Saved</span><button id="canvas-retry" hidden>Retry save</button>
+   <div class="canvas-zoom"><button id="canvas-zoom-out" aria-label="Zoom out">−</button><button id="canvas-fit" title="Fit content · ⌘0">100%</button><button id="canvas-zoom-in" aria-label="Zoom in">＋</button></div>
+  </div>
+  <div id="canvas-viewport" class="canvas-viewport" tabindex="0" role="group" aria-label="Canvas. Drag to select, hold Space to pan, pinch to zoom."><canvas id="canvas-overview" aria-hidden="true"></canvas><div id="canvas-world" class="canvas-world"></div><div id="canvas-marquee" class="canvas-marquee" hidden></div><div id="canvas-empty" class="canvas-empty"><div class="canvas-empty-mark" aria-hidden="true"></div><h2>An open canvas for your ideas</h2><p>Drag files, collections or bookmarks onto this board.<br>Add text and shapes, then make room for your next idea.</p><button id="canvas-empty-library">Browse your library</button></div></div>
+  <aside id="canvas-tray" class="canvas-tray" hidden aria-label="Library for this canvas"><div class="canvas-tray-heading"><strong>Your library</strong><button id="canvas-tray-close" aria-label="Close canvas library">✕</button></div><input id="canvas-tray-search" type="search" placeholder="Find inspiration…" aria-label="Search files for canvas"><div class="canvas-tray-tabs"><button data-canvas-tab="files" aria-pressed="true">Files</button><button data-canvas-tab="collections" aria-pressed="false">Collections</button><button data-canvas-tab="links" aria-pressed="false">Bookmarks</button></div><div id="canvas-tray-scroll" class="canvas-tray-scroll"><div id="canvas-tray-items"></div></div><p>Drag onto the board · Double-click to add</p></aside>
+ </section>
+ <section id="notes-workspace" hidden aria-label="Note editor">
+  <div id="notes-empty" class="notes-document notes-empty"><h2>Make space for your notes</h2><p>Start with a blank page or choose a template.</p><button id="new-note-empty" class="primary" type="button">New note</button></div>
+  <article id="notes-editor" class="notes-document" hidden>
+   <nav id="note-breadcrumbs" aria-label="Parent notes"></nav>
+   <div class="notes-page-tools">
+    <button id="note-cover-add" type="button">Add featured image</button><button id="note-cover-remove" type="button" hidden>Remove image</button>
+    <details class="notes-page-menu"><summary>Page actions</summary><div><button id="note-child" type="button">New subpage…</button><button id="note-up" type="button">Move note up</button><button id="note-down" type="button">Move note down</button><button id="note-delete" type="button">Delete note…</button></div></details>
+   </div>
+   <div id="note-cover" hidden></div>
+   <input id="note-title" aria-label="Note title" placeholder="Untitled note" maxlength="120">
+   <div id="note-blocks"></div>
+   <div class="notes-add-block"><select id="note-block-type" aria-label="Block type"></select><button id="note-add-block" type="button">Add block</button></div>
+  </article>
+ </section>
+ <div class="notes-footer"><span id="notes-status" role="status"></span><button id="notes-retry" type="button" hidden>Retry save</button></div>
+ <footer><span id="status">All changes saved</span><span><kbd>Space</kbd> Preview &nbsp; <kbd>←</kbd> <kbd>→</kbd> Navigate &nbsp; <kbd>⌘ V</kbd> Paste</span></footer>
+</main>
+<aside id="inspector" class="inspector"></aside>
+<div id="preview" class="preview" tabindex="-1" role="dialog" aria-modal="true" aria-label="File preview" hidden><div class="preview-drag-region" aria-hidden="true"></div><button id="close-preview" aria-label="Close preview" title="Close · Esc">✕</button><div class="preview-body"><div id="preview-content"></div></div><nav class="preview-bottom" aria-label="Preview navigation"><button id="previous" class="preview-arrow" aria-label="Previous file" title="Previous · Left arrow">‹</button><span id="preview-index" aria-live="polite" aria-atomic="true"></span><button id="next" class="preview-arrow" aria-label="Next file" title="Next · Right arrow">›</button></nav></div>
+<div id="layout-menu" class="layout-menu" popover role="menu" aria-label="Gallery layout">
+<button type="button" role="menuitemradio" aria-checked="true" data-layout="masonry"><span class="layout-demo demo-masonry" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span><strong>Masonry</strong><small>Balance column heights</small></span><span class="layout-check" aria-hidden="true">✓</span></button>
+<button type="button" role="menuitemradio" aria-checked="false" data-layout="waterfall"><span class="layout-demo demo-waterfall" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span><strong>Waterfall</strong><small>Fill columns in order</small></span><span class="layout-check" aria-hidden="true">✓</span></button>
+<button type="button" role="menuitemradio" aria-checked="false" data-layout="justified"><span class="layout-demo demo-justified" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span><strong>Justified</strong><small>Fit items into rows</small></span><span class="layout-check" aria-hidden="true">✓</span></button>
+</div>
+<div id="toast" role="status" hidden></div>
+<dialog id="canvas-dialog" aria-labelledby="canvas-dialog-title"><form id="canvas-dialog-form"><h2 id="canvas-dialog-title">New canvas</h2><p id="canvas-dialog-description">A place for your ideas, saved on this Mac.</p><label id="canvas-target-label">Canvas<select id="canvas-target"></select></label><label id="canvas-name-label">Name<input id="canvas-name" required maxlength="120" placeholder="Untitled canvas"></label><p id="canvas-dialog-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="canvas-dialog-cancel">Cancel</button><button type="submit" id="canvas-dialog-save" class="primary">Create canvas</button></div></form></dialog>
+<dialog id="folder-dialog" aria-labelledby="folder-dialog-title"><form method="dialog"><h2 id="folder-dialog-title">New collection</h2><p>Group your files without duplicating originals.</p><input id="folder-name" placeholder="Collection name" maxlength="120" required><div class="dialog-actions"><button value="cancel" formnovalidate>Cancel</button><button value="create" class="primary">Create collection</button></div></form></dialog>
+<dialog id="action-dialog" aria-labelledby="action-title"><form id="action-form"><h2 id="action-title"></h2><p id="action-description"></p><input id="action-value" required autocomplete="off"><p id="action-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="action-cancel">Cancel</button><button type="submit" id="action-save" class="primary">Save</button></div></form></dialog>
+<dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title"><div class="dialog-heading"><h2 id="settings-title">Settings</h2><button id="settings-close" aria-label="Close Settings">✕</button></div><div class="settings-options"><div class="library-location"><strong id="current-library-name">Current library</strong><p id="current-library-path" class="hint"></p><button id="new-library">New library…</button> <button id="open-library">Open existing…</button><p class="hint">Switching libraries saves your canvases and notes and restarts Canvas Pro. Originals stay in their library folder.</p></div>
+<button id="show-assistant-settings" class="settings-row"><span class="settings-row-icon" aria-hidden="true"><img src="assets/symbols/sparkles.png" alt=""></span><span class="settings-row-copy"><strong>Ask Canvas Pro</strong><small>Download FunctionGemma or reveal its folder</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+<button id="show-activity" class="settings-row"><span class="settings-row-icon" data-setting-icon="activity" aria-hidden="true"></span><span class="settings-row-copy"><strong class="settings-label">Import activity</strong><small>Queue, cancel and retry imports</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+<button id="check-library" class="settings-row"><span class="settings-row-icon" data-setting-icon="health" aria-hidden="true"></span><span class="settings-row-copy"><strong>Library health</strong><small>Check your originals for missing or changed files</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+<button id="show-extension" class="settings-row"><span class="settings-row-icon" data-setting-icon="link" aria-hidden="true"></span><span class="settings-row-copy"><strong>Browser capture extension</strong><small>Open browser-ready extension folder</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+<button id="show-library" class="settings-row"><span class="settings-row-icon" data-setting-icon="folder" aria-hidden="true"></span><span class="settings-row-copy"><strong>Library on this Mac</strong><small>Open the folder containing your originals</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+</div><p class="settings-footnote">Your files stay on this Mac.</p></dialog>
+<dialog id="activity-dialog" class="reliability-dialog" aria-labelledby="activity-dialog-title"><div class="dialog-heading"><h2 id="activity-dialog-title">Import activity</h2><button id="activity-close" aria-label="Close import activity">✕</button></div><p>Imports continue while you browse. Recent file results appear below.</p><div id="import-jobs" class="job-list"></div></dialog>
+<dialog id="health-dialog" class="reliability-dialog" aria-labelledby="health-dialog-title"><div class="dialog-heading"><h2 id="health-dialog-title">Library health</h2><button id="health-close" aria-label="Close library health">✕</button></div><p>Check your originals for missing files and changes. This check only reads files and never repairs or deletes them.</p><p id="health-summary" role="status">Ready to check your library.</p><progress id="health-progress" value="0" max="1" hidden></progress><div id="health-issues" class="health-issues"></div><div class="dialog-actions"><button id="health-show-library">Show library</button><button id="health-cancel" hidden>Cancel check</button><button id="health-run" class="primary">Check originals</button></div></dialog>
+<dialog id="note-template-dialog" aria-labelledby="note-template-title"><form id="note-template-form"><h2 id="note-template-title">New note</h2><label for="note-template">Template</label><select id="note-template"><option value="blank">Blank page</option><option value="movies">Movies &amp; Series</option><option value="finance">Finance tracker</option><option value="product">Product workspace</option><option value="youtube">YouTube workspace</option></select><div class="dialog-actions"><button type="button" id="note-template-cancel">Cancel</button><button class="primary" type="submit">Create note</button></div></form></dialog>
+<dialog id="note-image-dialog" aria-labelledby="note-image-title">
+ <h2 id="note-image-title">Choose a library image</h2>
+ <input id="note-image-search" type="search" placeholder="Search library images…" aria-label="Search library images" maxlength="500">
+ <div id="note-image-results" class="note-image-results" aria-label="Library images"></div>
+ <p id="note-image-status" role="status"></p>
+ <div class="dialog-actions"><button id="note-image-more" type="button" hidden>Load more</button><button id="note-image-browse" type="button">Choose from Mac…</button><button id="note-image-cancel" type="button">Cancel</button></div>
+</dialog>
+<dialog id="assistant-settings" class="reliability-dialog" aria-labelledby="assistant-settings-title">
+ <div class="dialog-heading"><h2 id="assistant-settings-title">Ask Canvas Pro</h2><button id="assistant-settings-close" aria-label="Close assistant settings">✕</button></div>
+ <p>FunctionGemma runs on this Mac when you submit a command. Approved web searches open in your browser.</p>
+ <p id="assistant-install-status" role="status"></p>
+ <progress id="assistant-progress" aria-label="Model download" hidden></progress>
+ <p id="assistant-path"></p>
+ <p>By downloading, you agree to the <button id="assistant-terms" type="button">Gemma Terms of Use</button>.</p>
+ <div class="dialog-actions"><button id="assistant-folder" type="button">Show in Finder</button><button id="assistant-download" type="button" class="primary">Download</button></div>
+</dialog>
+<aside id="assistant-dock" aria-label="Ask Canvas Pro">
+ <section id="assistant-panel" aria-labelledby="assistant-title" hidden>
+  <div class="dialog-heading"><h2 id="assistant-title">Ask Canvas Pro</h2><button id="assistant-close" type="button" aria-label="Close Ask Canvas Pro">✕</button></div>
+  <p id="assistant-message" role="status"></p>
+  <button id="assistant-setup" type="button" hidden>Open model settings</button>
+  <form id="assistant-form" hidden>
+   <textarea id="assistant-command" aria-label="Command" placeholder="Ask Canvas Pro…" rows="2" maxlength="1500" required></textarea>
+   <div class="dialog-actions"><button id="assistant-stop" type="button" hidden>Stop</button><button id="assistant-submit" type="submit" class="primary" aria-label="Send command" title="Send command"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15V5m-4 4 4-4 4 4"/></svg></button></div>
+  </form>
+  <div id="assistant-review" hidden>
+   <p id="assistant-proposal"></p>
+   <div class="dialog-actions"><button id="assistant-discard" type="button">Cancel</button><button id="assistant-apply" type="button" class="primary">Confirm</button></div>
+  </div>
+ </section>
+ <button id="assistant-launcher" type="button" aria-label="Ask Canvas Pro" title="Ask Canvas Pro" aria-controls="assistant-panel" aria-expanded="false">
+  <svg class="assistant-face" viewBox="0 0 40 40" aria-hidden="true">
+   <g class="assistant-eyes">
+    <rect x="11" y="16" width="5" height="8" rx="2.5"/>
+    <rect x="24" y="16" width="5" height="8" rx="2.5"/>
+   </g>
+  </svg>
+ </button>
+</aside>
+<script src="note-trackers.js"></script><script src="notes-workspace.js"></script><script src="selection.js"></script><script src="layout.js"></script><script src="media.js"></script><script src="context.js"></script><script src="format-loader.js"></script><script src="reliability.js"></script><script src="view-preferences.js"></script><script src="bookmarks.js"></script><script src="smart-cards.js"></script><script src="smart-search.js"></script><script src="canvas-model.js"></script><script src="canvas-workspace.js"></script><script src="workbench.js"></script><script src="canvas-export.js"></script><script src="sidebar.js"></script><script src="app.js"></script><script src="assistant.js"></script></body></html>

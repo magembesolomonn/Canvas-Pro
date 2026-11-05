@@ -1,0 +1,7 @@
+const fs=require('node:fs'),path=require('node:path');const root=path.join(__dirname,'..');
+require('esbuild').buildSync({entryPoints:[path.join(root,'scripts/viewers/formats.mjs')],bundle:true,platform:'browser',format:'iife',minify:true,outfile:path.join(root,'src/formats.js')});
+require('esbuild').buildSync({entryPoints:[path.join(root,'scripts/viewers/model-worker.mjs')],bundle:true,platform:'browser',format:'iife',minify:true,outfile:path.join(root,'src/model-worker.js')});
+for(const [pkg,target,extensions]of [['@ruffle-rs/ruffle','ruffle',['.js','.wasm']],['web-ifc','ifc',['.wasm']]]){const dest=path.join(root,'src/vendor',target);fs.mkdirSync(dest,{recursive:true});const folder=path.join(root,'node_modules',pkg);for(const name of fs.readdirSync(folder))if(extensions.includes(path.extname(name))&&(!name.includes('-mt.')&&!name.includes('-node.')))fs.copyFileSync(path.join(folder,name),path.join(dest,name));}
+for(const [pkg,name]of [['three','LICENSE'],['fflate','LICENSE'],['web-ifc','LICENSE.md'],['@ruffle-rs/ruffle','LICENSE_MIT'],['@ruffle-rs/ruffle','LICENSE_APACHE']])fs.copyFileSync(path.join(root,'node_modules',pkg,name),path.join(root,'src/vendor',pkg.replaceAll('/','-')+'-'+name));
+
+const gs=path.join(root,'src/vendor/ghostscript');fs.mkdirSync(gs,{recursive:true});for(const name of ['gs.js','gs.wasm','LICENSE'])fs.copyFileSync(path.join(root,'node_modules/@jspawn/ghostscript-wasm',name),path.join(gs,name));

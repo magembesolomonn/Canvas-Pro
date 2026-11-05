@@ -1,0 +1,17 @@
+{
+  "boundary": {
+    "sourceBefore": "Version A",
+    "destinationExists": false
+  },
+  "inputInitial": "Version A",
+  "inputAtCopy": "Version B, edited while import was pending",
+  "recordedSize": 42,
+  "actualSize": 42,
+  "recordedHash": "790245a98a55ce577f08f5440c04e1da69c68ae0cea6c7d2283b5be169e42039",
+  "actualHash": "790245a98a55ce577f08f5440c04e1da69c68ae0cea6c7d2283b5be169e42039",
+  "pristineImport": {
+    "imported": "62e83b8c-fa82-4a74-a58e-ee254404ef5b"
+  },
+  "pristineResultBytes": "Version A",
+  "confirmedBug": false
+}

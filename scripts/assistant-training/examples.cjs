@@ -1,0 +1,48 @@
+// Synthetic examples. Keep the evaluation prompts out of the training export.
+exports.train = [
+  ['Could you pull up the collection named Portfolio?', 'open_collection', { name: 'Portfolio' }],
+  ['Please bring up the existing collection called Client Work', 'open_collection', { name: 'Client Work' }],
+  ['Put the highlighted files in the existing collection named Retouch', 'add_to_collection', { name: 'Retouch' }, { selectionCount: 3 }],
+  ['Please add my selection to the existing collection called Stills', 'add_to_collection', { name: 'Stills' }, { selectionCount: 1, fileType: 'image' }],
+  ['Make me a fresh collection titled Research', 'create_collection', { name: 'Research' }],
+  ['Please start an empty collection named Travel', 'create_collection', { name: 'Travel' }],
+  ['Could you put those results into a new collection named Prints?', 'collect_results', { name: 'Prints' }],
+  ['Group the selected items in a new collection named Review', 'collect_results', { name: 'Review' }, { selectionCount: 4 }],
+  ['Collect files with Paris in their filenames in a new collection named Europe', 'collect_files', { query: 'Paris', name: 'Europe' }],
+  ['Gather filenames containing contract into a new collection named Legal', 'collect_files', { query: 'contract', name: 'Legal' }],
+  ['Could you bring up my moodboard named Launch?', 'open_canvas', { name: 'Launch' }],
+  ['Take me to the canvas titled Editorial', 'open_canvas', { name: 'Editorial' }],
+  ['Could you start a fresh canvas titled Brand Study?', 'create_canvas', { name: 'Brand Study' }],
+  ['Set up a new moodboard named Kitchen', 'create_canvas', { name: 'Kitchen' }],
+  ['Could you place these selected images on the canvas called Launch?', 'add_to_canvas', { name: 'Launch' }, { selectionCount: 2, fileType: 'image' }],
+  ['Put the highlighted audio clips on the moodboard named Cuts', 'add_to_canvas', { name: 'Cuts' }, { selectionCount: 3, fileType: 'audio' }],
+  ['Can you set Sunset.png as the featured image?', 'set_note_cover', { query: 'Sunset.png' }, { noteOpen: true }],
+  ['Feature Blue Hour.jpg on the cover of this note', 'set_note_cover', { query: 'Blue Hour.jpg' }, { noteOpen: true }],
+  ['Show me the preview for this selected clip', 'preview_selection', {}, { selectionCount: 1, fileType: 'video' }],
+  ['Play the preview of this selected recording', 'preview_selection', {}, { selectionCount: 1, fileType: 'audio' }],
+  ['Could you look up coffee in my library?', 'search_library', { query: 'coffee' }],
+  ['Find my files related to architecture', 'search_library', { query: 'architecture' }],
+  ['Start a blank page for my launch ideas and call it Launch', 'create_note', { title: 'Launch' }],
+  ['Bring up the note titled Meeting Plan', 'open_note', { title: 'Meeting Plan' }],
+  ['Could you retitle the open note Shot List?', 'rename_note', { title: 'Shot List' }],
+  ['Label the selected files with interview', 'tag_selection', { tag: 'interview' }, { selectionCount: 2 }],
+  ['Look up the history of typography on the web', 'search_web', { query: 'history of typography' }],
+  ['Can you generate a logo?', 'unsupported', {}],
+  ['Send this document by email', 'unsupported', {}, { selectionCount: 1, fileType: 'pdf' }],
+  ['Turn this MP4 into the featured image', 'unsupported', {}, { noteOpen: true, selectionCount: 1, fileType: 'video' }],
+  ['Edit the PSD layers in this selected file', 'unsupported', {}, { selectionCount: 1, fileType: 'image' }]
+];
+
+exports.eval = [
+  ['Could you round up the files with Kendall in their names into a new collection named References?', 'collect_files', { query: 'Kendall', name: 'References' }],
+  ['Could you show me the collection named Archive?', 'open_collection', { name: 'Archive' }],
+  ['Could you put the selected files in the existing collection called Finals?', 'add_to_collection', { name: 'Finals' }, { selectionCount: 2, fileType: 'image' }],
+  ['Can you take me to the moodboard named Summer?', 'open_canvas', { name: 'Summer' }],
+  ['Please start a new moodboard called Landing Page', 'create_canvas', { name: 'Landing Page' }],
+  ['Pin these selected PDFs to the canvas titled Client Review', 'add_to_canvas', { name: 'Client Review' }, { selectionCount: 2, fileType: 'pdf' }],
+  ['Can you make Dunes.jpg the featured image of the open note?', 'set_note_cover', { query: 'Dunes.jpg' }, { noteOpen: true }],
+  ['Can you preview the selected PDF?', 'preview_selection', {}, { selectionCount: 1, fileType: 'pdf' }],
+  ['Show me any library files about ceramics', 'search_library', { query: 'ceramics' }],
+  ['Draw a new logo for this collection', 'unsupported', {}],
+  ['Permanently erase everything in the library', 'unsupported', {}]
+];

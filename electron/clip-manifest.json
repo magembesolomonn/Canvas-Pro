@@ -1,0 +1,48 @@
+{
+  "repository": "Xenova/clip-vit-base-patch32",
+  "revision": "6b7c523703ae26e39be4b03774966f8571c7f523",
+  "files": [
+    {
+      "path": "config.json",
+      "size": 4524,
+      "hash": "e79bad158b04c235740f9b2ec320b17f4030f7a5",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "onnx/text_model_quantized.onnx",
+      "size": 64504507,
+      "hash": "73baab855d406190da9faa498cfedf65f15cf309f4cc7385b7b032e6d08e5c3a",
+      "algorithm": "sha256"
+    },
+    {
+      "path": "onnx/vision_model_quantized.onnx",
+      "size": 89117001,
+      "hash": "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299",
+      "algorithm": "sha256"
+    },
+    {
+      "path": "preprocessor_config.json",
+      "size": 520,
+      "hash": "e0675735fd0052745f2f7b7291e4aa7859389998",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "size": 472,
+      "hash": "2c2130b544c0c5a72d5d00da071ba130a9800fb2",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "tokenizer.json",
+      "size": 2224119,
+      "hash": "bc1f77d20440541dd073ebae6f6c401087c7d34e",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "size": 775,
+      "hash": "c9b2a711cbdd039529fa5a66f1965e13eb14451d",
+      "algorithm": "git-sha1"
+    }
+  ]
+}
