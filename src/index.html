@@ -24,10 +24,10 @@
    <div class="canvas-tool-group"><button data-canvas-tool="select" title="Select · V" aria-label="Select tool" aria-pressed="true"></button><button data-canvas-tool="hand" title="Pan · H or hold Space" aria-label="Hand tool" aria-pressed="false"></button></div>
    <div class="canvas-tool-group"><button data-canvas-tool="text" title="Text · T" aria-label="Add text" aria-pressed="false"></button><button data-canvas-tool="rectangle" title="Rectangle · R" aria-label="Add rectangle" aria-pressed="false"></button><button data-canvas-tool="ellipse" title="Ellipse · O" aria-label="Add ellipse" aria-pressed="false"></button></div>
    <div class="canvas-tool-group">
-    <button data-canvas-tool="draw" title="Pencil · P" aria-label="Pencil" aria-pressed="false">✎</button>
-    <button data-canvas-tool="arrow" title="Arrow · A" aria-label="Arrow" aria-pressed="false">↗</button>
-    <button data-canvas-tool="sticky" title="Sticky note · N" aria-label="Sticky note" aria-pressed="false">▣</button>
-    <button data-canvas-tool="list" title="Bulleted list · L" aria-label="Bulleted list" aria-pressed="false">☷</button>
+    <button data-canvas-tool="draw" title="Pencil · P" aria-label="Pencil" aria-pressed="false"></button>
+    <button data-canvas-tool="arrow" title="Arrow · A" aria-label="Arrow" aria-pressed="false"></button>
+    <button data-canvas-tool="sticky" title="Sticky note · N" aria-label="Sticky note" aria-pressed="false"></button>
+    <button data-canvas-tool="list" title="Bulleted list · L" aria-label="Bulleted list" aria-pressed="false"></button>
    </div>
    <button id="canvas-save-files">Save to Files</button><button id="canvas-export" title="Export canvas">Export…</button>
    <button id="canvas-library" aria-controls="canvas-tray" aria-expanded="false" title="Drag files, collections and bookmarks onto this canvas">Library</button><button id="canvas-import">Import files</button>
@@ -49,7 +49,11 @@
    <div id="note-cover" hidden></div>
    <input id="note-title" aria-label="Note title" placeholder="Untitled note" maxlength="120">
    <div id="note-blocks"></div>
-   <div class="notes-add-block"><select id="note-block-type" aria-label="Block type"></select><button id="note-add-block" type="button">Add block</button></div>
+   <div class="notes-add-block" role="toolbar" aria-label="Add to note">
+    <button id="note-add-paragraph" type="button">Paragraph</button>
+    <button id="note-insert-block" type="button" aria-label="Insert a block" title="Insert a block">/</button>
+    <button id="note-insert-link" type="button" aria-label="Link to a page or file" title="Link to a page or file">@</button>
+   </div>
   </article>
  </section>
  <div class="notes-footer"><span id="notes-status" role="status"></span><button id="notes-retry" type="button" hidden>Retry save</button></div>

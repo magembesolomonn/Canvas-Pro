@@ -24,6 +24,10 @@ require('../electron/main.cjs');
 
 let win;
 const run = source => win.webContents.executeJavaScript(source).catch(error => { console.error(source); throw error; });
+function key(keyCode, modifiers = []) {
+  win.webContents.sendInputEvent({type:'keyDown',keyCode,modifiers});
+  win.webContents.sendInputEvent({type:'keyUp',keyCode,modifiers});
+}
 async function until(fn) {
   for (let i = 0; i < 200; i++) {
     if (await fn()) return;
@@ -35,13 +39,20 @@ async function create(template) {
   await run(`$('#new-note').click();$('#note-template').value=${JSON.stringify(template)};$('#note-template-form').requestSubmit();`);
   await until(() => run("!$('#note-template-dialog').open && !$('#notes-editor').inert"));
 }
+async function insertBlock(type) {
+  const names = {paragraph:'Paragraph',table:'Table',image:'Library image',bullet:'Bulleted item'};
+  await run("$('#note-insert-block').click()");
+  await until(() => run("!!$('dialog[aria-label=\"Insert a block\"][open]')"));
+  await run(`[...$('dialog[aria-label="Insert a block"]').querySelectorAll('button')].find(button=>button.textContent===${JSON.stringify(names[type])}).click()`);
+}
 (async () => {
   await app.whenReady();
   await until(() => global.assetTestWindow);
   win = global.assetTestWindow;
+  win.webContents.on('console-message', event => { if (event.level === 'error') console.error('NOTES_RENDERER_ERROR',event.message); });
   await until(() => !win.webContents.isLoading());
   await until(() => run("typeof NotesWorkspace !== 'undefined' && typeof catalogTotal === 'number'"));
-  await run("$('#open-notes').click()");
+  await run("setView('notes')");
   await until(() => run("!$('#notes-workspace').hidden && !$('#notes-editor').inert"));
   assert.equal(await run("$('#notes-tree').open && !$('#notes-empty').hidden"), true);
   await run("$('#new-note').click();$('#note-template').focus()");
@@ -50,7 +61,7 @@ async function create(template) {
   await create('finance');
   const finance = await run("api.notesList().then(list=>list[0].id)");
   assert.equal(await run("document.querySelectorAll('.note-tracker').length"), 2);
-  await run("$('#note-block-type').value='table';$('#note-add-block').click()");
+  await insertBlock('table');
   await until(() => run("!!$('.notes-table-actions')"));
   await run("$('.notes-table-actions button').click()");
   assert.equal(await run("$('.note-block-table table tbody').rows.length"), 2);
@@ -68,7 +79,7 @@ async function create(template) {
     for (let i = 0; i < 10; i++) $('.notes-table-actions button').click();
     workspace.scrollTop = workspace.scrollHeight;
     return workspace.scrollTop > 0 && workspace.getBoundingClientRect().bottom <= innerHeight &&
-      $('#note-add-block').getBoundingClientRect().bottom <= workspace.getBoundingClientRect().bottom;
+      $('#note-add-paragraph').getBoundingClientRect().bottom <= workspace.getBoundingClientRect().bottom;
   })()`), true);
   await run("$('#note-cover-add').click();$('#note-image-browse').click()");
   await until(() => run("$('#note-cover img')?.naturalWidth>0"));
@@ -81,7 +92,7 @@ async function create(template) {
   await run("$('#note-image-results button').click()");
   await until(async () => await run("$('#note-cover img').src") !== oldCover);
   await until(() => run("!$('#notes-editor').inert && $('#note-cover img')?.naturalWidth>0"));
-  await run("$('#note-block-type').value='image';$('#note-add-block').click()");
+  await insertBlock('image');
   await until(() => run("!!$('#note-image-results button')"));
   await run("$('#note-image-results button').click()");
   await until(() => run("$('#note-blocks .note-inline-image')?.naturalWidth>0"));
@@ -148,8 +159,9 @@ async function create(template) {
     return inserted.contains(document.activeElement) && !inserted.querySelector('input').checked;
   })()`), true);
   assert.equal(await run(`(async () => {
-    $('#note-block-type').value = 'bullet';
-    $('#note-add-block').click();
+    $('#note-insert-block').click();
+    const dialog = $('dialog[aria-label="Insert a block"]');
+    [...dialog.querySelectorAll('button')].find(button=>button.textContent==='Bulleted item').click();
     await new Promise(resolve => setTimeout(resolve, 0));
     const bullet = $('.note-block-bullet textarea');
     bullet.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));
@@ -178,9 +190,13 @@ async function create(template) {
     const input = row.querySelector('[aria-label=Heading]');
     input.setSelectionRange(7,7);
     input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
-    return [...document.querySelectorAll('.note-block-heading input[aria-label=Heading]')].slice(0,2)
-      .map(input=>[input.value,input.style.fontSize,input.style.color]);
-  })()`),[['Product','32px','rgb(51, 119, 170)'],[' spec','32px','rgb(51, 119, 170)']]);
+    const heading = $('.note-block-heading input[aria-label=Heading]');
+    const paragraph = $('.note-block-heading + .note-block-paragraph textarea');
+    return [
+      [heading.value,heading.style.fontSize,heading.style.color],
+      [paragraph.value,getComputedStyle(paragraph).fontSize,paragraph.style.color]
+    ];
+  })()`),[['Product','32px','rgb(51, 119, 170)'],[' spec','13px','']]);
   assert.equal(await run(`(() => {
     const paragraph = $('.note-block-paragraph textarea');
     paragraph.setSelectionRange(paragraph.value.length,paragraph.value.length);
@@ -188,6 +204,28 @@ async function create(template) {
     return document.activeElement.closest('.note-block').classList.contains('note-block-paragraph') &&
       document.activeElement.value==='';
   })()`),true);
+  await run("$('#note-add-paragraph').click();$('#note-add-paragraph').click()");
+  await run(`(() => {
+    const inputs=[...document.querySelectorAll('.note-block-paragraph textarea')];
+    inputs.at(-1).blur();
+    inputs.at(-2).closest('.note-block').dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
+  })()`);
+  await new Promise(resolve=>setTimeout(resolve,250));
+  assert.equal(await run("[...document.querySelectorAll('.note-block-paragraph')].at(-2).querySelector('.note-format-toolbar').classList.contains('is-visible')"),false);
+  await new Promise(resolve=>setTimeout(resolve,400));
+  assert.equal(await run("[...document.querySelectorAll('.note-block-paragraph')].at(-2).querySelector('.note-format-toolbar').classList.contains('is-visible')"),true);
+  const singleToolbar = await run(`(() => {
+    const inputs=[...document.querySelectorAll('.note-block-paragraph textarea')];
+    inputs.at(-2).closest('.note-block').dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));
+    inputs.at(-1).focus();
+    const visible=[...document.querySelectorAll('.note-format-toolbar.is-visible')];
+    return {count:visible.length,owner:visible[0]?.closest('.note-block')===inputs.at(-1).closest('.note-block')};
+  })()`);
+  assert.deepEqual(singleToolbar,{count:1,owner:true});
+  await run("$('#note-insert-link').click()");
+  await until(() => run("!!$('dialog[open] .tracker-reference-results button')"));
+  await run("$('dialog[open]').close()");
+  console.log('NOTES_SINGLE_TOOLBAR_AND_FOOTER_ACTIONS_OK');
   assert.equal(await run(`(() => {
     const row = $('.note-block-toggle');
     const input = row.querySelector('textarea');
@@ -221,9 +259,11 @@ async function create(template) {
     assert.equal(JSON.parse(ordered[0].blocks).find(block => block.type === 'checklist').checked, true);
     const tracker = JSON.parse(ordered[0].blocks).find(block=>block.type==='tracker');
     assert.deepEqual(tracker.views.map(view=>view.name),['Production table']);
-    const headings = JSON.parse(ordered[2].blocks).filter(block=>block.type==='heading');
-    assert.equal(headings[1].fontSize,32);
-    assert.equal(headings[1].color,'#3377aa');
+    const blocks = JSON.parse(ordered[2].blocks);
+    const heading = blocks.find(block=>block.type==='heading');
+    assert.equal(heading.fontSize,32);
+    assert.equal(heading.color,'#3377aa');
+    assert.equal(blocks.find(block=>block.type==='paragraph')?.text,' spec');
 
 
   } finally { database.close(); }
@@ -231,7 +271,7 @@ async function create(template) {
   await until(() => global.assetTestWindow !== win);
   win = global.assetTestWindow;
   await until(() => !win.webContents.isLoading());
-  await run("$('#open-notes').click()");
+  await run("setView('notes');api.notesList().then(items=>NotesWorkspace.open(items.find(item=>item.title==='YouTube workspace').id))");
   await until(() => run("$('#note-title').value==='YouTube workspace'"));
   assert.equal(await run("$('#note-blocks input[type=checkbox]').checked"), true);
   await create('movies');
@@ -274,13 +314,35 @@ async function create(template) {
   await until(() => run("$('.tracker-record-panel textarea')?.value==='Practical model reference'"));
   await run("$('.tracker-record-panel').close();$('#note-child').click();$('#note-template').value='blank';$('#note-template-form').requestSubmit();");
   await until(() => run("$('#note-title').value==='Untitled note' && $('#note-breadcrumbs button')?.textContent==='Movies & Series'"));
+  await run("$('.note-block-paragraph textarea').focus()");
+  win.webContents.insertText('Undo me');
+  await until(() => run("$('.note-block-paragraph textarea').value==='Undo me'"));
+  key('Z',['meta']);
+  await until(() => run("$('.note-block-paragraph textarea').value===''"));
+  key('Z',['meta','shift']);
+  await until(() => run("$('.note-block-paragraph textarea').value==='Undo me'"));
+  assert.equal(await run("getComputedStyle($('.note-block-paragraph textarea')).borderRadius"),'0px');
+  await run("$('.note-block-paragraph textarea').blur();$('.note-block-paragraph').dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}))");
+  await new Promise(resolve=>setTimeout(resolve,250));
+  assert.equal(await run("$('.note-block-paragraph .note-format-toolbar').classList.contains('is-visible')"),false);
+  await new Promise(resolve=>setTimeout(resolve,450));
+  assert.equal(await run("$('.note-block-paragraph .note-format-toolbar').classList.contains('is-visible')"),true);
+  await run("$('.note-block-paragraph').dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));$('.note-block-paragraph textarea').focus()");
+  assert.equal(await run("$('.note-block-paragraph .note-format-toolbar').classList.contains('is-visible')"),true);
+  const blockCount = await run("$('#note-blocks').children.length");
+  await run("$('#note-add-paragraph').click()");
+  await until(() => run(`$('#note-blocks').children.length===${blockCount+1} && document.activeElement.matches('.note-block-paragraph textarea')`));
+  key('Backspace');
+  await until(() => run(`$('#note-blocks').children.length===${blockCount} && document.activeElement.matches('.note-block-paragraph textarea')`));
+  console.log('NOTES_KEYBOARD_UNDO_REDO_DELETE_AND_FORMAT_TOOLTIP_OK');
+  await run("const paragraph=$('.note-block-paragraph textarea');paragraph.value='';paragraph.dispatchEvent(new Event('input',{bubbles:true}))");
   await run("$('.note-block-paragraph textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'/',bubbles:true}))");
   assert.equal(await run("!!$('dialog[aria-label=\"Insert a block\"][open]')"),true);
   await run("$('dialog[aria-label=\"Insert a block\"]').close();$('.note-block-paragraph textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'@',bubbles:true}))");
   await until(() => run("!!$('dialog[open] .tracker-reference-results button')"));
   await run("[...$('dialog[open] .tracker-reference-results').children].find(b=>b.textContent==='Movies & Series').click()");
   await until(() => run("!!$('.note-block-reference button')"));
-  await run("$('#note-block-type').value='table';$('#note-add-block').click()");
+  await insertBlock('table');
   await until(() => run("!!$('.note-block-table')"));
   await run(`(() => {
     const input = $('.note-block-table tbody textarea');

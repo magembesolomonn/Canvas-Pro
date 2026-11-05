@@ -25,6 +25,7 @@ const NotesWorkspace = (() => {
   };
   const dragType = 'application/x-canvaspro-note';
   let list, note, timer, saving, busy = false, revision = 0, savedRevision = 0;
+  let formatTimer, formatOwner, formatHoveredRow, formatPendingRow;
   let coverRevision = 0, dragId, draggedBlock, dropMarker, templateParent;
   const root = () => $('#notes-workspace');
   const status = message => { $('#notes-status').textContent = message; };
@@ -384,11 +385,78 @@ const NotesWorkspace = (() => {
   function splitOnEnter(input, block, index, property, selector) {
     input.onkeydown = event => {
       if (!nextEntry(event) || note.blocks.length >= 250) return;
-      const next = nextBlock(block);
+      const next = block.type === 'heading' ? {type:'paragraph',text:''} : nextBlock(block);
       next[property] = input.value.slice(input.selectionEnd);
       block[property] = input.value.slice(0,input.selectionStart);
       insertNext(index,next,selector);
     };
+  }
+  function setFormatOwner(row) {
+    formatOwner = row;
+    document.querySelectorAll('.note-format-toolbar').forEach(toolbar => {
+      toolbar.classList.toggle('is-visible',toolbar.closest('.note-block') === row);
+    });
+  }
+  function scheduleFormatToolbar(row) {
+    clearTimeout(formatTimer);
+    formatPendingRow = row;
+    setFormatOwner(null);
+    formatTimer = setTimeout(() => {
+      if (formatPendingRow !== row || formatHoveredRow !== row || !row.isConnected) return;
+      formatPendingRow = null;
+      setFormatOwner(row);
+    },600);
+  }
+  function focusFormatToolbar(row) {
+    clearTimeout(formatTimer);
+    formatPendingRow = null;
+    setFormatOwner(row);
+  }
+  function leaveFormatToolbar(row, relatedTarget) {
+    if (relatedTarget && row.contains(relatedTarget)) return;
+    if (formatHoveredRow === row) formatHoveredRow = null;
+    if (formatPendingRow === row) {
+      clearTimeout(formatTimer);
+      formatPendingRow = null;
+    }
+    if (formatOwner === row && !row.contains(document.activeElement)) setFormatOwner(null);
+  }
+  function focusBlock(index) {
+    const row = $('#note-blocks').children[index];
+    const input = row?.querySelector('textarea,input:not([type="checkbox"])');
+    (input || row)?.focus();
+  }
+  function removeBlock(index) {
+    const block = note.blocks[index];
+    if (!block) return;
+    if (block.type === 'tracker' && !window.confirm('Remove this tracker and all its records?')) return;
+    note.blocks.splice(index, 1);
+    if (!note.blocks.length) note.blocks.push({type:'paragraph',text:''});
+    changed();
+    renderBlocks();
+    focusBlock(Math.min(index,note.blocks.length-1));
+  }
+  function showBlockPicker(index, replace = false) {
+    if (note.blocks.length >= 250 && !replace) return;
+    const dialog = el('dialog','note-tracker-dialog');
+    dialog.setAttribute('aria-label','Insert a block');
+    const search = el('input');
+    search.placeholder = 'Find a block…';
+    search.setAttribute('aria-label','Find a block');
+    const choices = el('div','tracker-reference-results');
+    function update() {
+      choices.replaceChildren(...Object.entries(blockTypes)
+        .filter(([,name])=>name.toLowerCase().includes(search.value.toLowerCase()))
+        .map(([type,name])=>button(name,()=>{dialog.close();addBlock(type,index,replace); })));
+    }
+    search.oninput = update;
+    search.onkeydown = event=>{if(event.key==='Enter'){event.preventDefault();choices.firstChild?.click();}};
+    dialog.append(search,choices,button('Cancel',()=>dialog.close()));
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    document.body.append(dialog);
+    update();
+    dialog.showModal();
+    search.focus();
   }
   function headingSettings(block, input, actions) {
     const size = el('input');
@@ -486,11 +554,18 @@ const NotesWorkspace = (() => {
   function blockNode(block, index) {
     const row = el('div', 'note-block note-block-'+block.type), content = el('div', 'note-block-content');
     const embedded = ['tracker','reference','table','image'].includes(block.type);
+    let toolbar;
     let heading;
     if (embedded) {
       row.tabIndex = 0;
       row.setAttribute('aria-label',blockTypes[block.type]+' block');
       row.onkeydown = event => {
+        if (event.target===row && !event.metaKey && !event.ctrlKey && !event.altKey &&
+            ['Backspace','Delete'].includes(event.key)) {
+          event.preventDefault();
+          if (!event.repeat) removeBlock(index);
+          return;
+        }
         if (event.target===row && nextEntry(event)) insertNext(index,nextBlock(block),':scope > .note-block-content > input');
       };
     }
@@ -560,15 +635,23 @@ const NotesWorkspace = (() => {
       move.disabled = !note.blocks[index + offset];
       actions.append(move);
     }
-    actions.append(button('Remove block', () => {
-      if (block.type==='tracker' && !window.confirm('Remove this tracker and all its records?')) return;
-      note.blocks.splice(index, 1);
-      changed();
-      renderBlocks();
-    }));
+    actions.append(button('Remove block', () => removeBlock(index)));
     controls.append(actions);
     enableBlockDrag(row, summary, index);
-    if (block.type === 'heading' || block.type === 'paragraph') row.append(formatToolbar(block, index, content.querySelector('textarea,input')), content, controls);
+    if (block.type === 'heading' || block.type === 'paragraph') {
+      toolbar = formatToolbar(block, index, content.querySelector('textarea,input'));
+      row.addEventListener('pointerenter', event => {
+        if (event.pointerType === 'touch') return;
+        formatHoveredRow = row;
+        scheduleFormatToolbar(row);
+      });
+      row.addEventListener('pointerleave', event => leaveFormatToolbar(row,event.relatedTarget));
+      row.addEventListener('focusin', () => focusFormatToolbar(row));
+      row.addEventListener('focusout', event => {
+        if (!row.contains(event.relatedTarget) && formatHoveredRow !== row && formatOwner === row) setFormatOwner(null);
+      });
+      row.append(toolbar, content, controls);
+    }
     else row.append(content, controls);
     return row;
   }
@@ -578,7 +661,7 @@ const NotesWorkspace = (() => {
   }
   function renderBlocks() {
     $('#note-blocks').replaceChildren(...note.blocks.map(blockNode));
-    $('#note-add-block').disabled = note.blocks.length >= 250;
+    $('#note-add-paragraph').disabled = note.blocks.length >= 250;
   }
   function renderCover() {
     $('#note-cover').replaceChildren(...(note.hasCover ? [picture(note)] : []));
@@ -699,6 +782,12 @@ const NotesWorkspace = (() => {
     });
   }
   function init() {
+    $('#notes-editor').addEventListener('keydown', event => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== 'z' ||
+          !event.target.matches('input:not([type="checkbox"]),textarea,[contenteditable="true"]')) return;
+      event.preventDefault();
+      document.execCommand(event.shiftKey ? 'redo' : 'undo');
+    });
     $('#notes-tree').ontoggle = () => { if ($('#notes-tree').open) safe(loadList); };
     $('#note-template-form').onsubmit = event => {
       event.preventDefault();
@@ -734,32 +823,25 @@ const NotesWorkspace = (() => {
     $('#note-cover-add').onclick = () => cover(false);
     $('#note-cover-remove').onclick = () => cover(true);
     $('#note-delete').onclick = () => deleteNote(note.id);
-    for (const [type, name] of Object.entries(blockTypes)) $('#note-block-type').append(new Option(name, type));
-    $('#note-add-block').onclick = () => addBlock($('#note-block-type').value,note.blocks.length);
+    $('#note-add-paragraph').onclick = () => addBlock('paragraph',note.blocks.length);
+    $('#note-insert-block').onclick = () => showBlockPicker(note.blocks.length);
+    $('#note-insert-link').onclick = () => addBlock('reference',note.blocks.length);
     $('#note-blocks').addEventListener('keydown',event=>{
+      if (!event.isComposing && !event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey &&
+          ['Backspace','Delete'].includes(event.key) &&
+          event.target.matches('.note-block textarea,.note-block input:not([type="checkbox"]):not([type="color"]):not([type="number"])') &&
+          !event.target.closest('.notes-table-wrap,.note-tracker') &&
+          event.target.value === '' && event.target.selectionStart === 0 && event.target.selectionEnd === 0) {
+        event.preventDefault();
+        removeBlock([...$('#note-blocks').children].indexOf(event.target.closest('.note-block')));
+        return;
+      }
       if (event.isComposing || event.repeat || event.metaKey || event.ctrlKey || event.altKey ||
           !event.target.matches('.note-block-paragraph textarea') || event.target.value || !['/','@'].includes(event.key)) return;
       event.preventDefault();
       const index = [...$('#note-blocks').children].indexOf(event.target.closest('.note-block'));
       if (event.key==='@') { addBlock('reference',index,true); return; }
-      const dialog = el('dialog','note-tracker-dialog');
-      dialog.setAttribute('aria-label','Insert a block');
-      const search = el('input');
-      search.placeholder = 'Find a block…';
-      search.setAttribute('aria-label','Find a block');
-      const choices = el('div','tracker-reference-results');
-      function update() {
-        choices.replaceChildren(...Object.entries(blockTypes).filter(([,label])=>label.toLowerCase().includes(search.value.toLowerCase()))
-          .map(([type,label])=>button(label,()=>{dialog.close();addBlock(type,index,true);})));
-      }
-      search.oninput = update;
-      search.onkeydown = event=>{if(event.key==='Enter'){event.preventDefault();choices.firstChild?.click();}};
-      dialog.append(search,choices,button('Cancel',()=>dialog.close()));
-      dialog.addEventListener('close',()=>dialog.remove(),{once:true});
-      document.body.append(dialog);
-      update();
-      dialog.showModal();
-      search.focus();
+      showBlockPicker(index,true);
     });
   }
   function deleteNote(id) {
@@ -792,7 +874,8 @@ const NotesWorkspace = (() => {
       return true;
     }).then(added=>{
       if (!added) return;
-      $('#note-blocks').children[index]?.querySelector('textarea,input:not([type="checkbox"]),button')?.focus();
+      const row = $('#note-blocks').children[index];
+      (row?.querySelector('textarea,input:not([type="checkbox"])') || row?.querySelector('button'))?.focus();
     });
   }
 

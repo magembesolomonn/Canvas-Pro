@@ -3,7 +3,7 @@ const CanvasWorkspace=(()=>{
  class Workspace{
   constructor(){this.boards=[];this.folderRecords=[];this.documents=new Map();this.doc=null;this.nodes=new Map();this.tool='select';this.frame=0;this.generation=0;this.space=false;this.activePlayer=null;this.trayTab='files';this.traySelection=new Set();this.trayNodes=new Map();}
   init(){this.root=$('#canvas-workspace');this.viewport=$('#canvas-viewport');this.world=$('#canvas-world');this.overview=$('#canvas-overview');this.context=this.overview.getContext('2d');this.frameNode=el('div','canvas-selection-frame');for(const corner of ['nw','ne','sw','se']){const handle=el('span','canvas-resize-handle handle-'+corner);handle.dataset.resize=corner;handle.setAttribute('aria-label','Resize selection');this.frameNode.append(handle);}this.world.append(this.frameNode);
-   for(const b of document.querySelectorAll('[data-canvas-tool]')){if(!b.textContent)b.append(glyph({select:'cursor',hand:'hand',text:'text',rectangle:'rectangle',ellipse:'ellipse'}[b.dataset.canvasTool]));b.onclick=()=>this.setTool(b.dataset.canvasTool);}
+   for(const b of document.querySelectorAll('[data-canvas-tool]')){if(!b.textContent)b.append(glyph({select:'cursor',hand:'hand',text:'text',rectangle:'rectangle',ellipse:'ellipse',draw:'pencil',arrow:'arrow',sticky:'sticky',list:'list'}[b.dataset.canvasTool]));b.onclick=()=>this.setTool(b.dataset.canvasTool);}
    this.selectionTools=el('div','canvas-selection-tools');
    this.selectionTools.setAttribute('role','toolbar');this.selectionTools.setAttribute('aria-label','Selection actions');
    this.selectionTools.hidden=true;this.viewport.append(this.selectionTools);
