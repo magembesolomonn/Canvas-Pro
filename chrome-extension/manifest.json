@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Canvas Pro Capture",
-  "version": "0.7.7",
+  "version": "1.0.0",
   "description": "Save images, GIFs, discovered videos and screenshots to Canvas Pro with live capture activity.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwSXvHIlTct+NBOsO/MkxZ0XFWlbf7vHV3SA354pYADE3vKaUmbnePji4DBXJ1ut6DV0bTllLpPO1moi1UbLnO+U/zOtVjJ6A5mmHMckCfoGu4qQ3iwPcDETsfddqSTwPmGG1d7dimNme9HXxB/NZy5h3m9rfMQjQ24LhWdHfAAZarYewdpsx794wHJ8uwqC13urFCZNcRUOkQ3bCH/AUrtI1KeLbk+cuvTrdXravm1MIZJFAU2cMLyQy3PRGv7w2jbmB0bVO7xrDN1rVlSjzjkCxtCcJ2IPKwFue90Fe4AVimol/GhDbedAiOjEY3UkVS7UU2vNYfqcz4jhc+1rRAwIDAQAB",
   "permissions": [
@@ -110,5 +110,5 @@
   "side_panel": {
     "default_path": "collector.html"
   },
-  "version_name": "0.7.7"
+  "version_name": "1.0.0"
 }

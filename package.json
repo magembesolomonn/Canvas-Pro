@@ -1,6 +1,6 @@
 {
   "name": "canvas-pro",
-  "version": "0.13.0-dev.4",
+  "version": "1.0.0",
   "private": true,
   "description": "A native Mac library and browser capture companion",
   "main": "electron/main.cjs",
