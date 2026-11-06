@@ -153,7 +153,7 @@ function renderReader(article){
  }
 }
 function renderArticle(item){
- const button=document.createElement('button');button.type='button';button.className='rss-article'+(selectedId===item.id?' selected':'')+(!item.is_read?' unread':'');button.dataset.articleId=item.id;button.setAttribute('role','option');button.setAttribute('aria-selected',String(selectedId===item.id));
+ const button=document.createElement('button');button.type='button';button.className='rss-article'+(selectedId===item.id?' selected':'')+(!item.is_read?' unread':'');button.dataset.articleId=item.id;button.setAttribute('role','option');button.setAttribute('aria-selected',String(selectedId===item.id||!item.is_read));
  const top=document.createElement('div');top.className='rss-article-top';
  const dot=document.createElement('span');dot.className='rss-unread-mark';dot.setAttribute('aria-hidden','true');top.append(dot);
  const feed=document.createElement('span');feed.className='rss-article-feed';feed.textContent=displayFeedName(item.feed_title);feed.title=item.feed_title;top.append(feed,timeElement(item.published_at||item.first_seen));
@@ -250,7 +250,7 @@ function init(options={}){
  $('#rss-refresh').onclick=refresh;
  $('#rss-articles').addEventListener('keydown',event=>{
   if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
-  const rows=[...$('#rss-articles').querySelectorAll('[role="option"]')];if(!rows.length)return;
+  const rows=[...$('#rss-articles').querySelectorAll('[role="option"]')];if(!rows.length){$('#rss-list-status').textContent='No articles to navigate.';return;}
   event.preventDefault();event.stopPropagation();
   const index=rows.indexOf(document.activeElement);
   const next=event.key==='Home'?0:event.key==='End'?rows.length-1:

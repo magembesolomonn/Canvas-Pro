@@ -1,6 +1,5 @@
 # Canvas Pro
 
-A personal, local-first macOS asset library. The dark three-panel interface takes layout inspiration from the supplied Eagle screenshot: collections on the left, adjustable thumbnail gallery in the middle, editable details on the right. No account, server, or paid API is required by the app.
 
 ## Run
 
