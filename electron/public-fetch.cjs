@@ -3,6 +3,7 @@ const http=require('node:http');
 const https=require('node:https');
 const {isIP}=require('node:net');
 const {Readable}=require('node:stream');
+const zlib=require('node:zlib');
 
 function isPublicAddress(address){
   if(isIP(address)===4){
@@ -28,9 +29,9 @@ function publicLookup(host,options,done){
   });
 }
 
-async function publicFetch(value,{signal,headers}={}){
+async function publicFetch(value,{signal,headers,timeout=12000}={}){
   let url=new URL(value);
-  const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(12000)]):AbortSignal.timeout(12000);
+  const deadline=signal?AbortSignal.any([signal,AbortSignal.timeout(timeout)]):AbortSignal.timeout(timeout);
   for(let redirects=0;redirects<=5;redirects++){
     const host=url.hostname.replace(/^\[|\]$/g,'');
     if(!['http:','https:'].includes(url.protocol)||url.username||url.password||
@@ -50,9 +51,16 @@ async function publicFetch(value,{signal,headers}={}){
       url=new URL(incoming.headers.location,url);
       continue;
     }
-    const body=[204,205,304].includes(status)?null:Readable.toWeb(incoming);
+    const encoding=String(incoming.headers['content-encoding']||'').toLowerCase();
+    const decoded=encoding==='gzip'?incoming.pipe(zlib.createGunzip())
+      :encoding==='deflate'?incoming.pipe(zlib.createInflate())
+      :encoding==='br'?incoming.pipe(zlib.createBrotliDecompress()):incoming;
+    const body=[204,205,304].includes(status)?null:Readable.toWeb(decoded);
     if(!body)incoming.resume();
-    const response=new Response(body,{status,headers:incoming.headers});
+    const responseHeaders={...incoming.headers};
+    delete responseHeaders['content-encoding'];
+    delete responseHeaders['content-length'];
+    const response=new Response(body,{status,headers:responseHeaders});
     Object.defineProperty(response,'url',{value:url.href});
     return response;
   }

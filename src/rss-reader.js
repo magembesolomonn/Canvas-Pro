@@ -1,7 +1,7 @@
 (()=>{
 const $=selector=>document.querySelector(selector);
 const api=window.library;
-let navigate=()=>{},filter='all',feedId=null,unreadOnly=false,feeds=[],selectedId=null,selectedFeedId=null,request=0,refreshing=false,workspaceActive=false,listRequest=0;
+let navigate=()=>{},filter='all',feedId=null,unreadOnly=false,feeds=[],selectedId=null,selectedFeedId=null,request=0,refreshing=false,workspaceActive=false,listRequest=0,readerCache=new Map();
 const root=$('#rss-workspace');
 const escapeURL=(value,base)=>{try{const url=new URL(value,base);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:'';}catch{return '';}};
 const displayFeedName=value=>{
@@ -117,14 +117,11 @@ function renderReader(article){
  const head=document.createElement('div');head.className='rss-reader-heading';
  const actions=document.createElement('div');actions.className='rss-reader-actions';
  const star=document.createElement('button');star.type='button';star.className='rss-icon-button'+(article.is_starred?' is-starred':'');star.textContent=article.is_starred?'★':'☆';star.title=article.is_starred?'Remove star':'Star article';star.setAttribute('aria-label',star.title);star.setAttribute('aria-pressed',String(!!article.is_starred));
- star.onclick=async()=>{try{await api.rssSetState(article.id,{starred:!article.is_starred});await loadReader(article.id,false);}catch(error){showError(error);}};
- const read=document.createElement('button');read.type='button';read.className='rss-state-button';read.textContent=article.is_read?'Mark unread':'Mark as read';read.onclick=async()=>{try{await api.rssSetState(article.id,{read:!article.is_read});await loadReader(article.id,false);await renderNav();await renderList();}catch(error){showError(error);}};
+ star.onclick=async()=>{try{await api.rssSetState(article.id,{starred:!article.is_starred});readerCache.delete(article.id);await loadReader(article.id,false);}catch(error){showError(error);}};
+ const read=document.createElement('button');read.type='button';read.className='rss-state-button';read.textContent=article.is_read?'Mark unread':'Mark as read';read.onclick=async()=>{try{await api.rssSetState(article.id,{read:!article.is_read});readerCache.delete(article.id);await loadReader(article.id,false);await renderNav();await renderList();}catch(error){showError(error);}};
  actions.append(star,read);head.append(readableTime(article),actions);pane.append(head);
  const title=document.createElement('h1');title.className='rss-reader-title';title.textContent=article.readerTitle||article.title;pane.append(title);
  if(article.readerDescription){const description=document.createElement('p');description.className='rss-reader-description';description.textContent=article.readerDescription;pane.append(description);}
- if(article.readerSource==='paywall'){
-  const note=document.createElement('p');note.className='rss-paywall-note';note.textContent='This publisher limits the article to subscribers. Showing the content available in the feed.';pane.append(note);
- }
  if(article.readerStatus==='pending'||article.readerStatus==='running'){
   const status=document.createElement('p');status.className='rss-extraction-status';status.setAttribute('role','status');status.textContent=article.automaticExtraction?'Retrieving the full article in the background…':'Automatic extraction is off. The feed content is shown.';pane.append(status);
   if(!article.automaticExtraction&&article.readerStatus==='pending'){
@@ -141,9 +138,6 @@ function renderReader(article){
   refresh.onclick=async()=>{refresh.disabled=true;try{await api.rssRetryExtraction(article.id,true);}catch(error){showError(error);refresh.disabled=false;}};pane.append(refresh);
  }
  const content=document.createElement('div');content.className='rss-reader-content';content.append(safeContent(article.readerHTML,article.link||article.site_url));
- if(!article.readerHTML&&article.readerStatus!=='pending'&&article.readerStatus!=='running'){
-  const empty=document.createElement('p');empty.className='rss-reader-note';empty.textContent='The feed does not include article text.';content.append(empty);
- }
  pane.append(content);
  const sourceURL=escapeURL(article.link,article.site_url);
  if(sourceURL){
@@ -215,13 +209,22 @@ function emptyReader(){
  empty.append(mark,title,note);return empty;
 }
 async function loadReader(id,markRead){
- selectedId=id;const token=++request;
+ const same=selectedId===id&&readerCache.has(id);selectedId=id;const token=++request;
  try{
-  if(markRead){const current=await api.rssSetState(id,{read:true});}
-  const article=await api.rssRead(id);if(token!==request)return;selectedFeedId=article.feed_id;
-  if(markRead)article.is_read=1;
-  renderReader(article);await renderList();await renderNav();
+  let article=readerCache.get(id);
+  if(!article){article=await api.rssRead(id);if(token!==request)return;readerCache.set(id,article);}
+  selectedFeedId=article.feed_id;
+  if(markRead&&!article.is_read){
+   const state=await api.rssSetState(id,{read:true});if(token!==request)return;
+   article={...article,is_read:state.is_read??1};readerCache.set(id,article);
+  }
+  renderReader(article);
+  if(markRead&&!same){await renderNav();if(unreadOnly)await renderList();else markReadInList(id);}
  }catch(error){if(token===request)showError(error);}
+}
+function markReadInList(id){
+ const button=$('#rss-articles [data-article-id="'+id+'"]');if(!button)return;
+ button.classList.remove('unread');button.setAttribute('aria-selected',String(selectedId===id));
 }
 async function refresh(){
  if(refreshing)return;
@@ -263,7 +266,7 @@ function init(options={}){
  });
  document.querySelectorAll('[data-rss-unread]').forEach(button=>button.onclick=()=>{unreadOnly=button.dataset.rssUnread==='';renderList();});
  api.onRSSUnsubscribeRequested(id=>removeSubscription(id));
- api.onRSSChanged(async()=>{await renderNav();if(!root.hidden){await renderList();if(selectedId)loadReader(selectedId,false);}});
+ api.onRSSChanged(async()=>{readerCache.clear();await renderNav();if(!root.hidden){await renderList();if(selectedId)loadReader(selectedId,false);}});
 }
 function show(active){
  workspaceActive=active;root.hidden=!active;document.body.classList.toggle('rss-active',active);

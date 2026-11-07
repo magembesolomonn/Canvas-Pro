@@ -80,7 +80,11 @@
 .rss-reader-empty p { margin: 0; font-size: 11px; }
 .rss-unsubscribe { padding: 2px 6px; border: 0; background: transparent; color: #aaa; font-size: 9px; }
 .rss-unsubscribe:hover { color: #e0a2a2; }
-.rss-icon-button.spinning { animation: rss-spin .9s linear infinite; }
+.rss-icon-button.spinning { 
+  animation: rss-spin .9s linear infinite; 
+  background: transparent !important;
+  will-change: transform;
+}
 @keyframes rss-spin { to { transform: rotate(360deg); } }
 @media (max-width: 760px) {
  .rss-columns { grid-template-columns: minmax(240px, 40%) minmax(0, 1fr); }

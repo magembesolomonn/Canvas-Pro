@@ -135,7 +135,7 @@ test('uses Google News RSS when a publisher blocks its website homepage', async 
     assert.equal(feed.source_kind, 'rss');
     const article = service.articles({ feedId: feed.id })[0];
     assert.equal(article.title, 'Latest report - Blocked News');
-    assert.equal(service.articleRecord(article.id).extraction_status, 'not_required');
+    assert.equal(service.articleRecord(article.id).extraction_status, 'pending');
     assert.match(service.read(article.id).readerHTML, /feed-provided article preview/);
   } finally { await service.close(); db.close(); }
 });
@@ -175,6 +175,146 @@ test('reader view falls back to feed text for paywalls and caches accessible art
     const cached = service.read(open.id);
     assert.equal(cached.readerSource, 'readability');
     assert.equal(cached.readerTitle, 'Open title');
+  } finally { await service.close(); db.close(); }
+});
+
+test('retrieves blocked articles through crawler and archive fallbacks', async () => {
+  const db = new DatabaseSync(':memory:');
+  const paragraphs = Array.from({ length: 10 }, (_, index) =>
+    `<p>Archived full article paragraph ${index} contains original reporting and context.</p>`).join('');
+  const seen = [];
+  const fetcher = async (url, options = {}) => {
+    seen.push({ url, agent: options.headers?.['User-Agent'] || '' });
+    if (url.endsWith('/feed.xml')) return response(xml(item({
+      id: 'blocked', link: 'https://news.test/blocked', content: '', summary: '<p>Preview only.</p>'
+    })));
+    if (url === 'https://news.test/blocked')
+      return new Response('Forbidden', { status: 403, headers: { 'content-type': 'text/html' } });
+    if (url.startsWith('https://web.archive.org/web/2id_/'))
+      return response(`<html><head><title>Archived title</title></head><body><article><h1>Archived title</h1>${paragraphs}</article></body></html>`, 'text/html');
+    throw new Error('Unexpected request: ' + url);
+  };
+  const service = new RSSService(db, {
+    fetcher, minimumHostInterval: 0, extractor: async () => null, readerProxy: true
+  });
+  try {
+    const feed = await service.add('https://news.test/feed.xml');
+    const article = service.articles({ feedId: feed.id })[0];
+    await waitFor(() => service.articleRecord(article.id).extraction_status === 'complete');
+    const reader = service.read(article.id);
+    assert.match(reader.readerHTML, /Archived full article paragraph/);
+    assert.notEqual(reader.readerSource, 'paywall');
+    assert.ok(seen.some(request => request.agent.includes('Googlebot')), 'expected a Googlebot attempt');
+    assert.ok(seen.some(request => request.url.startsWith('https://web.archive.org/web/2id_/')),
+      'expected a Wayback Machine attempt');
+  } finally { await service.close(); db.close(); }
+});
+
+test('the archive fallback setting can be turned off', async () => {
+  const db = new DatabaseSync(':memory:');
+  const paragraphs = Array.from({ length: 10 }, (_, index) =>
+    `<p>Archived paragraph ${index} contains original reporting and context.</p>`).join('');
+  let waybackRequests = 0;
+  const fetcher = async url => {
+    if (url.endsWith('/feed.xml')) return response(xml(item({
+      id: 'blocked', link: 'https://news.test/blocked', content: '', summary: '<p>Preview only.</p>'
+    })));
+    if (url.startsWith('https://web.archive.org/web/2id_/')) {
+      waybackRequests++;
+      return response(`<html><body><article>${paragraphs}</article></body></html>`, 'text/html');
+    }
+    return new Response('Forbidden', { status: 403, headers: { 'content-type': 'text/html' } });
+  };
+  const service = new RSSService(db, {
+    fetcher, minimumHostInterval: 0, extractor: async () => null, readerProxy: true
+  });
+  try {
+    assert.equal(service.setReaderProxy(false).enabled, false);
+    assert.equal(service.readerProxySetting(), false);
+    const feed = await service.add('https://news.test/feed.xml');
+    const article = service.articles({ feedId: feed.id })[0];
+    await waitFor(() => service.articleRecord(article.id).extraction_status === 'failed');
+    assert.equal(waybackRequests, 0);
+    assert.equal(service.read(article.id).readerSource, 'feed');
+    assert.equal(service.setReaderProxy(true).enabled, true);
+  } finally { await service.close(); db.close(); }
+});
+
+test('does not cache archive viewer pages as article content', async () => {
+  const db = new DatabaseSync(':memory:');
+  const fetcher = async url => {
+    if (url.endsWith('/feed.xml')) return response(xml(item({
+      id: 'blocked', link: 'https://news.test/blocked', content: '', summary: '<p>Available preview.</p>'
+    })));
+    if (url.startsWith('https://archive.ph/newest/'))
+      return response('<html><head><title>archive.today</title></head><body><div>archive.today webpage capture Saved from 7 Nov 2026 All snapshots from host www.news.test</div></body></html>', 'text/html');
+    if (url.startsWith('https://web.archive.org/'))
+      return new Response('Not archived', { status: 404, headers: { 'content-type': 'text/html' } });
+    return new Response('Forbidden', { status: 403, headers: { 'content-type': 'text/html' } });
+  };
+  const service = new RSSService(db, {
+    fetcher, minimumHostInterval: 0, extractor: async () => null, readerProxy: true
+  });
+  try {
+    const feed = await service.add('https://news.test/feed.xml');
+    const article = service.articles({ feedId: feed.id })[0];
+    await waitFor(() => service.articleRecord(article.id).extraction_status === 'failed');
+    const reader = service.read(article.id);
+    assert.equal(reader.readerSource, 'feed');
+    assert.match(reader.readerHTML, /Available preview/);
+    assert.match(reader.readerError, /viewer page/i);
+  } finally { await service.close(); db.close(); }
+});
+
+test('unwraps an archive viewer frame that contains the article', async () => {
+  const db = new DatabaseSync(':memory:');
+  const paragraphs = Array.from({ length: 10 }, (_, index) =>
+    `<p>Archived frame paragraph ${index} contains original reporting and context.</p>`).join('');
+  const fetcher = async url => {
+    if (url.endsWith('/feed.xml')) return response(xml(item({
+      id: 'blocked', link: 'https://news.test/blocked', content: '', summary: '<p>Available preview.</p>'
+    })));
+    if (url === 'https://archive.ph/newest/https://news.test/blocked')
+      return response('<html><head><title>archive.today</title></head><body><div>archive.today webpage capture Saved from 7 Nov 2026 All snapshots from host www.news.test</div><iframe src="/frame/story"></iframe></body></html>', 'text/html');
+    if (url === 'https://archive.ph/frame/story')
+      return response(`<html><body><article>${paragraphs}</article></body></html>`, 'text/html');
+    if (url.startsWith('https://web.archive.org/'))
+      return new Response('Not archived', { status: 404, headers: { 'content-type': 'text/html' } });
+    return new Response('Forbidden', { status: 403, headers: { 'content-type': 'text/html' } });
+  };
+  const service = new RSSService(db, {
+    fetcher, minimumHostInterval: 0, extractor: async () => null, readerProxy: true
+  });
+  try {
+    const feed = await service.add('https://news.test/feed.xml');
+    const article = service.articles({ feedId: feed.id })[0];
+    await waitFor(() => service.articleRecord(article.id).extraction_status === 'complete');
+    assert.match(service.read(article.id).readerHTML, /Archived frame paragraph/);
+  } finally { await service.close(); db.close(); }
+});
+
+test('does not cache non-HTML responses as article content', async () => {
+  const db = new DatabaseSync(':memory:');
+  const pdf = '%PDF-1.7\n' + '\u0001\u0002binary\u0003'.repeat(200);
+  const fetcher = async url => {
+    if (url.endsWith('/feed.xml')) return response(xml(item({
+      id: 'pdf', link: 'https://news.test/paper.pdf', content: '', summary: '<p>Paper preview.</p>'
+    })));
+    if (url === 'https://news.test/paper.pdf')
+      return new Response(pdf, { status: 200, headers: { 'content-type': 'application/pdf' } });
+    return new Response('Forbidden', { status: 403, headers: { 'content-type': 'text/html' } });
+  };
+  const service = new RSSService(db, {
+    fetcher, minimumHostInterval: 0, extractor: async () => null, readerProxy: false
+  });
+  try {
+    const feed = await service.add('https://news.test/feed.xml');
+    const article = service.articles({ feedId: feed.id })[0];
+    await waitFor(() => service.articleRecord(article.id).extraction_status === 'failed');
+    const reader = service.read(article.id);
+    assert.equal(reader.readerSource, 'feed');
+    assert.match(reader.readerHTML, /Paper preview/);
+    assert.match(reader.readerError, /not an HTML article/i);
   } finally { await service.close(); db.close(); }
 });
 

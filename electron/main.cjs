@@ -380,8 +380,9 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('rss-refresh',async event=>{trusted(event);return rssService.refreshAll();});
   ipcMain.handle('rss-read',(event,id)=>{trusted(event);return rssService.read(id);});
-  ipcMain.handle('rss-extraction-settings',event=>{trusted(event);return {enabled:rssService.automaticExtraction()};});
+  ipcMain.handle('rss-extraction-settings',event=>{trusted(event);return {enabled:rssService.automaticExtraction(),readerProxy:rssService.readerProxySetting()};});
   ipcMain.handle('rss-set-automatic-extraction',(event,enabled)=>{trusted(event);return rssService.setAutomaticExtraction(enabled);});
+  ipcMain.handle('rss-set-reader-proxy',(event,enabled)=>{trusted(event);return rssService.setReaderProxy(enabled);});
   ipcMain.handle('rss-retry-extraction',(event,id,options)=>{trusted(event);return rssService.retryExtraction(id,options||{});});
   ipcMain.handle('rss-set-state',(event,id,state)=>{trusted(event);return rssService.setState(id,state);});
   ipcMain.handle('rss-open-url',(event,value)=>{trusted(event);return shell.openExternal(validURL(value));});

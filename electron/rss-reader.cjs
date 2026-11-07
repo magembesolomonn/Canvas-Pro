@@ -6,8 +6,25 @@ const { extract: extractWithTrafilatura } = require('./rss-extractor.cjs');
 
 const BODY_LIMIT = 8 * 1024 * 1024;
 const ARTICLE_LIMIT = 300;
-const READER_CACHE_LIMIT = 20;
+const READER_CACHE_LIMIT = 300;
 const EXTRACTION_CONCURRENCY = 2;
+const MIN_READER_TEXT = 400;
+const GOOGLEBOT_AGENT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+const ARCHIVE_MIRRORS = ['archive.ph', 'archive.is', 'archive.li', 'archive.md', 'archive.vn', 'archive.fo'];
+const readerTextLength = html =>
+  String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length;
+const looksLikeHTML = body => {
+  const sample = String(body || '').slice(0, 4000);
+  if (!sample.trim() || sample.includes('\u0000') || /^%PDF-/i.test(sample)) return false;
+  return /<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<article[\s>]|<main[\s>]|<div[\s>]|<p[\s>]/i.test(sample);
+};
+function betterCandidate(candidate, current) {
+  if (!candidate?.readable) return false;
+  if (candidate.source !== 'direct' && candidate.textLength < MIN_READER_TEXT) return false;
+  if (!current?.readable) return true;
+  if (candidate.paywalled !== current.paywalled) return !candidate.paywalled;
+  return candidate.textLength > current.textLength;
+}
 const articleId = (feedId, key) => crypto.createHash('sha256').update(feedId + '\0' + key).digest('hex');
 const isGoogleNewsArticle = value => {
   try {
@@ -57,6 +74,7 @@ class RSSService {
   constructor(db, options = {}) {
     this.db = db;
     this.fetch = options.fetcher || publicFetch;
+    this.readerProxyCapable = options.readerProxy ?? this.fetch === publicFetch;
     this.extractor = options.extractor || extractWithTrafilatura;
     this.onUpdate = options.onUpdate || (() => {});
     this.minimumHostInterval = options.minimumHostInterval ?? 1000;
@@ -65,6 +83,7 @@ class RSSService {
     this.activeExtractions = new Set();
     this.activeOperations = new Set();
     this.lastExtractionByHost = new Map();
+    this.hostQueues = new Map();
     this.closed = false;
     db.exec(`
       CREATE TABLE IF NOT EXISTS rss_feeds (
@@ -268,41 +287,52 @@ class RSSService {
     try {
       const url = validURL(article.link);
       await this.waitForHost(url);
-      const result = await this.response(url, {});
-      const pageURL = result.response.url || url;
-      const pageImageURL = article.image_url || await runContentWorker('image', { html: result.body, url: pageURL });
+      const errors = [];
+      let direct = null, directBody = null;
+      try {
+        const result = await this.response(url, {});
+        const baseURL = result.response.url || url;
+        directBody = { body: result.body, baseURL };
+        if (!imageOnly) direct = await this.collectCandidate(result.body, baseURL, 'direct');
+      } catch (error) {
+        errors.push('Direct: ' + String(error.message || error).split('\n')[0].slice(0, 200));
+      }
+      let best = direct;
+      const needsFallback = !imageOnly && (!best || !best.readable || best.paywalled ||
+        best.textLength < MIN_READER_TEXT);
+      if (needsFallback && this.remoteFallbacksEnabled()) {
+        for (const strategy of this.retrievalStrategies(url)) {
+          if (best?.readable && !best.paywalled && best.textLength >= 1200) break;
+          try {
+            const fetched = await strategy.run();
+            const candidate = await this.collectCandidate(fetched.body, fetched.baseURL, fetched.source);
+            if (betterCandidate(candidate, best)) best = candidate;
+          } catch (error) {
+            errors.push(strategy.name + ': ' +
+              String(error.message || error).split('\n')[0].slice(0, 200));
+          }
+        }
+      }
+      const source = best || direct || directBody;
+      const pageImageURL = article.image_url || (source
+        ? await runContentWorker('image', { html: source.body, url: source.baseURL })
+        : '');
       imageCheckedAt = new Date().toISOString();
       this.db.prepare(`
         UPDATE rss_articles SET image_url=CASE WHEN ?<>'' THEN ? ELSE image_url END,image_checked_at=?
         WHERE id=?
       `).run(pageImageURL, pageImageURL, imageCheckedAt, id);
       if (imageOnly) { this.onUpdate(); return; }
-      if (await runContentWorker('paywall', { html: result.body }))
-        throw new Error('The publisher restricts this article; showing the content available in the feed.');
-
-      let readable = null;
-      const extractionErrors = [];
-      try {
-        const primary = await this.extractor(result.body, pageURL);
-        readable = await runContentWorker('normalize', { result: primary, html: result.body, url: pageURL });
-      } catch (error) {
-        extractionErrors.push('Trafilatura: ' + String(error.message || error).split('\n')[0].slice(0, 200));
-      }
-      let method = 'trafilatura';
+      const readable = best?.readable &&
+        (best.source === 'direct' || best.textLength >= MIN_READER_TEXT) ? best.readable : null;
       if (!readable) {
-        try {
-          readable = await runContentWorker('readability', { html: result.body, url: pageURL });
-        } catch (error) {
-          extractionErrors.push('Readability: ' + String(error.message || error).split('\n')[0].slice(0, 200));
-        }
-        if (readable?.paywalled)
-          throw new Error('The publisher restricts this article; showing the content available in the feed.');
-        if (!readable?.contentHTML) {
-          const details = extractionErrors.length ? ' ' + extractionErrors.join(' ') : '';
-          throw new Error('The page did not contain extractable article content.' + details);
-        }
-        method = 'readability';
+        const details = [...(best?.errors || []), ...errors].filter(Boolean).join(' ');
+        throw new Error((best?.paywalled
+          ? 'The publisher restricts this article and the page did not include readable text.'
+          : 'The page did not contain extractable article content.') + (details ? ' ' + details : ''));
       }
+      let method = best.method;
+      if (best.paywalled || readable.paywalled) method = 'restricted';
       const extractedAt = new Date().toISOString();
       const title = readable.title || '';
       this.db.prepare(`
@@ -337,6 +367,149 @@ class RSSService {
       }
     }
     this.onUpdate();
+  }
+
+  readerProxySetting() {
+    const row = this.db.prepare("SELECT value FROM rss_settings WHERE key='reader-proxy'").get();
+    return row ? row.value === 'true' : true;
+  }
+
+  setReaderProxy(enabled) {
+    if (typeof enabled !== 'boolean') throw new Error('Choose whether to use the reader service.');
+    this.db.prepare(`
+      INSERT INTO rss_settings(key,value) VALUES('reader-proxy',?)
+      ON CONFLICT(key) DO UPDATE SET value=excluded.value
+    `).run(String(enabled));
+    return { enabled };
+  }
+
+  remoteFallbacksEnabled() {
+    return this.readerProxyCapable && this.readerProxySetting() &&
+      process.env.CANVAS_DISABLE_READER_PROXY !== '1';
+  }
+
+  async throttledFetch(host, url, options = {}, gap = 3000) {
+    const previous = this.hostQueues.get(host) || Promise.resolve();
+    let release;
+    const current = new Promise(resolve => { release = resolve; });
+    this.hostQueues.set(host, previous.then(() => current, () => current));
+    await previous.catch(() => {});
+    try {
+      return await this.fetch(url, options);
+    } finally {
+      const timer = setTimeout(release, this.minimumHostInterval ? gap : 0);
+      timer.unref?.();
+    }
+  }
+
+  retrievalStrategies(url) {
+    return [
+      { name: 'Googlebot', run: () => this.googlebotFetch(url) },
+      { name: 'Wayback Machine', run: () => this.waybackFetch(url) },
+      { name: 'Jina Reader', run: () => this.readerProxy(url) },
+      { name: 'archive.today', run: () => this.archiveFetch(url) }
+    ];
+  }
+
+  async googlebotFetch(url) {
+    const response = await this.fetch(url, {
+      headers: { 'User-Agent': GOOGLEBOT_AGENT }, timeout: 15000
+    });
+    if (!response.ok) throw new Error('Googlebot returned HTTP ' + response.status + '.');
+    return { body: await readLimited(response), baseURL: response.url || url, source: 'googlebot' };
+  }
+
+  async waybackFetch(url) {
+    const target = 'https://web.archive.org/web/2id_/' + encodeURIComponent(url);
+    let response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await this.throttledFetch('web.archive.org', target, { timeout: 25000 }, 4000);
+      if (response.status !== 429 && response.status !== 503) break;
+      const retryAfter = Number(response.headers.get('retry-after'));
+      await response.body?.cancel().catch(() => {});
+      if (attempt < 2) await new Promise(resolve => setTimeout(
+        resolve, Math.min(15000, (retryAfter || 5) * 1000)));
+    }
+    if (!response.ok) throw new Error('Wayback returned HTTP ' + response.status + '.');
+    const body = await readLimited(response);
+    if (!/<html/i.test(body) || /Wayback Machine has not archived that URL/i.test(body))
+      throw new Error('No Wayback snapshot is available.');
+    return { body, baseURL: url, source: 'wayback' };
+  }
+
+  async archiveFetch(url) {
+    const failures = [];
+    const viewer = /webpage capture|All snapshots from host|archive\.today webpage capture/i;
+    for (const host of ARCHIVE_MIRRORS) {
+      try {
+        const response = await this.throttledFetch(
+          host, 'https://' + host + '/newest/' + url, { timeout: 8000 }, 1500);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        let body = await readLimited(response);
+        if (!/<html/i.test(body) || !/archive\.(?:ph|is|li|md|vn|fo)|archive\.today/i.test(body))
+          throw new Error('No snapshot is available.');
+        if (viewer.test(body)) {
+          const frame = body.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+          if (!frame) throw new Error('The archive returned its viewer page instead of the article.');
+          const base = response.url || 'https://' + host + '/newest/' + url;
+          const frameResponse = await this.throttledFetch(
+            host, new URL(frame[1], base).href, { timeout: 10000 }, 1500);
+          if (!frameResponse.ok)
+            throw new Error('The archive viewer frame returned HTTP ' + frameResponse.status + '.');
+          body = await readLimited(frameResponse);
+          if (viewer.test(body))
+            throw new Error('The archive returned its viewer page instead of the article.');
+        }
+        return { body, baseURL: url, source: 'archive.today' };
+      } catch (error) {
+        failures.push(host + ': ' + String(error.message || error).split('\n')[0].slice(0, 80));
+      }
+    }
+    throw new Error(failures.join(' '));
+  }
+
+  async readerProxy(url) {
+    if (!this.remoteFallbacksEnabled()) throw new Error('Reader proxy is disabled.');
+    const response = await this.throttledFetch('r.jina.ai', 'https://r.jina.ai/' + url, {
+      headers: { 'X-Return-Format': 'html' },
+      timeout: 30000
+    }, 3500);
+    if (!response.ok) throw new Error('Reader proxy returned HTTP ' + response.status + '.');
+    return { body: await readLimited(response), baseURL: url, source: 'jina' };
+  }
+
+  async collectCandidate(body, baseURL, source) {
+    if (!looksLikeHTML(body)) {
+      return {
+        body, baseURL, source, paywalled: false, readable: null, method: '',
+        errors: ['The response was not an HTML article.'], textLength: 0
+      };
+    }
+    const paywalled = await runContentWorker('paywall', { html: body });
+    const extracted = await this.extractReadable(body, baseURL);
+    return {
+      body, baseURL, source, paywalled,
+      readable: extracted.readable, method: extracted.method, errors: extracted.errors,
+      textLength: readerTextLength(extracted.readable?.contentHTML)
+    };
+  }
+
+  async extractReadable(body, url) {
+    const errors = [];
+    try {
+      const primary = await this.extractor(body, url);
+      const normalized = await runContentWorker('normalize', { result: primary, html: body, url });
+      if (normalized?.contentHTML) return { readable: normalized, method: 'trafilatura', errors };
+    } catch (error) {
+      errors.push('Trafilatura: ' + String(error.message || error).split('\n')[0].slice(0, 200));
+    }
+    try {
+      const readable = await runContentWorker('readability', { html: body, url });
+      if (readable?.contentHTML) return { readable, method: 'readability', errors };
+    } catch (error) {
+      errors.push('Readability: ' + String(error.message || error).split('\n')[0].slice(0, 200));
+    }
+    return { readable: null, method: '', errors };
   }
 
   retryExtraction(id, { refresh = false } = {}) {
@@ -470,7 +643,7 @@ class RSSService {
         link: item.link, author: item.author.slice(0, 300), summary: item.summary.slice(0, 1200),
         content_html: item.contentHTML.slice(0, 100000), has_full_content: item.hasFullContent ? 1 : 0,
         image_url: item.imageURL, published_at: item.publishedAt, first_seen: now,
-        extraction_status: item.hasFullContent || !item.link || isGoogleNewsArticle(item.link) ? 'not_required' : 'pending'
+        extraction_status: item.hasFullContent || !item.link ? 'not_required' : 'pending'
       });
     }
     this.db.prepare(`

@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('library', {
   rssRead:id=>ipcRenderer.invoke('rss-read',id),
   rssExtractionSettings:()=>ipcRenderer.invoke('rss-extraction-settings'),
   rssSetAutomaticExtraction:enabled=>ipcRenderer.invoke('rss-set-automatic-extraction',enabled),
+  rssSetReaderProxy:enabled=>ipcRenderer.invoke('rss-set-reader-proxy',enabled),
   rssRetryExtraction:(id,refresh)=>ipcRenderer.invoke('rss-retry-extraction',id,{refresh}),
   rssSetState:(id,state)=>ipcRenderer.invoke('rss-set-state',id,state),
   rssOpenURL:url=>ipcRenderer.invoke('rss-open-url',url),
