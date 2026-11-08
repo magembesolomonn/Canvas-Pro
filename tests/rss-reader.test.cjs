@@ -128,6 +128,7 @@ test('uses Google News RSS when a publisher blocks its website homepage', async 
   };
   const service = new RSSService(db, { fetcher, minimumHostInterval: 0 });
   try {
+    service.setAutomaticExtraction(false);
     const feed = await service.add('https://blocked.test/');
     assert.equal(feed.url, googleURL);
     assert.equal(feed.title, 'Blocked News');
@@ -137,6 +138,34 @@ test('uses Google News RSS when a publisher blocks its website homepage', async 
     assert.equal(article.title, 'Latest report - Blocked News');
     assert.equal(service.articleRecord(article.id).extraction_status, 'pending');
     assert.match(service.read(article.id).readerHTML, /feed-provided article preview/);
+  } finally { await service.close(); db.close(); }
+});
+
+test('prefers a publisher feed over Google News when its homepage is blocked', async () => {
+  const db = new DatabaseSync(':memory:');
+  const feedURL = 'https://blocked.test/feed/all/';
+  const publisherFeed = xml(item({
+    id: 'publisher-story', title: 'Publisher story', link: 'https://blocked.test/story',
+    content: '<p>' + 'Full publisher article text. '.repeat(20) + '</p>'
+  }));
+  const requested = [];
+  const fetcher = async url => {
+    requested.push(url);
+    if (url === 'https://blocked.test/')
+      return new Response('Blocked', { status: 403, headers: { 'content-type': 'text/html' } });
+    if (url === feedURL) return response(publisherFeed);
+    throw new Error('Unexpected request: ' + url);
+  };
+  const service = new RSSService(db, { fetcher, minimumHostInterval: 0 });
+  try {
+    service.setAutomaticExtraction(false);
+    const feed = await service.add('https://blocked.test/');
+    assert.equal(feed.url, feedURL);
+    assert.equal(feed.source_kind, 'rss');
+    const article = service.articles({ feedId: feed.id })[0];
+    assert.equal(article.link, 'https://blocked.test/story');
+    assert.equal(service.articleRecord(article.id).has_full_content, 1);
+    assert.doesNotMatch(requested.join(' '), /news\.google\.com/);
   } finally { await service.close(); db.close(); }
 });
 

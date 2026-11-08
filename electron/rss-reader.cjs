@@ -11,6 +11,7 @@ const EXTRACTION_CONCURRENCY = 2;
 const MIN_READER_TEXT = 400;
 const GOOGLEBOT_AGENT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
 const ARCHIVE_MIRRORS = ['archive.ph', 'archive.is', 'archive.li', 'archive.md', 'archive.vn', 'archive.fo'];
+const FEED_PATHS = ['/feed/all/', '/feed', '/rss', '/rss.xml', '/feed.xml', '/atom.xml', '/index.xml'];
 const readerTextLength = html =>
   String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length;
 const looksLikeHTML = body => {
@@ -26,12 +27,6 @@ function betterCandidate(candidate, current) {
   return candidate.textLength > current.textLength;
 }
 const articleId = (feedId, key) => crypto.createHash('sha256').update(feedId + '\0' + key).digest('hex');
-const isGoogleNewsArticle = value => {
-  try {
-    const url = new URL(value);
-    return url.hostname === 'news.google.com' && /^\/rss\/articles\//.test(url.pathname);
-  } catch { return false; }
-};
 function transaction(db, operation) {
   db.exec('BEGIN IMMEDIATE');
   try { const result = operation(); db.exec('COMMIT'); return result; }
@@ -550,6 +545,42 @@ class RSSService {
     return { response, body: await readLimited(response) };
   }
 
+  async findFeed(origin, discovered = []) {
+    const candidates = [...discovered];
+    for (const path of FEED_PATHS) {
+      const url = new URL(path, origin).href;
+      if (!candidates.some(candidate => candidate.url === url)) candidates.push({ url, title: '' });
+    }
+    const errors = [];
+    for (const candidate of candidates.slice(0, 12)) {
+      try {
+        const result = await this.response(validURL(candidate.url));
+        const parsed = parseFeed(result.body, result.response.url || candidate.url);
+        if (parsed.valid)
+          return { feed: { url: result.response.url || candidate.url, parsed, response: result.response }, errors };
+      } catch (error) { errors.push(error); }
+    }
+    return { feed: null, errors };
+  }
+
+  async googleNewsFallback(source, cause) {
+    try {
+      const googleURL = new URL('https://news.google.com/rss/search');
+      googleURL.searchParams.set('q', `site:${source.hostname.replace(/^www\./, '')}`);
+      googleURL.searchParams.set('hl', 'en');
+      const result = await this.response(googleURL.href);
+      const parsed = parseFeed(result.body, result.response.url || googleURL.href);
+      if (!parsed.valid || !parsed.items.length)
+        throw new Error('Google News returned no articles for this publisher.');
+      const sourceItem = parsed.items.find(item => item.sourceURL);
+      parsed.title = sourceItem?.sourceName || source.hostname.replace(/^www\./, '');
+      parsed.siteURL = sourceItem?.sourceURL || source.origin + '/';
+      return { url: result.response.url || googleURL.href, parsed, response: result.response };
+    } catch (error) {
+      throw new Error(cause.message + ' Google News fallback failed: ' + String(error.message || error));
+    }
+  }
+
   async resolveFeed(inputURL) {
     const sourceURL = validURL(inputURL);
     let initial;
@@ -557,45 +588,23 @@ class RSSService {
       initial = await this.response(sourceURL);
     } catch (error) {
       const source = new URL(sourceURL);
-      if (error.message.includes('HTTP 403') && source.pathname === '/' && source.hostname !== 'news.google.com') {
-        try {
-          const googleURL = new URL('https://news.google.com/rss/search');
-          googleURL.searchParams.set('q', `site:${source.hostname.replace(/^www\./, '')}`);
-          googleURL.searchParams.set('hl', 'en');
-          const result = await this.response(googleURL.href);
-          const parsed = parseFeed(result.body, result.response.url || googleURL.href);
-          if (!parsed.valid || !parsed.items.length)
-            throw new Error('Google News returned no articles for this publisher.');
-          const sourceItem = parsed.items.find(item => item.sourceURL);
-          parsed.title = sourceItem?.sourceName || source.hostname.replace(/^www\./, '');
-          parsed.siteURL = sourceItem?.sourceURL || source.origin + '/';
-          return { url: result.response.url || googleURL.href, parsed, response: result.response };
-        } catch (fallbackError) {
-          throw new Error(error.message + ' Google News fallback failed: ' + String(fallbackError.message || fallbackError));
-        }
+      if (source.pathname === '/' && source.hostname !== 'news.google.com') {
+        const { feed } = await this.findFeed(source.origin);
+        if (feed) return feed;
+        if (error.message.includes('HTTP 403')) return this.googleNewsFallback(source, error);
       }
       throw error;
     }
-    let parsed = parseFeed(initial.body, initial.response.url || sourceURL);
+    const parsed = parseFeed(initial.body, initial.response.url || sourceURL);
     if (parsed.valid) return { url: initial.response.url || sourceURL, parsed, response: initial.response };
 
-    const candidates = discoverFeeds(initial.body, initial.response.url || sourceURL);
     const base = new URL(initial.response.url || sourceURL);
-    for (const path of ['/rss', '/feed', '/rss.xml', '/feed.xml', '/atom.xml']) {
-      const url = new URL(path, base.origin).href;
-      if (!candidates.some(candidate => candidate.url === url)) candidates.push({ url, title: '' });
-    }
-    const candidateErrors = [];
-    for (const candidate of candidates.slice(0, 12)) {
-      try {
-        const result = await this.response(validURL(candidate.url));
-        parsed = parseFeed(result.body, result.response.url || candidate.url);
-        if (parsed.valid) return { url: result.response.url || candidate.url, parsed, response: result.response };
-      } catch (error) { candidateErrors.push(error); }
-    }
+    const { feed, errors } = await this.findFeed(
+      base.origin, discoverFeeds(initial.body, initial.response.url || sourceURL));
+    if (feed) return feed;
     if (/text\/html/i.test(initial.response.headers.get('content-type') || '') || /<!doctype html|<html\b/i.test(initial.body))
       return { kind: 'site', url: initial.response.url || sourceURL, parsed: parseSitePage(initial.body, initial.response.url || sourceURL), response: initial.response };
-    if (candidateErrors.length) throw candidateErrors[candidateErrors.length - 1];
+    if (errors.length) throw errors[errors.length - 1];
     throw new Error('No RSS or Atom feed was found at that address.');
   }
 
