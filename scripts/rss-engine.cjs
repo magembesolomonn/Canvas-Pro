@@ -242,12 +242,26 @@ function parseSitePage(source, pageURL) {
     items: [asArticle(article)]
   };
 }
+const PAYWALL_PATTERNS = [
+  /\bsubscribe to (?:continue|keep) reading\b/i,
+  /\bsubscribe to read\b/i,
+  /\bsubscribe to unlock (?:this|the) (?:article|story)\b/i,
+  /\bsubscription required to read\b/i,
+  /\bsubscribers only\b/i,
+  /\bto continue reading\b/i,
+  /\bsign in to (?:read|continue)\b/i,
+  /\balready a subscriber\b/i,
+  /\bcreate a free account\b/i,
+  /\bstart your free trial\b/i,
+  /\bonly \$\d+(?:\.\d+)? for \d+ weeks?\b/i,
+  /\bcomplete digital access\b/i
+];
 function isPaywalled(document, content) {
   const tier = [...document.querySelectorAll('meta[property="article:content_tier"],meta[name="content-access"]')]
     .map(node => (node.getAttribute('content') || '').toLowerCase()).join(' ');
   if (/paid|subscriber|premium|metered|subscription/.test(tier)) return true;
   if (document.querySelector('[data-paywall],#paywall,.paywall,[class*="paywall"],[id*="paywall"]')) return true;
-  return /\bsubscribe to (?:continue|keep) reading\b|\bsubscription required to read\b|\bsubscribers only\b/i.test(content);
+  return PAYWALL_PATTERNS.some(pattern => pattern.test(content));
 }
 function pageIsPaywalled(source) {
   const document = parseHTML(source).document;

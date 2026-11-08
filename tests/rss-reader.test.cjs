@@ -350,7 +350,7 @@ test('does not cache non-HTML responses as article content', async () => {
 test('fetches a featured image from the article page when RSS content is already complete', async () => {
   const db = new DatabaseSync(':memory:');
   let pageRequests = 0, extractionRequests = 0;
-  const fullContent = '<p>' + 'This complete RSS article contains useful reporting details. '.repeat(8) + '</p>';
+  const fullContent = '<p>' + 'This complete RSS article contains useful reporting details. '.repeat(70) + '</p>';
   const fetcher = async url => {
     if (url.endsWith('/feed.xml')) return response(xml(item({
       id: 'featured', link: 'https://news.test/featured', content: fullContent, summary: 'Complete article.'
@@ -633,7 +633,7 @@ test('waits for an in-flight feed discovery before closing the reader database',
 test('keeps complete feed content local and extracts explicitly truncated content', async () => {
   const db = new DatabaseSync(':memory:');
   let articleRequests = 0;
-  const full = '<h2>Complete feed article</h2>' + '<p>' + 'This complete feed paragraph contains details. '.repeat(8) + '</p>';
+  const full = '<h2>Complete feed article</h2>' + '<p>' + 'This complete feed paragraph contains details. '.repeat(70) + '</p>';
   const truncated = '<p>Part of a story. <a href="https://news.test/story">Read more</a></p>';
   const fetcher = async url => {
     if (url.endsWith('/feed.xml')) return response(xml(
@@ -658,6 +658,96 @@ test('keeps complete feed content local and extracts explicitly truncated conten
     await waitFor(() => service.articleRecord(cutArticle.id).extraction_status === 'complete');
     assert.equal(articleRequests, 1);
     assert.match(service.read(fullArticle.id).readerHTML, /Complete feed article/);
+  } finally { await service.close(); db.close(); }
+});
+
+test('upgrades short full-content feed items by fetching the article page', async () => {
+  const db = new DatabaseSync(':memory:');
+  let pageRequests = 0;
+  const teaser = '<p>' + 'A short feed teaser mentions the story briefly. '.repeat(6) + '</p>';
+  const paragraphs = Array.from({ length: 20 }, (_, index) =>
+    `<p>Paragraph ${index} adds substantial reporting and context for the complete story.</p>`).join('');
+  const page = `<html><head><title>Long read</title></head><body><article><h1>Long read</h1>${paragraphs}</article></body></html>`;
+  const fetcher = async url => {
+    if (url.endsWith('/feed.xml')) return response(xml(item({
+      id: 'teaser', link: 'https://news.test/teaser-story', content: teaser
+    })));
+    if (url.endsWith('/teaser-story')) { pageRequests++; return response(page, 'text/html'); }
+    throw new Error('Unexpected request: ' + url);
+  };
+  const service = new RSSService(db, { fetcher, minimumHostInterval: 0, extractor: async () => null });
+  try {
+    const feed = await service.add('https://news.test/feed.xml');
+    const stored = service.articles({ feedId: feed.id })[0];
+    const initial = service.articleRecord(stored.id);
+    assert.equal(initial.has_full_content, 1);
+    assert.ok(initial.content_html.length < 3000);
+    await waitFor(() => service.articleRecord(stored.id).extraction_status === 'complete');
+    const upgraded = service.articleRecord(stored.id);
+    assert.equal(pageRequests, 1);
+    assert.match(upgraded.reader_html, /Paragraph 19/);
+    assert.ok(String(upgraded.reader_html).length > String(initial.content_html).length);
+    assert.match(service.read(stored.id).readerHTML, /Paragraph 19/);
+  } finally { await service.close(); db.close(); }
+});
+
+test('keeps the feed excerpt when the page only returns paywall text', async () => {
+  const db = new DatabaseSync(':memory:');
+  const paywall = '<html><head><title>Subscribe to read</title></head><body><main>' +
+    '<h1>Subscribe to unlock this article</h1>' +
+    '<p>Try unlimited access. Only $1 for 4 weeks. Then $75 per month. ' +
+    'Complete digital access to quality journalism on any device. Cancel anytime during your trial.</p>' +
+    '<p>Already a subscriber? Sign in to read.</p></main></body></html>';
+  const fetcher = async url => {
+    if (url.endsWith('/feed.xml')) return response(xml(item({
+      id: 'paid', link: 'https://news.test/paid-story', content: '', summary: '<p>A short publisher excerpt.</p>'
+    })));
+    if (url.endsWith('/paid-story')) return response(paywall, 'text/html');
+    throw new Error('Unexpected request: ' + url);
+  };
+  const service = new RSSService(db, { fetcher, minimumHostInterval: 0, extractor: async () => null });
+  try {
+    const feed = await service.add('https://news.test/feed.xml');
+    const stored = service.articles({ feedId: feed.id })[0];
+    await waitFor(() => ['complete', 'failed'].includes(service.articleRecord(stored.id).extraction_status));
+    const result = service.articleRecord(stored.id);
+    assert.equal(result.extraction_status, 'failed');
+    assert.equal(result.reader_html, '');
+    assert.match(result.extraction_error, /restricts this article/i);
+    const reader = service.read(stored.id);
+    assert.equal(reader.readerSource, 'paywall');
+    assert.match(reader.readerHTML, /A short publisher excerpt/);
+    assert.doesNotMatch(reader.readerHTML, /Subscribe to unlock/i);
+  } finally { await service.close(); db.close(); }
+});
+
+test('does not retry a failed full-content upgrade on every refresh', async () => {
+  const db = new DatabaseSync(':memory:');
+  let pageRequests = 0;
+  const teaser = '<p>' + 'A short feed teaser mentions the story briefly. '.repeat(6) + '</p>';
+  const fetcher = async url => {
+    if (url.endsWith('/feed.xml')) return response(xml(item({
+      id: 'teaser', link: 'https://news.test/teaser', content: teaser
+    })));
+    if (url.endsWith('/teaser')) {
+      pageRequests++;
+      return new Response('Forbidden', { status: 403, headers: { 'content-type': 'text/html' } });
+    }
+    throw new Error('Unexpected request: ' + url);
+  };
+  const service = new RSSService(db, { fetcher, minimumHostInterval: 0, extractor: async () => null });
+  try {
+    const feed = await service.add('https://news.test/feed.xml');
+    const stored = service.articles({ feedId: feed.id })[0];
+    await waitFor(() => {
+      const article = service.articleRecord(stored.id);
+      return article.extraction_status === 'not_required' && Boolean(article.extraction_error);
+    });
+    assert.equal(pageRequests, 1);
+    await service.refreshFeed(feed.id);
+    await new Promise(resolve => setTimeout(resolve, 30));
+    assert.equal(pageRequests, 1);
+    assert.match(service.read(stored.id).readerHTML, /short feed teaser/);
   } finally { await service.close(); db.close(); }
 });
 

@@ -9,8 +9,10 @@ const ARTICLE_LIMIT = 300;
 const READER_CACHE_LIMIT = 300;
 const EXTRACTION_CONCURRENCY = 2;
 const MIN_READER_TEXT = 400;
+const MIN_RESTRICTED_TEXT = 1500;
+const FEED_TEXT_THRESHOLD = 3000;
 const GOOGLEBOT_AGENT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
-const ARCHIVE_MIRRORS = ['archive.ph', 'archive.is', 'archive.li', 'archive.md', 'archive.vn', 'archive.fo'];
+const ARCHIVE_MIRRORS = ['archive.today', 'archive.ph', 'archive.is', 'archive.li', 'archive.md', 'archive.vn', 'archive.fo'];
 const FEED_PATHS = ['/feed/all/', '/feed', '/rss', '/rss.xml', '/feed.xml', '/atom.xml', '/index.xml'];
 const readerTextLength = html =>
   String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length;
@@ -145,7 +147,10 @@ class RSSService {
           WHEN rss_articles.extraction_status='not_required' THEN 'pending'
           ELSE rss_articles.extraction_status
         END,
-        extraction_error=CASE WHEN excluded.extraction_status='not_required' THEN '' ELSE rss_articles.extraction_error END,
+        extraction_error=CASE
+          WHEN excluded.extraction_status='not_required' AND rss_articles.has_full_content=0 THEN ''
+          ELSE rss_articles.extraction_error
+        END,
         image_url=CASE WHEN excluded.image_url<>'' THEN excluded.image_url ELSE rss_articles.image_url END,
         published_at=COALESCE(excluded.published_at,rss_articles.published_at)
     `);
@@ -201,11 +206,14 @@ class RSSService {
     if (!this.automaticExtraction() || this.closed) return;
     const rows = this.db.prepare(`
       SELECT id FROM rss_articles WHERE link<>'' AND (
-        (has_full_content=0 AND reader_html='' AND extraction_status='pending') OR
+        (reader_html='' AND extraction_status='pending' AND
+          (has_full_content=0 OR length(content_html) < ?)) OR
+        (reader_html='' AND extraction_status='not_required' AND extraction_error='' AND
+          length(content_html) < ?) OR
         (image_url='' AND image_checked_at IS NULL AND link NOT LIKE 'https://news.google.com/rss/articles/%')
       )
       ORDER BY COALESCE(published_at,first_seen) DESC LIMIT 300
-    `).all();
+    `).all(FEED_TEXT_THRESHOLD, FEED_TEXT_THRESHOLD);
     for (const row of rows) this.enqueueExtraction(row.id);
   }
 
@@ -219,12 +227,17 @@ class RSSService {
       return;
     }
     const article = this.db.prepare(`
-      SELECT extraction_status,has_full_content,reader_html,link,image_url,image_checked_at
+      SELECT extraction_status,has_full_content,reader_html,content_html,link,image_url,
+        image_checked_at,extraction_error
       FROM rss_articles WHERE id=?
     `).get(id);
     if (!article || !article.link || (article.reader_html && !force && (article.image_url || article.image_checked_at))) return;
-    const textExtraction = !article.has_full_content && (force || !article.reader_html) &&
-      (force || article.extraction_status === 'pending');
+    const feedTextShort = readerTextLength(article.content_html) < FEED_TEXT_THRESHOLD;
+    const wantsText = !article.has_full_content || feedTextShort;
+    const needsText = wantsText && (force || !article.reader_html);
+    const mayExtractText = force || article.extraction_status === 'pending' ||
+      (article.extraction_status === 'not_required' && !article.extraction_error);
+    const textExtraction = needsText && mayExtractText;
     const imageOnly = !textExtraction && !article.image_url && !article.image_checked_at;
     if (!textExtraction && !imageOnly && !force) return;
     if (force && textExtraction) {
@@ -237,6 +250,8 @@ class RSSService {
       `).run(id);
     } else if (force) {
       this.db.prepare('UPDATE rss_articles SET image_checked_at=NULL WHERE id=?').run(id);
+    } else if (textExtraction && article.extraction_status === 'not_required') {
+      this.db.prepare("UPDATE rss_articles SET extraction_status='pending' WHERE id=?").run(id);
     }
     this.queuedExtractions.add(id);
     if (prioritize) this.extractionQueue.unshift(id);
@@ -269,7 +284,10 @@ class RSSService {
   async extractArticle(id) {
     const article = this.db.prepare('SELECT * FROM rss_articles WHERE id=?').get(id);
     if (!article || !article.link) return;
-    const imageOnly = Boolean(article.has_full_content || article.reader_html || article.extraction_status !== 'pending');
+    const feedTextShort = readerTextLength(article.content_html) < FEED_TEXT_THRESHOLD;
+    const upgrading = article.has_full_content === 1 && feedTextShort;
+    const imageOnly = Boolean(article.reader_html || article.extraction_status !== 'pending' ||
+      (article.has_full_content && !feedTextShort));
     if (!imageOnly) {
       this.db.prepare(`
         UPDATE rss_articles SET extraction_status='running',extraction_error=''
@@ -318,7 +336,8 @@ class RSSService {
         WHERE id=?
       `).run(pageImageURL, pageImageURL, imageCheckedAt, id);
       if (imageOnly) { this.onUpdate(); return; }
-      const readable = best?.readable &&
+      const paywallOnly = Boolean(best?.paywalled && best.textLength < MIN_RESTRICTED_TEXT);
+      const readable = !paywallOnly && best?.readable &&
         (best.source === 'direct' || best.textLength >= MIN_READER_TEXT) ? best.readable : null;
       if (!readable) {
         const details = [...(best?.errors || []), ...errors].filter(Boolean).join(' ');
@@ -351,10 +370,15 @@ class RSSService {
       const message = String(error.message || error).slice(0, 500);
       const failedAt = new Date().toISOString();
       this.db.prepare(`
-        UPDATE rss_articles SET extraction_status=CASE WHEN ?=1 THEN extraction_status ELSE 'failed' END,
+        UPDATE rss_articles SET extraction_status=CASE
+            WHEN ?=1 THEN extraction_status
+            WHEN ?=1 THEN 'not_required'
+            ELSE 'failed'
+          END,
           extraction_at=?,
           extraction_method=?,extraction_error=? WHERE id=?
-      `).run(Number(imageOnly), failedAt, /publisher restricts this article/i.test(message) ? 'restricted' : '',
+      `).run(Number(imageOnly), Number(upgrading && !imageOnly), failedAt,
+        /publisher restricts this article/i.test(message) ? 'restricted' : '',
         message, id);
       if (!imageCheckedAt) {
         this.db.prepare('UPDATE rss_articles SET image_checked_at=COALESCE(image_checked_at,?) WHERE id=?')
@@ -775,8 +799,11 @@ class RSSService {
 
   read(id) {
     const article = this.articleRecord(id);
-    if ((!article.has_full_content && !article.reader_html && article.extraction_status === 'pending') ||
-        (!article.image_url && !article.image_checked_at))
+    const feedTextShort = readerTextLength(article.content_html) < FEED_TEXT_THRESHOLD;
+    const wantsText = !article.reader_html &&
+      ((article.extraction_status === 'pending' && (!article.has_full_content || feedTextShort)) ||
+        (article.extraction_status === 'not_required' && feedTextShort && !article.extraction_error));
+    if (wantsText || (!article.image_url && !article.image_checked_at))
       this.enqueueExtraction(id, { prioritize: true });
     return {
       ...article,
