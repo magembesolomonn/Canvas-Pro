@@ -3,6 +3,8 @@ node_modules/
 *.log
 dist/
 .updates/
+config.local.json
+.perch/
 
 .prototype/
 /bin/

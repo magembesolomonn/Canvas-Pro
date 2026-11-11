@@ -25,7 +25,7 @@ const NotesWorkspace = (() => {
   };
   const dragType = 'application/x-canvaspro-note';
   let list, note, timer, saving, busy = false, revision = 0, savedRevision = 0;
-  let formatTimer, formatOwner, formatHoveredRow, formatPendingRow;
+  let formatTimer, formatOwner, formatHoveredRow, formatHoverReady, formatPendingRow;
   let coverRevision = 0, dragId, draggedBlock, dropMarker, templateParent;
   const root = () => $('#notes-workspace');
   const status = message => { $('#notes-status').textContent = message; };
@@ -46,6 +46,14 @@ const NotesWorkspace = (() => {
   function noteActionsDialog(item) {
     const dialog = el('dialog','note-tracker-dialog');
     dialog.setAttribute('aria-label','Note actions');
+    const sheetHead = el('div','note-dialog-heading');
+    const sheetClose = el('button','note-dialog-close');
+    sheetClose.type = 'button';
+    sheetClose.setAttribute('aria-label','Close');
+    sheetClose.append(glyph('close'));
+    sheetClose.onclick = () => dialog.close();
+    sheetHead.append(el('h2','','Note actions'), sheetClose);
+    dialog.append(sheetHead);
     const form = el('form'), input = el('input'), error = el('p','dialog-error');
     input.value = item.emoji;
     input.maxLength = 64;
@@ -66,7 +74,7 @@ const NotesWorkspace = (() => {
       } finally { savingEmoji = false; }
     }
     form.onsubmit = event => { event.preventDefault(); save(input.value.trim()); };
-    const actions = el('div','dialog-actions');
+    const actions = el('div','dialog-actions note-dialog-actions');
     const submit = el('button','primary','Save icon');
     submit.type = 'submit';
     if (item.emoji) actions.append(button('Remove icon',()=>save('')));
@@ -385,16 +393,37 @@ const NotesWorkspace = (() => {
   function splitOnEnter(input, block, index, property, selector) {
     input.onkeydown = event => {
       if (!nextEntry(event) || note.blocks.length >= 250) return;
+      // Enter on an empty bullet, checklist or toggle leaves the list and
+      // returns a plain paragraph: the "Write here…" line after a block.
+      if (property === 'text' && !input.value.trim() && ['bullet','checklist','toggle'].includes(block.type)) {
+        note.blocks[index] = {type:'paragraph',text:''};
+        changed();
+        redrawBlock(index);
+        focusBlock(index);
+        return;
+      }
       const next = block.type === 'heading' ? {type:'paragraph',text:''} : nextBlock(block);
       next[property] = input.value.slice(input.selectionEnd);
       block[property] = input.value.slice(0,input.selectionStart);
       insertNext(index,next,selector);
     };
   }
-  function setFormatOwner(row) {
-    formatOwner = row;
+  // The toolbar belongs to the block you are in: the one holding the caret,
+  // or the one you are pointing at once the hover delay has passed. The
+  // visible toolbar is derived from that state every time it changes, so it
+  // can never disagree with the block you are actually editing.
+  function formatTarget() {
+    const active = document.activeElement;
+    const focused = active && active.closest ? active.closest('.note-block') : null;
+    if (focused && focused.querySelector('.note-format-toolbar')) return focused;
+    if (formatHoverReady && formatHoveredRow && formatHoveredRow.isConnected) return formatHoveredRow;
+    return null;
+  }
+  function refreshFormatToolbars() {
+    const target = formatTarget();
+    formatOwner = target;
     document.querySelectorAll('.note-format-toolbar').forEach(toolbar => {
-      toolbar.classList.toggle('is-visible',toolbar.closest('.note-block') === row);
+      toolbar.classList.toggle('is-visible',!!target && toolbar.closest('.note-block') === target);
     });
   }
   function scheduleFormatToolbar(row) {
@@ -404,22 +433,26 @@ const NotesWorkspace = (() => {
       if (formatPendingRow !== row) return;
       formatPendingRow = null;
       if (formatHoveredRow !== row || !row.isConnected) return;
-      setFormatOwner(row);
+      formatHoverReady = true;
+      refreshFormatToolbars();
     },600);
   }
-  function focusFormatToolbar(row) {
+  function focusFormatToolbar() {
     clearTimeout(formatTimer);
     formatPendingRow = null;
-    setFormatOwner(row);
+    refreshFormatToolbars();
   }
   function leaveFormatToolbar(row, relatedTarget) {
     if (relatedTarget && row.contains(relatedTarget)) return;
-    if (formatHoveredRow === row) formatHoveredRow = null;
+    if (formatHoveredRow === row) {
+      formatHoveredRow = null;
+      formatHoverReady = false;
+    }
     if (formatPendingRow === row) {
       clearTimeout(formatTimer);
       formatPendingRow = null;
     }
-    if (formatOwner === row && !row.contains(document.activeElement)) setFormatOwner(null);
+    refreshFormatToolbars();
   }
   function focusBlock(index) {
     const row = $('#note-blocks').children[index];
@@ -436,27 +469,101 @@ const NotesWorkspace = (() => {
     renderBlocks();
     focusBlock(Math.min(index,note.blocks.length-1));
   }
-  function showBlockPicker(index, replace = false) {
+  const blockIcons = {
+    paragraph: 'text', heading: 'heading', bullet: 'list', checklist: 'checklist',
+    toggle: 'toggle', table: 'table', image: 'image', tracker: 'tracker', reference: 'link'
+  };
+  let blockMenu = null, blockMenuCleanup = null;
+  function closeBlockMenu() {
+    if (!blockMenu) return;
+    blockMenu.remove();
+    blockMenu = null;
+    blockMenuCleanup?.();
+    blockMenuCleanup = null;
+  }
+  function showBlockPicker(index, replace = false, anchor = null) {
     if (note.blocks.length >= 250 && !replace) return;
-    const dialog = el('dialog','note-tracker-dialog');
-    dialog.setAttribute('aria-label','Insert a block');
-    const search = el('input');
-    search.placeholder = 'Find a block…';
-    search.setAttribute('aria-label','Find a block');
-    const choices = el('div','tracker-reference-results');
-    function update() {
-      choices.replaceChildren(...Object.entries(blockTypes)
-        .filter(([,name])=>name.toLowerCase().includes(search.value.toLowerCase()))
-        .map(([type,name])=>button(name,()=>{dialog.close();addBlock(type,index,replace); })));
+    closeBlockMenu();
+    const menu = el('div', 'note-block-menu');
+    menu.setAttribute('role', 'listbox');
+    menu.setAttribute('aria-label', 'Insert a block');
+    const search = el('input', 'note-block-menu-search');
+    search.type = 'text';
+    search.placeholder = 'Filter blocks…';
+    search.maxLength = 60;
+    search.setAttribute('aria-label', 'Find a block');
+    const list = el('div', 'note-block-menu-list');
+    let active = 0, matches = [];
+    function choose(type) {
+      closeBlockMenu();
+      addBlock(type, index, replace);
     }
-    search.oninput = update;
-    search.onkeydown = event=>{if(event.key==='Enter'){event.preventDefault();choices.firstChild?.click();}};
-    dialog.append(search,choices,button('Cancel',()=>dialog.close()));
-    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
-    document.body.append(dialog);
+    function paintActive() {
+      list.querySelectorAll('button').forEach((choice, position) =>
+        choice.setAttribute('aria-selected', String(position === active)));
+      list.querySelector('button[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    }
+    function update() {
+      const query = search.value.trim().toLowerCase();
+      matches = Object.entries(blockTypes).filter(([, name]) => name.toLowerCase().includes(query));
+      active = Math.min(active, Math.max(0, matches.length - 1));
+      list.replaceChildren(...matches.map(([type, name]) => {
+        const choice = el('button');
+        choice.type = 'button';
+        choice.setAttribute('role', 'option');
+        choice.setAttribute('aria-selected', 'false');
+        choice.dataset.blockType = type;
+        choice.append(glyph(blockIcons[type] || 'text'), el('span', '', name));
+        choice.onpointerenter = () => { active = matches.findIndex(([key]) => key === type); paintActive(); };
+        choice.onclick = () => choose(type);
+        return choice;
+      }));
+      if (!matches.length) list.append(el('p', 'note-block-empty', 'No blocks match “' + search.value.trim() + '”.'));
+      paintActive();
+    }
+    search.oninput = () => { active = 0; update(); };
+    search.onkeydown = event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!matches.length) return;
+        active = (active + (event.key === 'ArrowDown' ? 1 : matches.length - 1)) % matches.length;
+        paintActive();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        if (matches[active]) choose(matches[active][0]);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        closeBlockMenu();
+        focusBlock(index);
+      }
+    };
+    menu.append(search, list);
+    document.body.append(menu);
     update();
-    dialog.showModal();
+    // Sit under the block being replaced, or the last block, and flip above
+    // when there is not enough room below.
+    const row = anchor || $('#note-blocks').children[index] || $('#note-blocks').lastElementChild;
+    const bounds = row?.getBoundingClientRect();
+    const left = Math.max(12, Math.min(bounds?.left ?? 48, innerWidth - menu.offsetWidth - 12));
+    const below = (bounds?.bottom ?? 72) + 6;
+    const top = below + menu.offsetHeight > innerHeight - 12
+      ? Math.max(12, (bounds?.top ?? 72) - menu.offsetHeight - 6)
+      : below;
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    blockMenu = menu;
     search.focus();
+    const onPointerDown = event => { if (!menu.contains(event.target)) closeBlockMenu(); };
+    const onScroll = event => { if (!menu.contains(event.target)) closeBlockMenu(); };
+    const onResize = () => closeBlockMenu();
+    document.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    blockMenuCleanup = () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
   }
   function headingSettings(block, input, actions) {
     const size = el('input');
@@ -566,7 +673,7 @@ const NotesWorkspace = (() => {
           if (!event.repeat) removeBlock(index);
           return;
         }
-        if (event.target===row && nextEntry(event)) insertNext(index,nextBlock(block),':scope > .note-block-content > input');
+        if (event.target===row && nextEntry(event)) insertNext(index,{type:'paragraph',text:''});
       };
     }
     if (block.type === 'tracker') content.append(NoteTrackers.mount(block,note.id,changed,flush));
@@ -643,12 +750,16 @@ const NotesWorkspace = (() => {
       row.addEventListener('pointerenter', event => {
         if (event.pointerType === 'touch') return;
         formatHoveredRow = row;
+        formatHoverReady = false;
         scheduleFormatToolbar(row);
       });
       row.addEventListener('pointerleave', event => leaveFormatToolbar(row,event.relatedTarget));
-      row.addEventListener('focusin', () => focusFormatToolbar(row));
+      // Both focus events reach the row: focusin bubbles, focus is caught in
+      // the capture phase. Whichever arrives first shows the toolbar.
+      row.addEventListener('focusin', () => focusFormatToolbar());
+      row.addEventListener('focus', () => focusFormatToolbar(), true);
       row.addEventListener('focusout', event => {
-        if (!row.contains(event.relatedTarget) && formatHoveredRow !== row && formatOwner === row) setFormatOwner(null);
+        if (!row.contains(event.relatedTarget)) refreshFormatToolbars();
       });
       row.append(toolbar, content, controls);
     }
@@ -669,11 +780,10 @@ const NotesWorkspace = (() => {
     previous.replaceWith(replacement);
     if (wasHovered) formatHoveredRow = replacement;
     if (wasPending && wasHovered) scheduleFormatToolbar(replacement);
-    if (wasOwner) setFormatOwner(replacement);
+    if (wasOwner) { formatOwner = replacement; refreshFormatToolbars(); }
   }
   function renderBlocks() {
     $('#note-blocks').replaceChildren(...note.blocks.map(blockNode));
-    $('#note-add-paragraph').disabled = note.blocks.length >= 250;
   }
   function renderCover() {
     $('#note-cover').replaceChildren(...(note.hasCover ? [picture(note)] : []));
@@ -684,6 +794,7 @@ const NotesWorkspace = (() => {
   function renderEditor() {
     $('#notes-empty').hidden = !!note;
     $('#notes-editor').hidden = !note;
+    $('#notes-toolbar').hidden = !note;
     if (!note) return;
     $('.notes-page-menu').open = false;
     const trail = [];
@@ -753,7 +864,7 @@ const NotesWorkspace = (() => {
       generation++;
       clearTimeout(timer);
       search.disabled = results.inert = more.disabled = browse.disabled = cancel.disabled = true;
-      message.textContent = 'Choose an image to add to All files.';
+      message.textContent = 'Choose an image to add to the library.';
       try {
         const asset = await api.noteImportThumbnail(imageExt);
         if (asset) {
@@ -823,6 +934,9 @@ const NotesWorkspace = (() => {
       $('#note-template-dialog').showModal();
     };
     $('#note-template-cancel').onclick = () => $('#note-template-dialog').close();
+    $('#note-template-close').onclick = () => $('#note-template-dialog').close();
+    $('#note-image-close').onclick = () => $('#note-image-dialog').close();
+    for(const id of ['note-template-close','note-image-close'])$('#'+id).replaceChildren(glyph('close'));
     $('#note-title').oninput = event => {
       note.title = event.target.value;
       list.find(item => item.id === note.id).title = note.title;
@@ -836,9 +950,6 @@ const NotesWorkspace = (() => {
     $('#note-cover-add').onclick = () => cover(false);
     $('#note-cover-remove').onclick = () => cover(true);
     $('#note-delete').onclick = () => deleteNote(note.id);
-    $('#note-add-paragraph').onclick = () => addBlock('paragraph',note.blocks.length);
-    $('#note-insert-block').onclick = () => showBlockPicker(note.blocks.length);
-    $('#note-insert-link').onclick = () => addBlock('reference',note.blocks.length);
     $('#note-blocks').addEventListener('keydown',event=>{
       if (!event.isComposing && !event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey &&
           ['Backspace','Delete'].includes(event.key) &&
@@ -854,7 +965,7 @@ const NotesWorkspace = (() => {
       event.preventDefault();
       const index = [...$('#note-blocks').children].indexOf(event.target.closest('.note-block'));
       if (event.key==='@') { addBlock('reference',index,true); return; }
-      showBlockPicker(index,true);
+      showBlockPicker(index,true,event.target.closest('.note-block'));
     });
   }
   function deleteNote(id) {
@@ -882,13 +993,15 @@ const NotesWorkspace = (() => {
       else if (type==='table') block = {type,rows:[['Column 1','Column 2'],['','']]};
       else block = {type,text:'',...(type==='toggle'?{body:'',open:true}:{})};
       note.blocks.splice(index,Number(replace),block);
+      if (['table','image','tracker','reference'].includes(type) && index === note.blocks.length - 1)
+        note.blocks.push({type:'paragraph',text:''});
       changed();
       renderBlocks();
       return true;
     }).then(added=>{
       if (!added) return;
       const row = $('#note-blocks').children[index];
-      (row?.querySelector('textarea,input:not([type="checkbox"])') || row?.querySelector('button'))?.focus();
+      (row?.querySelector('textarea,input:not([type="checkbox"])') || row?.querySelector('button') || row)?.focus();
     });
   }
 

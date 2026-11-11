@@ -1,1 +1,110 @@
-<!doctype html><html><head><meta charset="UTF-8"><title>Canvas Pro Capture</title><link rel="stylesheet" href="extension.css"></head><body class="popup"><header><img src="icons/128.png" alt=""><div><h1>Canvas Pro</h1><p>Capture to your Mac</p></div><span id="connection" class="connection">Connecting…</span></header><label class="destination">Save to <select id="folder"><option value="">All files</option></select></label><div class="capture-actions"><button data-action="viewport"><b>Capture visible page</b><span>Save what’s on screen</span></button><button data-action="region"><b>Capture an area</b><span>Drag to select a region</span></button><button data-action="collect"><b>Collect images</b><span>Choose several images at once</span></button><button data-action="videos"><b>Find videos & animated media</b><span>Discover loaded and hidden media sources</span></button><button data-action="content"><b>Save page content</b><span>Readable text with source metadata</span></button><button data-action="bookmark"><b>Save web link</b><span>Keep the original source</span></button></div><button id="deep-scan">Enable deep media scan for this tab</button><div id="status" class="status" role="status">Tip: right-click an image or video to save it directly.</div><div id="capture-activity"></div><footer><button id="setup">Setup & privacy</button><span>Local capture · no account</span></footer><script src="activity.js"></script><script src="popup.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas Pro Capture</title>
+<link rel="stylesheet" href="extension.css">
+<link rel="stylesheet" href="popup.css">
+</head>
+<body class="popup">
+<main class="popup-shell">
+  <header class="popup-header">
+    <img class="app-mark" src="icons/128.png" alt="">
+    <div class="identity">
+      <h1>Canvas Pro</h1>
+      <p>Capture to your Mac</p>
+    </div>
+    <span id="connection" class="connection" role="status" aria-live="polite">Connecting…</span>
+  </header>
+
+  <section class="destination" aria-labelledby="destination-label">
+    <label id="destination-label" for="folder">Save to</label>
+    <div class="destination-select">
+      <select id="folder" aria-labelledby="destination-label">
+        <option value="">All files</option>
+      </select>
+      <svg class="chevron" viewBox="0 0 12 12" aria-hidden="true">
+        <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </section>
+
+  <section class="capture-section" aria-labelledby="capture-label">
+    <h2 id="capture-label" class="section-label">Capture</h2>
+    <div class="capture-actions">
+      <button class="capture-card" type="button" data-action="viewport">
+        <span class="capture-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M9 20h6"/></svg>
+        </span>
+        <b>Visible page</b>
+        <span class="capture-desc">Save what’s on screen</span>
+      </button>
+
+      <button class="capture-card" type="button" data-action="region">
+        <span class="capture-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v4H3M17 3v4h4M7 21v-4H3M17 21v-4h4"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+        </span>
+        <b>Capture an area</b>
+        <span class="capture-desc">Drag to select a region</span>
+      </button>
+
+      <button class="capture-card" type="button" data-action="collect">
+        <span class="capture-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6.5" width="13" height="13" rx="2"/><path d="M8 3.5h9.5a2 2 0 0 1 2 2V15"/></svg>
+        </span>
+        <b>Collect images</b>
+        <span class="capture-desc">Choose several at once</span>
+      </button>
+
+      <button class="capture-card" type="button" data-action="videos">
+        <span class="capture-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m10.5 9 4.5 3-4.5 3z"/></svg>
+        </span>
+        <b>Find videos</b>
+        <span class="capture-desc">Loaded and hidden media</span>
+      </button>
+
+      <button class="capture-card" type="button" data-action="content">
+        <span class="capture-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M5 10h14M5 14h9M5 18h11"/></svg>
+        </span>
+        <b>Page content</b>
+        <span class="capture-desc">Readable text and source</span>
+      </button>
+
+      <button class="capture-card" type="button" data-action="bookmark">
+        <span class="capture-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l2.83-2.83a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0L5.5 12.83a4 4 0 0 0 5.66 5.66l1-1"/></svg>
+        </span>
+        <b>Web link</b>
+        <span class="capture-desc">Keep the original source</span>
+      </button>
+    </div>
+  </section>
+
+  <button id="deep-scan" class="deep-scan" type="button" aria-pressed="false">
+    <span class="deep-scan-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4M16 4h4v4M4 16v4h4M20 16v4h-4"/><circle cx="12" cy="12" r="3"/></svg>
+    </span>
+    <span class="deep-scan-copy">
+      <strong>Enable deep media scan</strong>
+      <small>Find media that loads as you scroll</small>
+    </span>
+  </button>
+
+  <p id="status" class="status" role="status" aria-live="polite">Tip: right-click an image or video to save it directly.</p>
+  <div id="capture-activity" class="activity-slot"></div>
+
+  <footer class="popup-footer">
+    <button id="setup" type="button">Setup &amp; privacy</button>
+    <span>Local capture · no account</span>
+  </footer>
+</main>
+
+<div id="toasts" class="toast-stack"></div>
+
+<script src="activity.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

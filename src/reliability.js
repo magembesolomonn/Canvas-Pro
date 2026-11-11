@@ -52,9 +52,9 @@ function openSettingsTool(selector){
  if(settings.open)settings.close();target.showModal();
 }
 function initReliabilityUI(){
+ SettingsUI.init();
  $('#show-settings .settings-icon').append(glyph('settings'));
- for(const icon of document.querySelectorAll('[data-setting-icon]'))icon.append(glyph(icon.dataset.settingIcon));
- $('#show-settings').onclick=()=>{stopHover();$('#settings-dialog').showModal();safe(async()=>{const info=await api.libraryLocation();$('#current-library-name').textContent=info.name;$('#current-library-path').textContent=info.root;});};
+ $('#show-settings').onclick=()=>{stopHover();SettingsUI.open();safe(async()=>{const info=await api.libraryLocation();$('#current-library-name').textContent=info.name;$('#current-library-path').textContent=info.root;});};
  $('#new-library').onclick=()=>safe(()=>api.switchLibrary('new'));$('#open-library').onclick=()=>safe(()=>api.switchLibrary('open'));
  $('#settings-close').onclick=()=>$('#settings-dialog').close();
  for(const [dialog,button]of [['#activity-dialog','#show-activity'],['#health-dialog','#check-library']])$(dialog).addEventListener('close',()=>{

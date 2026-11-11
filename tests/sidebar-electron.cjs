@@ -52,12 +52,14 @@ function key(keyCode,modifiers=[]) {
   await until(()=>run("!document.body.classList.contains('hide-sidebar') && !$('.sidebar').inert"));
   await pause(240);
   await run("$('[data-section=media] > summary').click()");
-  await until(()=>run("!$('[data-section=media]').open && localStorage.getItem('sidebar-section-media')==='false'"));
+  await pause(150);
+  assert.equal(await run("$('[data-section=media]').open"),true,'Media section must stay open');
+  assert.equal(await run("localStorage.getItem('sidebar-section-media')"),null,'Section state is no longer stored');
   await run("$('#gallery').focus()");
   key('B',['meta']);
-  await until(()=>run("document.body.classList.contains('hide-sidebar') && !$('[data-section=media]').open"));
+  await until(()=>run("document.body.classList.contains('hide-sidebar') && $('[data-section=media]').open"));
   key('B',['meta']);
-  await until(()=>run("!$('[data-section=media]').open"));
+  await until(()=>run("!document.body.classList.contains('hide-sidebar') && $('[data-section=media]').open"));
   await run("$('[data-section=media] > summary').click()");
   await run("$('#add-folder').click()");
   assert.equal(await run("$('#folder-dialog').open"),true);
@@ -70,11 +72,13 @@ function key(keyCode,modifiers=[]) {
   assert.equal(await run("$('.sidebar-active-pill').hidden"),false);
   assert.ok(await run("$('#notes-tree').open"));
   await run("$('#notes-tree > summary').click()");
-  await until(()=>run("!$('#notes-tree').open"));
-  await until(()=>run("$('.sidebar-active-pill').hidden"));
+  await pause(150);
+  assert.equal(await run("$('#notes-tree').open"),true,'Notes section must stay open');
+  assert.equal(await run("$('.sidebar-active-pill').hidden"),false,'The active note stays highlighted');
   assert.equal(await run("$('#open-notes')"),null);
   await run("$('#notes-tree > summary').click()");
-  await until(()=>run("$('#notes-tree').open"));
+  await pause(150);
+  assert.equal(await run("$('#notes-tree').open"),true);
   await until(()=>run("!!$('.note-block-paragraph textarea')"));
   await run("$('.note-block-paragraph textarea').focus()");
   await until(()=>run("getComputedStyle($('.note-format-toolbar')).opacity==='1'"));
@@ -85,6 +89,10 @@ function key(keyCode,modifiers=[]) {
   await until(()=>run("!!$('.note-block-heading input')"));
   assert.equal(await run("$('.note-block-heading input').style.fontSize"),'32px');
   console.log('NOTES_COLLAPSE_AND_FORMATTING_OK');
+  // Leave the notes view: sections stay open now, so the library header (and
+  // the button that reopens the drawer) is only on screen outside a note.
+  await run("$('#navigation button').click()");
+  await until(()=>run("view==='all' && !document.body.classList.contains('notes-active')"));
   await run("$('#gallery').focus()");
   key('B',['meta']);
   await until(()=>run("document.body.classList.contains('hide-sidebar') && $('.sidebar').inert"));
@@ -105,6 +113,7 @@ function key(keyCode,modifiers=[]) {
   await until(()=>run("document.activeElement.id==='toggle-sidebar'"));
   key('Escape');
   await until(()=>run("$('.sidebar').inert && !$('main').inert"));
+  await pause(120);
   assert.equal(await run("document.activeElement.id"),'show-sidebar');
   await run("$('#show-sidebar').click()");
   await pause(240);

@@ -9,9 +9,9 @@
 }
 .sidebar-active-pill { background: #ffffff13; }
 .sidebar-hover-pill { background: #ffffff0b; }
-body.light-mode .sidebar-active-pill { background: var(--selection, #dce9fa); }
-body.light-mode .sidebar-hover-pill { background: #263d6810; }
-.sidebar nav, .sidebar .section-label, .sidebar .notes-nav, .sidebar .sidebar-bottom {
+body.light-mode .sidebar-active-pill { background: var(--selection, #e8e8ea); }
+body.light-mode .sidebar-hover-pill { background: #00000008; }
+.sidebar nav, .sidebar .section-label, .sidebar .sidebar-bottom {
   position: relative;
   z-index: 1;
 }
@@ -22,24 +22,25 @@ body.light-mode .sidebar nav button.active {
 }
 .sidebar .sidebar-section { flex: none; }
 .sidebar .sidebar-section > summary {
+  /* Every category stays open, so the heading is a label rather than a
+     disclosure control: no arrow, and clicking it does nothing. */
   justify-content: flex-start;
   gap: 6px;
-  cursor: pointer;
+  padding-left: 12px;
+  cursor: default;
   list-style: none;
 }
 .sidebar .sidebar-section > summary::-webkit-details-marker { display: none; }
-.sidebar .sidebar-section > summary::before {
-  content: '›';
-  display: inline-block;
-  font-size: 15px;
-  line-height: 1;
-  transform: rotate(0deg);
-}
-.sidebar .sidebar-section[open] > summary::before { transform: rotate(90deg); }
-.sidebar .sidebar-section > summary .section-add { margin-left: auto; }
+.sidebar .sidebar-section > summary .section-add { margin-left: auto; cursor: pointer; }
 /* Keep the window controls legible while sidebar content scrolls behind them. */
 .sidebar .window-space {
   position: sticky; top: 0; z-index: 4;
+  /* Same 56px band as the toolbar, so the sidebar toggle sits exactly on the
+     traffic lights instead of a few pixels above them. */
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   margin-inline: -12px; padding-inline: 12px;
   background: linear-gradient(to bottom, rgb(41 42 44 / 82%) 0 64%, rgb(41 42 44 / 58%) 82%, transparent 100%);
   backdrop-filter: blur(15px) saturate(130%);
@@ -71,7 +72,6 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
 .sidebar-backdrop,.sidebar-drawer-edge,.sidebar-drawer-handle { display: none; }
 @media (prefers-reduced-motion: no-preference) {
   .sidebar .sidebar-pill { transition: transform 180ms cubic-bezier(.22,1,.36,1); }
-  .sidebar .sidebar-section > summary::before { transition: transform 160ms ease-out; }
 }
 @media (max-width: 1040px) {
   body,body.hide-sidebar { --sidebar: 0px; }
@@ -84,15 +84,15 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
     height: 100%;
     width: 248px;
     padding-inline: 12px;
-    background: #292a2c;
+    background: var(--surface-raised);
     border-right: 1px solid var(--line);
     transform: translateX(-100%);
     visibility: hidden;
     pointer-events: none;
     opacity: 1;
   }
-  body.native-glass > .sidebar { background: #292a2c; }
-  body.light-mode .sidebar { background: #e9edf3; }
+  body.native-glass > .sidebar,
+  body.light-mode .sidebar { background: var(--sidebar-surface); }
   body.sidebar-drawer-open .sidebar {
     transform: translateX(0);
     visibility: visible;
@@ -101,10 +101,12 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
   body .library-header,body.hide-sidebar .library-header { padding-left: 104px; }
   body #show-sidebar,body.hide-sidebar #show-sidebar { display: inline-flex; }
   body.hide-sidebar .sidebar .window-space {
-    height: 52px;
+    /* Same 56px band as the toolbar, so the drawer toggle sits on the
+       traffic lights and not a few pixels above them. */
+    height: 56px;
     align-items: center;
     justify-content: flex-end;
-    padding: 3px 2px 0;
+    padding: 0;
   }
   body.hide-sidebar .sidebar .brand { display: flex; }
   body.hide-sidebar .sidebar nav button {

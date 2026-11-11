@@ -68,7 +68,34 @@ const SmartCards=(()=>{
  }
  function art(a,t=type(a)){const root=el('div','smart-object smart-object-'+t);if(t==='album'||t==='playlist'||t==='music'){root.append(el('div','smart-vinyl'));const sleeve=el('div','smart-sleeve');if(info(a).cover)sleeve.append(image(a));else sleeve.append(glyph('audio'));root.append(sleeve);}else if(t==='song'){const disc=el('div','smart-disc');if(info(a).cover)disc.append(image(a));else disc.append(glyph('audio'));disc.append(el('div','smart-disc-hole'));root.append(disc);}else if(t==='book'){const book=el('div','smart-book');if(kind(a)!=='link'||info(a).cover)book.append(image(a));else book.append(el('strong','',info(a).title||a.name));root.append(book);}else if(t==='movie'||t==='series'){const poster=el('div','smart-poster');if(info(a).cover)poster.append(image(a));else poster.append(glyph('video'));root.append(poster);}return root;}
  function noteText(a){return a.captureMetadata?.textExcerpt||a.smart?.excerpt||a.name.replace(/\.[^.]+$/,'');}
- function fileVisual(a){if(isNote(a)){const root=el('div','smart-note-card');root.append(el('span','smart-quote-mark',a.captureMetadata?.selection?'“':'✎'),el('p','',noteText(a)));if(a.captureMetadata?.author)root.append(el('small','',a.captureMetadata.author));return root;}if(a.ext==='pdf')return art(a,'book');return null;}
+ // Every quote gets one of eight paper tints. The pick is derived from the id,
+ // so a card keeps its colour across launches and layouts.
+ function paperFor(a){let hash=0;const id=String(a.id||'');for(let i=0;i<id.length;i++)hash=(hash*31+id.charCodeAt(i))>>>0;return 1+hash%8;}
+ // Fit the quote to the card instead of chopping it: start at a comfortable
+ // size, shrink a little if needed, and only add an ellipsis when the text is
+ // genuinely longer than the card can hold.
+ const quoteFit=new WeakSet();
+ const quoteObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const entry of entries)fitQuote(entry.target);}):null;
+ function fitQuote(card){
+  if(!card?.isConnected||card.dataset.fit==='1'&&card.dataset.fitSize===card.clientWidth+'x'+card.clientHeight)return;
+  const p=card.querySelector('p');if(!p)return;
+  card.dataset.fit='1';card.dataset.fitSize=card.clientWidth+'x'+card.clientHeight;
+  p.style.fontSize='';p.style.webkitLineClamp='';p.style.display='';
+  let size=15;
+  while(size>10.5&&p.scrollHeight>p.clientHeight+1){size-=0.5;p.style.fontSize=size+'px';}
+  if(p.scrollHeight>p.clientHeight+1){
+   const line=parseFloat(getComputedStyle(p).lineHeight)||size*1.5;
+   const lines=Math.max(1,Math.floor(p.clientHeight/line));
+   p.style.display='-webkit-box';p.style.webkitBoxOrient='vertical';p.style.webkitLineClamp=String(lines);
+  }
+ }
+ function watchQuote(card){
+  if(!quoteObserver||quoteFit.has(card))return;
+  quoteFit.add(card);
+  quoteObserver.observe(card);
+  requestAnimationFrame(()=>fitQuote(card));
+ }
+ function fileVisual(a){if(isNote(a)){const root=el('div','smart-note-card');root.dataset.paper=String(paperFor(a));root.append(el('span','smart-quote-mark',a.captureMetadata?.selection?'“':'✎'),el('p','',noteText(a)));if(a.captureMetadata?.author)root.append(el('small','',a.captureMetadata.author));watchQuote(root);return root;}if(a.ext==='pdf')return art(a,'book');return null;}
  function paint(node,a,i=info(a)){const t=i.type||'webpage',film=filmTypes.includes(t),music=musicTypes.includes(t);node.className='link-visual smart-link smart-type-'+t+(film||music||t==='book'?' smart-media-card':'');node.replaceChildren();node.dataset.id=a.id;node.dataset.url=a.url;const heading=el('div','smart-card-heading');heading.append(el('span','smart-kind',titles[t]||'Web link'),el('span','smart-domain',i.site||(()=>{try{return new URL(a.url).hostname;}catch{return 'Web link';}})()));
  if(music||t==='book'){if(i.cover)node.append(image(a,'smart-media-artwork'));else node.append(glyph(t==='book'?'file':'audio'));}
  else if(film){node.append(art(a,t));}
@@ -202,9 +229,9 @@ const SmartCards=(()=>{
  };
  element.append(el('p','hint','Preparing saved link…'));bookmarkInfo(a).then(i=>show(i||info(a))).catch(()=>web());return {element,dispose(){disposed=true;child?.dispose();element.remove();}};
  }
- function mountNote(a){const element=el('div','smart-note-preview'),body=el('article','smart-note-paper');body.append(el('span','smart-quote-mark',a.captureMetadata?.selection?'“':'✎'),el('p','',noteText(a)));element.append(body);let disposed=false;api.readText(a.id).then(value=>{if(disposed)return;const text=value.replace(/^# [^\n]*\n\nSource: [^\n]*\nCaptured: [^\n]*\n\n/,'');body.querySelector('p').textContent=text;if(a.captureMetadata?.author)body.append(el('small','',a.captureMetadata.author));if(a.url)body.append(action('View source in Canvas Pro',()=>{const child=mountWebBookmark({...a,ext:'url'});element.replaceChildren(child.element);element._child=child;}));}).catch(error=>body.append(el('p','hint',error.message)));return{element,dispose(){disposed=true;element._child?.dispose();element.remove();}};}
+ function mountNote(a){const element=el('div','smart-note-preview'),body=el('article','smart-note-paper');body.dataset.paper=String(paperFor(a));body.append(el('span','smart-quote-mark',a.captureMetadata?.selection?'“':'✎'),el('p','',noteText(a)));element.append(body);let disposed=false;api.readText(a.id).then(value=>{if(disposed)return;const text=value.replace(/^# [^\n]*\n\nSource: [^\n]*\nCaptured: [^\n]*\n\n/,'');body.querySelector('p').textContent=text;if(a.captureMetadata?.author)body.append(el('small','',a.captureMetadata.author));if(a.url)body.append(action('View source in Canvas Pro',()=>{const child=mountWebBookmark({...a,ext:'url'});element.replaceChildren(child.element);element._child=child;}));}).catch(error=>body.append(el('p','hint',error.message)));return{element,dispose(){disposed=true;element._child?.dispose();element.remove();}};}
  function enrichSearch(a){return [a.name,a.notes,a.url,...a.tags,...a.folders,...(a.smart?.tags||[]),a.smart?.excerpt,a.captureMetadata?.textExcerpt,a.captureMetadata?.pageTitle,a.captureMetadata?.author,JSON.stringify(info(a))].filter(Boolean).join(' ').toLowerCase();}
- function paletteSection(a){const sectionNode=section('Colours'),swatches=el('div','color-palette');const values=a.smart?.palette||[];if(!values.length){sectionNode.append(el('p','hint','Colours appear after local indexing finds a preview.'));return sectionNode;}for(const item of values){const button=el('button','color-swatch');button.style.backgroundColor=item.hex;button.title=item.hex+' · '+item.name;button.setAttribute('aria-label','Copy '+item.hex);button.title+=' · Click to find matching colours · Option-click to copy';button.onclick=e=>e.altKey?safe(async()=>{await api.copyColor(item.hex);notify(item.hex+' copied');}):WorkbenchUI.findColor(item.hex);swatches.append(button);}sectionNode.append(swatches);return sectionNode;}
+ function paletteSection(a){const sectionNode=section('Colours'),swatches=el('div','color-palette');const values=a.smart?.palette||[];if(!values.length){sectionNode.append(el('p','hint','Colours appear after local indexing finds a preview.'));const link=el('button','hint-link','Turn on local indexing');link.onclick=()=>safe(()=>SettingsUI.open('experimental'));sectionNode.append(link);return sectionNode;}for(const item of values){const button=el('button','color-swatch');button.style.backgroundColor=item.hex;button.title=item.hex+' · '+item.name;button.setAttribute('aria-label','Copy '+item.hex);button.title+=' · Click to find matching colours · Option-click to copy';button.onclick=e=>e.altKey?safe(async()=>{await api.copyColor(item.hex);notify(item.hex+' copied');}):WorkbenchUI.findColor(item.hex);swatches.append(button);}sectionNode.append(swatches);return sectionNode;}
  return{type,ratio,isSocialCard,paint,art,fileVisual,isNote,mount,mountNote,enrichSearch,paletteSection};
 })();
 function mountBookmark(a){return SmartCards.mount(a);}

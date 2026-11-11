@@ -4,7 +4,6 @@ const SidebarUI = (() => {
   let sidebar, activePill, hoverPill, backdrop, edge, handle;
   let frame = 0, hovered = null, pointer = null, drawerOpen = false, gesture = null;
   let compact = localStorage.getItem('hide-sidebar') === 'true';
-  const sections = new Map();
   let drawerMotion = [];
 
   function syncAccessibility() {
@@ -13,7 +12,6 @@ const SidebarUI = (() => {
     sidebar.inert = previewOpen || (narrow.matches ? !drawerOpen : compact);
     $('main').inert = previewOpen || drawerOpen;
     $('#inspector').inert = previewOpen || drawerOpen;
-    $('#assistant-dock').inert = drawerOpen;
   }
 
   function visible(element) {
@@ -62,10 +60,8 @@ const SidebarUI = (() => {
   }
 
   function updateSections() {
-    for (const section of sidebar.querySelectorAll('.sidebar-section')) {
-      const open = sections.get(section.dataset.section);
-      if (section.open !== open) section.open = open;
-    }
+    // Categories are always open. The heading no longer collapses a list.
+    for (const section of sidebar.querySelectorAll('.sidebar-section')) section.open = true;
   }
 
   function syncMode() {
@@ -120,7 +116,9 @@ const SidebarUI = (() => {
     drawerOpen = narrow.matches && open;
     hovered = null;
     syncMode();
-    $(drawerOpen ? '#toggle-sidebar' : '#show-sidebar').focus({ preventScroll: true });
+    // The sidebar may have just become inert, and the browser drops focus from
+    // an element that turns inert. Move focus on the next frame so it lands.
+    requestAnimationFrame(() => $(drawerOpen ? '#toggle-sidebar' : '#show-sidebar').focus({ preventScroll: true }));
 
     const target = drawerOpen ? 0 : -width;
     if (reducedMotion.matches || Math.abs(from - target) < 1) return;
@@ -255,14 +253,11 @@ const SidebarUI = (() => {
       beginGesture(event, edge);
     }, true);
     for (const section of sidebar.querySelectorAll('.sidebar-section')) {
-      const key = section.dataset.section;
-      sections.set(key, localStorage.getItem('sidebar-section-' + key) !== 'false');
-      section.addEventListener('toggle', () => {
-        if (section.open !== sections.get(key)) {
-          sections.set(key, section.open);
-          localStorage.setItem('sidebar-section-' + key, String(section.open));
-        }
-        schedule();
+      // Always open, and the heading does nothing when clicked. The add button
+      // inside the heading still creates a new canvas, collection or note.
+      section.open = true;
+      section.querySelector(':scope > summary')?.addEventListener('click', event => {
+        if (!event.target.closest('.section-add')) event.preventDefault();
       });
       section.querySelector('.section-add')?.addEventListener('click', event => event.preventDefault());
     }

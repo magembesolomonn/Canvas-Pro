@@ -7,7 +7,7 @@ async function deleteSelectedPermanently(ids=selection.values()){
 }
 async function emptyTrash(){stopHover();if(!$('#preview').hidden)closePreview();const result=await api.emptyTrash();if(result.cancelled)return;mediaMetadata.clear();mediaInFlight.clear();await refreshCurrent();if(result.deleted)notify('Trash emptied · '+result.deleted+' files permanently deleted.');}
 async function handleContextAction(command){
- const ids=command.ids||[];if(!$('#preview').hidden&&['tags','rename','new-collection','collection','remove-collection','rating','trash','restore','delete-permanently'].includes(command.action))closePreview();switch(command.action){
+ const ids=command.ids||[];if(!$('#preview').hidden&&['tags','rename','new-collection','collection','remove-collection','trash','restore','delete-permanently'].includes(command.action))closePreview();switch(command.action){
  case 'choose-icon':await WorkbenchUI.pickIcon(command.key);break;
  case 'similar':await WorkbenchUI.similar(ids[0]);break;
  case 'canvas-rename':CanvasWorkspace.rename(command.boardId);break;
@@ -18,12 +18,13 @@ async function handleContextAction(command){
  case 'favorite':await setFavorites(ids,command.favorite);break;
  case 'preview':selection.clear();for(const id of ids)selection.ids.add(id);selected=ids[0];selection.focus=selected;selection.anchor=selected;paintSelection();renderInspector();openPreview();break;
  case 'tags':case 'rename':case 'new-collection':showActionDialog(command.action,ids);break;
- case 'collection':case 'remove-collection':case 'rating':case 'trash':case 'restore':{
-  const operation=command.action==='collection'?{type:'collection',folder:command.folder}:command.action==='remove-collection'?{type:'removeCollection',folder:command.folder}:command.action==='rating'?{type:'rating',rating:command.rating}:{type:'trash',trash:command.action==='trash'};await api.bulkUpdate(ids,operation);await refreshCurrent();notify(command.action==='trash'?'Moved '+ids.length+' files to Trash.':command.action==='restore'?'Restored '+ids.length+' files.':'Updated '+ids.length+' files.');break;}
+ case 'collection':case 'remove-collection':case 'trash':case 'restore':{
+  const operation=command.action==='collection'?{type:'collection',folder:command.folder}:command.action==='remove-collection'?{type:'removeCollection',folder:command.folder}:{type:'trash',trash:command.action==='trash'};await api.bulkUpdate(ids,operation);await refreshCurrent();notify(command.action==='trash'?'Moved '+ids.length+' files to Trash.':command.action==='restore'?'Restored '+ids.length+' files.':'Updated '+ids.length+' files.');break;}
  case 'copy':await api.copyFiles(ids);notify(ids.length+' files copied.');break;
  case 'export':{const count=await api.exportFiles(ids);if(count)notify(count+' copies exported.');break;}
  case 'share':await api.shareFiles(ids);break;
  case 'reveal':await api.reveal(ids[0]);break;
+ case 'copy-path':await api.copyPath(ids[0]);notify('Path copied');break;
  case 'open':await api.openFile(ids[0]);break;
  case 'source':await api.openLink(ids[0]);break;
  case 'copy-source':await api.copySource(ids[0]);notify('Source URL copied.');break;
@@ -34,10 +35,10 @@ async function handleContextAction(command){
 }
 function renderEmptyState(){
  const empty=$('#empty'),icon=empty.querySelector('.empty-icon'),heading=empty.querySelector('h2'),description=empty.querySelector('p'),button=$('#empty-import'),small=empty.querySelector('small');const trashCount=pagedCatalog?navStats?.counts.trash||0:assets.filter(a=>a.trash).length;$('#empty-trash').hidden=view!=='trash';$('#import').hidden=view==='trash';$('#import-folder').hidden=view==='trash';$('#empty-trash').disabled=!trashCount;
- icon.replaceChildren();empty.classList.toggle('trash-empty',view==='trash'&&!trashCount);button.hidden=false;small.hidden=false;button.onclick=()=>importDialog();button.textContent=assets.length?'Import files':'Import your first files';
- if(view==='trash'&&!trashCount){const image=el('img');image.src='assets/trash-empty.png';image.alt='Empty macOS Trash';icon.append(image);heading.textContent='Trash is empty';description.textContent='Files you move to Trash appear here. You can restore them, or permanently delete their library originals, thumbnails, and cached previews.';button.hidden=false;small.textContent='Deleting from Trash cannot be undone.';}
- else if(view==='trash'){icon.append(glyph('search'));heading.textContent='No matching files in Trash';description.textContent='Try a different search or file type. Items elsewhere in Trash are still available to restore.';button.textContent='Clear filters';button.onclick=()=>{$('#search').value='';$('#type').value='all';render();};small.hidden=true;}
- else if(view==='favorites'&&!(pagedCatalog?navStats?.counts.favorites:assets.some(a=>!a.trash&&a.favorite))){icon.append(glyph('star'));heading.textContent='No favourites yet';description.textContent='Click the star on a file, or choose Add to Favourites in its details or right-click menu.';button.hidden=false;small.hidden=false;}
+ icon.replaceChildren();empty.classList.toggle('trash-empty',view==='trash'&&!trashCount);button.hidden=false;small.hidden=false;button.onclick=()=>importDialog();button.textContent=assets.length?'Import files':'Import your first files';const openLibrary=$('#empty-open-library');openLibrary.hidden=view==='trash';openLibrary.onclick=()=>safe(()=>api.switchLibrary('open'));
+ if(view==='trash'&&!trashCount){const image=el('img');image.src='assets/trash-empty.png';image.alt='Empty macOS Trash';icon.append(image);heading.textContent='Trash is empty';description.textContent='Files you move to Trash appear here. You can restore them, or permanently delete their library originals, thumbnails, and cached previews.';button.hidden=true;small.textContent='Deleting from Trash cannot be undone.';}
+ else if(view==='trash'){icon.append(glyph('search'));heading.textContent='No matching files in Trash';description.textContent='Try a different search or file type. Items elsewhere in Trash are still available to restore.';button.hidden=false;button.textContent='Clear filters';button.onclick=()=>{$('#search').value='';$('#type').value='all';render();};small.hidden=true;}
+ else if(view==='favorites'&&!(pagedCatalog?navStats?.counts.favorites:assets.some(a=>!a.trash&&a.favorite))){icon.append(glyph('star'));heading.textContent='No favourites yet';description.textContent='Click the star on a file, or choose Add to Favourites from its right-click menu.';button.hidden=false;small.hidden=false;}
  else if(view==='tags'&&!(pagedCatalog?navStats?.counts.tags:assets.some(a=>!a.trash&&a.tags.length))){icon.append(glyph('tag'));heading.textContent='No tags yet';description.textContent='Add tags to your files to find them here.';button.hidden=false;small.hidden=false;}
  else if((pagedCatalog?navStats?.counts.all:assets.length)){icon.append(glyph('search'));heading.textContent='No matching files';description.textContent='Try a different search, collection, or file type.';button.textContent='Import files';small.hidden=true;}
  else{icon.append(glyph('grid'));heading.textContent='Bring your files together';description.textContent='Drop files or folders here, import them, or copy in Finder and press ⌘V.';small.textContent='Images · videos · PDFs · design files · and everything else';}

@@ -16,6 +16,8 @@ const NoteTrackers = (() => {
     return input;
   }
   function field(label, type, value = '') {
+    // Dates and months use the app's own calendar instead of the browser's.
+    if (type === 'date' || type === 'month') return Calendar.field(label, type, value);
     const input = el('input');
     input.type = type;
     input.value = value;
@@ -26,7 +28,15 @@ const NoteTrackers = (() => {
   function modal(title, className = '') {
     const dialog = el('dialog','note-tracker-dialog '+className);
     dialog.setAttribute('aria-label',title);
-    dialog.append(el('h2','',title));
+    // Every note sheet opens with the same heading row: a title and a close.
+    const heading = el('div','note-dialog-heading');
+    const close = el('button','note-dialog-close');
+    close.type = 'button';
+    close.setAttribute('aria-label','Close');
+    close.append(glyph('close'));
+    close.onclick = () => dialog.close();
+    heading.append(el('h2','',title), close);
+    dialog.append(heading);
     document.body.append(dialog);
     dialog.addEventListener('close',()=>dialog.remove(),{once:true});
     return dialog;

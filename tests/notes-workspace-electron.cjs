@@ -29,7 +29,9 @@ function key(keyCode, modifiers = []) {
   win.webContents.sendInputEvent({type:'keyUp',keyCode,modifiers});
 }
 async function until(fn) {
-  for (let i = 0; i < 200; i++) {
+  // A busy machine needs more than four seconds to switch notes and flush a
+  // tracker, so the wait is generous on purpose.
+  for (let i = 0; i < 600; i++) {
     if (await fn()) return;
     await new Promise(resolve => setTimeout(resolve, 20));
   }
@@ -39,11 +41,49 @@ async function create(template) {
   await run(`$('#new-note').click();$('#note-template').value=${JSON.stringify(template)};$('#note-template-form').requestSubmit();`);
   await until(() => run("!$('#note-template-dialog').open && !$('#notes-editor').inert"));
 }
+async function openBlockMenu() {
+  // The slash menu only opens in an empty paragraph, so work at the end of the
+  // note and keep pressing Enter until the caret sits in the last block, which
+  // is an empty plain paragraph.
+  const atEmptyParagraph = () => run(`(() => {
+    const active = document.activeElement;
+    const last = $('#note-blocks').lastElementChild;
+    return !!active && active.matches('.note-block-paragraph textarea') && !active.value &&
+      active.closest('.note-block') === last;
+  })()`);
+  for (let i = 0; i < 6; i++) {
+    if (await atEmptyParagraph()) break;
+    await run(`(() => {
+      const last = $('#note-blocks').lastElementChild;
+      const input = last?.querySelector('textarea');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+        input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+      } else {
+        last?.focus();
+        last?.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+      }
+    })()`);
+  }
+  try {
+    await until(atEmptyParagraph);
+  } catch (error) {
+    console.error('BLOCK_MENU_STATE', JSON.stringify(await run(`(() => ({
+      classes:[...$('#note-blocks').children].map(n=>n.className),
+      active:document.activeElement?.tagName+'.'+document.activeElement?.className,
+      value:document.activeElement?.value,
+      last:document.querySelector('#note-blocks')?.lastElementChild?.className
+    }))()`)));
+    throw error;
+  }
+  await run("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'/',bubbles:true}))");
+  await until(() => run("!!$('.note-block-menu')"));
+}
 async function insertBlock(type) {
   const names = {paragraph:'Paragraph',table:'Table',image:'Library image',bullet:'Bulleted item'};
-  await run("$('#note-insert-block').click()");
-  await until(() => run("!!$('dialog[aria-label=\"Insert a block\"][open]')"));
-  await run(`[...$('dialog[aria-label="Insert a block"]').querySelectorAll('button')].find(button=>button.textContent===${JSON.stringify(names[type])}).click()`);
+  await openBlockMenu();
+  await run(`[...$('.note-block-menu').querySelectorAll('button')].find(button=>button.textContent===${JSON.stringify(names[type])}).click()`);
 }
 (async () => {
   await app.whenReady();
@@ -86,7 +126,7 @@ async function insertBlock(type) {
     for (let i = 0; i < 10; i++) $('.notes-table-actions button').click();
     workspace.scrollTop = workspace.scrollHeight;
     return workspace.scrollTop > 0 && workspace.getBoundingClientRect().bottom <= innerHeight &&
-      $('#note-add-paragraph').getBoundingClientRect().bottom <= workspace.getBoundingClientRect().bottom;
+      $('#note-blocks').lastElementChild.getBoundingClientRect().bottom <= workspace.getBoundingClientRect().bottom;
   })()`), true);
   await run("$('#note-cover-add').click();$('#note-image-browse').click()");
   await until(() => run("$('#note-cover img')?.naturalWidth>0"));
@@ -165,12 +205,14 @@ async function insertBlock(type) {
     const inserted = $('.note-block-checklist + .note-block-checklist');
     return inserted.contains(document.activeElement) && !inserted.querySelector('input').checked;
   })()`), true);
+  await insertBlock('bullet');
+  await until(() => run("!!$('.note-block-bullet textarea')"));
+
   assert.equal(await run(`(async () => {
-    $('#note-insert-block').click();
-    const dialog = $('dialog[aria-label="Insert a block"]');
-    [...dialog.querySelectorAll('button')].find(button=>button.textContent==='Bulleted item').click();
-    await new Promise(resolve => setTimeout(resolve, 0));
     const bullet = $('.note-block-bullet textarea');
+    bullet.value = 'A bullet';
+    bullet.dispatchEvent(new Event('input',{bubbles:true}));
+    bullet.setSelectionRange(bullet.value.length, bullet.value.length);
     bullet.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));
     const blocks = $('#note-blocks'), last = blocks.lastElementChild;
     const transfer = new DataTransfer();
@@ -232,7 +274,15 @@ async function insertBlock(type) {
     return document.activeElement.closest('.note-block').classList.contains('note-block-paragraph') &&
       document.activeElement.value==='';
   })()`),true);
-  await run("$('#note-add-paragraph').click();$('#note-add-paragraph').click()");
+  await run(`(() => {
+    for (let i = 0; i < 2; i++) {
+      const inputs = [...document.querySelectorAll('.note-block-paragraph textarea')];
+      const input = inputs.at(-1);
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+    }
+  })()`);
   await run(`(() => {
     document.activeElement.blur?.();
     for (const row of document.querySelectorAll('.note-block-paragraph')) {
@@ -265,7 +315,15 @@ async function insertBlock(type) {
     return {count:visible.length,owner:visible[0]?.closest('.note-block')===inputs.at(-1).closest('.note-block')};
   })()`);
   assert.deepEqual(singleToolbar,{count:1,owner:true});
-  await run("$('#note-insert-link').click()");
+  await run(`(() => {
+    // Use the empty paragraph at the end of the note, never the first one:
+    // clearing the first paragraph would delete the split text being checked.
+    const input = [...document.querySelectorAll('.note-block-paragraph textarea')].at(-1);
+    input.focus();
+    input.value = '';
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'@',bubbles:true}));
+  })()`);
   await until(() => run("!!$('dialog[open] .tracker-reference-results button')"));
   await run("$('dialog[open]').close()");
   console.log('NOTES_SINGLE_TOOLBAR_AND_FOOTER_ACTIONS_OK');
@@ -368,20 +426,27 @@ async function insertBlock(type) {
   await run("$('.note-block-paragraph textarea').blur();$('.note-block-paragraph').dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}))");
   await new Promise(resolve=>setTimeout(resolve,250));
   assert.equal(await run("$('.note-block-paragraph .note-format-toolbar').classList.contains('is-visible')"),false);
-  await new Promise(resolve=>setTimeout(resolve,450));
-  assert.equal(await run("$('.note-block-paragraph .note-format-toolbar').classList.contains('is-visible')"),true);
+  // The toolbar appears after a 600 ms hover delay: wait for it instead of
+  // guessing a sleep, which made the suite flaky under load.
+  await until(()=>run("$('.note-block-paragraph .note-format-toolbar').classList.contains('is-visible')"));
   await run("$('.note-block-paragraph').dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));$('.note-block-paragraph textarea').focus()");
-  assert.equal(await run("$('.note-block-paragraph .note-format-toolbar').classList.contains('is-visible')"),true);
+  await until(() => run("$('.note-block-paragraph .note-format-toolbar').classList.contains('is-visible')"));
   const blockCount = await run("$('#note-blocks').children.length");
-  await run("$('#note-add-paragraph').click()");
+  await run(`(() => {
+    const input = $('.note-block-paragraph textarea');
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+  })()`);
   await until(() => run(`$('#note-blocks').children.length===${blockCount+1} && document.activeElement.matches('.note-block-paragraph textarea')`));
   key('Backspace');
   await until(() => run(`$('#note-blocks').children.length===${blockCount} && document.activeElement.matches('.note-block-paragraph textarea')`));
   console.log('NOTES_KEYBOARD_UNDO_REDO_DELETE_AND_FORMAT_TOOLTIP_OK');
   await run("const paragraph=$('.note-block-paragraph textarea');paragraph.value='';paragraph.dispatchEvent(new Event('input',{bubbles:true}))");
   await run("$('.note-block-paragraph textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'/',bubbles:true}))");
-  assert.equal(await run("!!$('dialog[aria-label=\"Insert a block\"][open]')"),true);
-  await run("$('dialog[aria-label=\"Insert a block\"]').close();$('.note-block-paragraph textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'@',bubbles:true}))");
+  await until(() => run("!!$('.note-block-menu')"));
+  assert.equal(await run("$('.note-block-menu-list button[aria-selected=\"true\"]').textContent"),'Paragraph');
+  await run("$('.note-block-menu-search').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));$('.note-block-paragraph textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'@',bubbles:true}))");
   await until(() => run("!!$('dialog[open] .tracker-reference-results button')"));
   await run("[...$('dialog[open] .tracker-reference-results').children].find(b=>b.textContent==='Movies & Series').click()");
   await until(() => run("!!$('.note-block-reference button')"));

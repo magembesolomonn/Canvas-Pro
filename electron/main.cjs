@@ -22,7 +22,6 @@ const {contextTemplate}=require('./file-menu.cjs');
 const {ImportQueue}=require('./import-queue.cjs');
 const {Workbench}=require('./workbench.cjs');
 const {HealthService}=require('./health-service.cjs');
-const {RSSService,validURL}=require('./rss-reader.cjs');
 app.setName(process.env.CANVAS_PROTOTYPE?'Canvas Pro Prototype':'Canvas Pro');
 const legacyData=path.join(app.getPath('appData'),'Asset Library');
 if(fs.existsSync(path.join(legacyData,'Library/library.sqlite')))app.setPath('userData',legacyData);
@@ -32,12 +31,8 @@ if (process.env.AGAGWU_DATA_DIR) {
   app.setPath('userData', process.env.AGAGWU_DATA_DIR);
 }
 if(!process.env.ASSET_TEST_MODE&&!app.requestSingleInstanceLock()){app.quit();return;}
-let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,rssService;
+let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench;
 let notesStore;
-let assistantService;
-const getAssistant = () => assistantService ??= new (require('./assistant.cjs').Assistant)(
-  path.join(app.getPath('userData'), 'Local Models', 'FunctionGemma')
-);
 const getNotesStore=()=>notesStore??=new (require('./notes-store.cjs').NotesStore)(library.db);
 let pendingLibrarySwitch=null;
 let previewZoomActive=false;
@@ -201,15 +196,47 @@ async function importPaths(paths, folder) {
   return importQueue.enqueue(paths, folder).done;
 }
 
-function appearanceState(){
- const reducedTransparency=!!nativeTheme.prefersReducedTransparency,highContrast=!!nativeTheme.shouldUseHighContrastColors;
- return {dark:!!nativeTheme.shouldUseDarkColors,nativeGlass:process.platform==='darwin'&&nativeTheme.shouldUseDarkColors&&!reducedTransparency&&!highContrast,reducedTransparency,highContrast};
+// Appearance preferences are the user's own: the system look is the default and
+// any override is stored beside the library, never in the app bundle.
+const appearancePrefs={theme:'system',glass:'system',transparency:'system'};
+function appearancePrefsPath(){return path.join(app.getPath('userData'),'appearance.json');}
+function loadAppearancePrefs(){
+ try{
+  const saved=JSON.parse(fs.readFileSync(appearancePrefsPath(),'utf8'));
+  if(saved&&typeof saved==='object'){
+   if(['system','light','dark'].includes(saved.theme))appearancePrefs.theme=saved.theme;
+   if(['system','on','off'].includes(saved.glass))appearancePrefs.glass=saved.glass;
+   if(['system','on','off'].includes(saved.transparency))appearancePrefs.transparency=saved.transparency;
+  }
+ }catch(error){}
+ return appearancePrefs;
 }
-nativeTheme.on('updated',()=>{
- if(!win||win.isDestroyed())return;const state=appearanceState();
+function saveAppearancePrefs(){
+ try{fs.mkdirSync(path.dirname(appearancePrefsPath()),{recursive:true});fs.writeFileSync(appearancePrefsPath(),JSON.stringify(appearancePrefs,null,2));}catch(error){}
+}
+function appearanceState(){
+ const prefs=loadAppearancePrefs();
+ const systemDark=!!nativeTheme.shouldUseDarkColors;
+ const dark=prefs.theme==='dark'?true:prefs.theme==='light'?false:systemDark;
+ const systemReduced=!!nativeTheme.prefersReducedTransparency;
+ const reducedTransparency=prefs.transparency==='on'?true:prefs.transparency==='off'?false:systemReduced;
+ const highContrast=!!nativeTheme.shouldUseHighContrastColors;
+ const systemGlass=process.platform==='darwin'&&!systemReduced&&!highContrast;
+ // Native glass is a dark-appearance material only; the renderer drops it in
+ // light mode, so the state it reports must agree or the switch lies.
+ const nativeGlass=dark&&(prefs.glass==='on'?true:prefs.glass==='off'?false:systemGlass);
+ return {dark,nativeGlass,reducedTransparency,highContrast,theme:prefs.theme,glass:prefs.glass,transparency:prefs.transparency};
+}
+function applyAppearanceWindow(){
+ if(!win||win.isDestroyed())return;
+ const state=appearanceState();
  if(process.platform==='darwin')win.setVibrancy(state.nativeGlass?'sidebar':null);
- win.setBackgroundColor(state.nativeGlass?'#00000000':state.dark?'#202020':'#f4f4f6');win.webContents.send('appearance-changed',state);
-});
+ win.setBackgroundColor(state.nativeGlass?'#00000000':state.dark?'#202020':'#f4f4f6');
+ win.webContents.send('appearance-changed',state);
+}
+loadAppearancePrefs();
+nativeTheme.themeSource=appearancePrefs.theme;
+nativeTheme.on('updated',()=>applyAppearanceWindow());
 function createWindow() {
   const appearance=appearanceState();
   win = new BrowserWindow({ width: 1480, height: 940, minWidth: 960, minHeight: 640, title: 'Canvas Pro', backgroundColor: appearance.nativeGlass?'#00000000':appearance.dark?'#202020':'#f4f4f6', ...(appearance.nativeGlass?{vibrancy:'sidebar',visualEffectState:'followWindow'}:{}), titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
@@ -262,10 +289,6 @@ app.whenReady().then(async () => {
   }
   if(!process.env.ASSET_TEST_MODE&&(savedLibrary?.root!==libraryRoot||savedLibrary.recent[0]!==libraryRoot))locations.remember(libraryRoot);
   library = new Library(libraryRoot);
-  rssService = new RSSService(library.db, {
-    fetcher: process.env.ASSET_TEST_MODE ? (url, options) => net.fetch(url, options) : publicFetch,
-    onUpdate: () => { if (win && !win.isDestroyed()) win.webContents.send('rss-changed'); }
-  });
   workbench=new Workbench(library);
   let switchingLibrary=false;
   async function changeLibrary(mode){if(switchingLibrary)return;switchingLibrary=true;try{await flushWorkspaces();const target=await chooseLibrary(mode);if(!target||target===library.root)return;pendingLibrarySwitch=()=>{locations.remember(target);app.relaunch();};app.quit();}catch(error){dialog.showErrorBox('Could not switch library',error.message);}finally{switchingLibrary=false;}}
@@ -305,6 +328,18 @@ app.whenReady().then(async () => {
   }
   healthService=new HealthService(library.root,state=>{if(win&&!win.isDestroyed())win.webContents.send('health-state',state);});
   ipcMain.handle('appearance-state',()=>appearanceState());
+  ipcMain.handle('appearance-set',(event,patch)=>{
+    trusted(event);
+    if(!patch||typeof patch!=='object')throw new Error('Invalid appearance settings.');
+    if(['system','light','dark'].includes(patch.theme))appearancePrefs.theme=patch.theme;
+    if(['system','on','off'].includes(patch.glass))appearancePrefs.glass=patch.glass;
+    if(['system','on','off'].includes(patch.transparency))appearancePrefs.transparency=patch.transparency;
+    saveAppearancePrefs();
+    nativeTheme.themeSource=appearancePrefs.theme;
+    applyAppearanceWindow();
+    return appearanceState();
+  });
+  ipcMain.handle('app-version',()=>require('../package.json').version);
   ipcMain.handle('import-state',()=>importQueue.snapshot());
   ipcMain.handle('import-cancel',(_,id)=>{importQueue.cancel(id);return importQueue.snapshot();});
   ipcMain.handle('import-retry',(_,id)=>importQueue.retry(id).done);
@@ -316,21 +351,6 @@ app.whenReady().then(async () => {
     try {
       const u = new URL(request.url);
       if(u.hostname==='ai'){const file=localModel.file(decodeURIComponent(u.pathname));return file?await fileResponse(file,request):new Response('',{status:404});}
-      if(u.hostname==='rss-image'){
-        const url=validURL(u.searchParams.get('url')||'');
-        const image=await publicFetch(url);
-        const type=(image.headers.get('content-type')||'').split(';')[0].toLowerCase();
-        if(!image.ok||!['image/jpeg','image/png','image/webp','image/gif','image/avif','image/x-icon','image/vnd.microsoft.icon'].includes(type))return new Response(null,{status:415});
-        const size=Number(image.headers.get('content-length'));
-        if(Number.isFinite(size)&&size>4*1024*1024)return new Response(null,{status:413});
-        const reader=image.body?.getReader();
-        if(!reader)return new Response(null,{status:404});
-        const chunks=[];let total=0;
-        try{while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>4*1024*1024){await reader.cancel();return new Response(null,{status:413});}chunks.push(value);}}
-        finally{reader.releaseLock();}
-        const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
-        return new Response(bytes,{headers:{'Content-Type':type,'Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'}});
-      }
       const id = u.pathname.slice(1);
       if (!/^[a-f0-9-]{36}$/.test(id)) return new Response('', { status: 400 });
       if(u.hostname==='note-cover'){
@@ -365,27 +385,6 @@ app.whenReady().then(async () => {
   });
   const trusted=event=>{if(event.sender!==win?.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Unavailable outside the library.');};
   ipcMain.handle('notes-emoji',(event,id,emoji)=>{trusted(event);return getNotesStore().setEmoji(id,emoji);});
-  ipcMain.handle('rss-feeds',event=>{trusted(event);return rssService.feeds();});
-  ipcMain.handle('rss-summary',event=>{trusted(event);return rssService.summary();});
-  ipcMain.handle('rss-articles',(event,options)=>{trusted(event);return rssService.articles(options||{});});
-  ipcMain.handle('rss-add-feed',(event,url)=>{trusted(event);return rssService.add(url);});
-  ipcMain.handle('rss-remove-feed',(event,id)=>{trusted(event);return rssService.remove(id);});
-  ipcMain.handle('rss-feed-context-menu',(event,id)=>{
-    trusted(event);
-    const feed=rssService.feed(id);
-    const requestUnsubscribe=()=>win.webContents.send('rss-unsubscribe-requested',id);
-    const menu=Menu.buildFromTemplate([{label:'Unsubscribe from “'+feed.title+'”…',click:requestUnsubscribe}]);
-    if(process.env.ASSET_TEST_MODE){global.rssFeedMenu=menu;global.rssFeedMenuAction=requestUnsubscribe;return;}
-    menu.popup({window:win});
-  });
-  ipcMain.handle('rss-refresh',async event=>{trusted(event);return rssService.refreshAll();});
-  ipcMain.handle('rss-read',(event,id)=>{trusted(event);return rssService.read(id);});
-  ipcMain.handle('rss-extraction-settings',event=>{trusted(event);return {enabled:rssService.automaticExtraction(),readerProxy:rssService.readerProxySetting()};});
-  ipcMain.handle('rss-set-automatic-extraction',(event,enabled)=>{trusted(event);return rssService.setAutomaticExtraction(enabled);});
-  ipcMain.handle('rss-set-reader-proxy',(event,enabled)=>{trusted(event);return rssService.setReaderProxy(enabled);});
-  ipcMain.handle('rss-retry-extraction',(event,id,options)=>{trusted(event);return rssService.retryExtraction(id,options||{});});
-  ipcMain.handle('rss-set-state',(event,id,state)=>{trusted(event);return rssService.setState(id,state);});
-  ipcMain.handle('rss-open-url',(event,value)=>{trusted(event);return shell.openExternal(validURL(value));});
   ipcMain.handle('notes-show-emoji-picker',event=>{trusted(event);if(process.platform==='darwin')app.showEmojiPanel();});
   ipcMain.handle('notes-list',event=>{trusted(event);return getNotesStore().list();});
   ipcMain.handle('notes-get',(event,id)=>{trusted(event);return getNotesStore().get(id);});
@@ -574,42 +573,6 @@ app.whenReady().then(async () => {
     if(op==='backup'){await flushWorkspaces();const chosen=await dialog.showSaveDialog(win,{title:'Back up library',defaultPath:path.join(app.getPath('documents'),'Canvas Pro Backup '+new Date().toISOString().slice(0,10)+'.canvaslibrary'),buttonLabel:'Back up'});if(chosen.canceled)return {cancelled:true};return workbench.backup(chosen.filePath);}
     throw Error('Unknown library tool.');
   });
-  ipcMain.handle('assistant-state', event => { trusted(event); return getAssistant().state(); });
-  ipcMain.handle('assistant-download', event => { trusted(event); return getAssistant().download(); });
-  ipcMain.handle('assistant-cancel', event => { trusted(event); getAssistant().cancel(); });
-  ipcMain.handle('assistant-stop', event => { trusted(event); getAssistant().stop(); });
-  ipcMain.handle('assistant-plan', (event, command, context) => { trusted(event); return getAssistant().plan(command, context); });
-  ipcMain.handle('assistant-filename-matches', (event, query, extensions = []) => {
-    trusted(event);
-    if (typeof query !== 'string' || !query.trim() || query.length > 500) throw new Error('Invalid filename search.');
-    if (!Array.isArray(extensions) || extensions.length > 100 || extensions.some(ext => typeof ext !== 'string' || ext.length > 12)) throw new Error('Invalid file types.');
-    return library.filenameMatches(query.trim(), extensions);
-  });
-  ipcMain.handle('assistant-create-collection', (event, root, name, ids) => {
-    trusted(event);
-    if (root !== library.root) throw new Error('The library changed. Submit the command again.');
-    if (workbench.backingUp) throw new Error('Wait for the library backup to finish.');
-    if (typeof name !== 'string' || !name.trim() || name.length > 120 || !Array.isArray(ids)) throw new Error('Invalid collection.');
-    library.createCollectionWithAssets(name.trim(), ids);
-  });
-  ipcMain.handle('assistant-folder', async event => {
-    trusted(event);
-    const { folder } = getAssistant().state();
-    await require('node:fs/promises').mkdir(folder, { recursive: true, mode: 0o700 });
-    const error = await shell.openPath(folder);
-    if (error) throw new Error(error);
-  });
-  ipcMain.handle('assistant-terms', event => {
-    trusted(event);
-    return shell.openExternal('https://ai.google.dev/gemma/terms');
-  });
-  ipcMain.handle('assistant-web', (event, query) => {
-    trusted(event);
-    if (typeof query !== 'string' || !query.trim() || query.length > 500) throw new Error('Invalid search.');
-    const url = new URL('https://duckduckgo.com/');
-    url.searchParams.set('q', query);
-    return shell.openExternal(url.href);
-  });
   ipcMain.handle('model-state',event=>{trusted(event);return localModel.state();});
   ipcMain.handle('model-download',event=>{trusted(event);return localModel.download();});
   ipcMain.handle('model-cancel',event=>{trusted(event);return localModel.cancel();});
@@ -727,9 +690,24 @@ app.whenReady().then(async () => {
   ipcMain.on('asset-ratio',(_,id,ratio)=>{if(typeof id!=='string'||!Number.isFinite(ratio)||ratio<=0||ratio>=100000)return;ratioUpdates.set(id,ratio);clearTimeout(ratioTimer);ratioTimer=setTimeout(()=>{try{library.setAspectRatios([...ratioUpdates]);ratioUpdates.clear();}catch{}},200);});
   app.on('before-quit',()=>{clearTimeout(ratioTimer);if(ratioUpdates.size)library.setAspectRatios([...ratioUpdates]);});
   ipcMain.handle('media-info', (_,id,priority) => mediaCache.get(id,!!priority));
+  ipcMain.handle('image-size', (event,id) => {
+    trusted(event);
+    const a=library.asset(id);
+    if(!a||a.trash||library.deleting.has(id))return null;
+    const image=nativeImage.createFromPath(library.file(id));
+    if(image.isEmpty())return null;
+    const {width,height}=image.getSize();
+    return width&&height?{width,height}:null;
+  });
   ipcMain.on('visible-assets', (_,ids) => { if(Array.isArray(ids)&&ids.length<=300){setVisibleThumbnails(ids);mediaCache.setVisible(ids);bookmarks.setVisible(ids);} });
   ipcMain.on('drag-file', async(event,value)=>{
-    try {const ids=Array.isArray(value)?value:[value];const files=checkedAssets(ids).map(a=>library.file(a.id));const icon=await app.getFileIcon(files[0],{size:'normal'});event.sender.startDrag({file:files[0],files,icon});}catch{}
+    try {
+      const ids=Array.isArray(value)?value:[value];
+      // Always hand over the original file, never the thumbnail.
+      const files=checkedAssets(ids).map(a=>library.file(a.id));
+      const icon=await app.getFileIcon(files[0],{size:'normal'});
+      event.sender.startDrag({items:files.map(filePath=>({filePath,icon}))});
+    }catch(error){console.error('Drag failed:',error.message);}
   });
   ipcMain.handle('open-link', (_,id) => {const url=new URL(library.asset(id).url);if(['http:','https:'].includes(url.protocol))return shell.openExternal(url.href);});
   ipcMain.handle('paste', async (_, folder) => {
@@ -758,6 +736,11 @@ app.whenReady().then(async () => {
     for(const a of assets){const base=path.basename(a.name).replace(/[\/\\]/g,'_')||'File';let target=path.join(chosen.filePaths[0],base),counter=1;while(fs.existsSync(target)){const parts=path.parse(base);target=path.join(chosen.filePaths[0],parts.name+' ('+(counter++)+')'+parts.ext);}await fs.promises.copyFile(library.file(a.id),target,fs.constants.COPYFILE_EXCL);}return assets.length;
   });
   ipcMain.handle('reveal', (_, id) => shell.showItemInFolder(library.file(id)));
+  ipcMain.handle('copy-path', async (_, id) => {
+    const file = library.file(id);
+    clipboard.writeText(file);
+    return file;
+  });
   ipcMain.handle('quick-look', async (_, id) => {
     if (process.platform === 'darwin') win.previewFile(library.file(id), library.asset(id).name);
   });
@@ -771,8 +754,6 @@ app.whenReady().then(async () => {
     {label:'Edit',submenu:[{label:'Undo',accelerator:'CmdOrCtrl+Z',click:()=>win?.webContents.send('history-command',false)},{label:'Redo',accelerator:'CmdOrCtrl+Shift+Z',click:()=>win?.webContents.send('history-command',true)},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]}, { role: 'viewMenu' }, { role: 'windowMenu' }
   ]));
   createWindow();
-  rssService.start();
-  app.on('before-quit',()=>rssService?.close());
   const bridgeDirectory=(process.env.ASSET_TEST_MODE||process.env.CANVAS_PROTOTYPE)?path.join(app.getPath('userData'),'Bridge'):path.join(app.getPath('appData'),'Canvas Pro/Bridge');
   captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>{if(win&&!win.isDestroyed())win.webContents.send('library-changed',ids);},onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);}});
   try{await captureBridge.start();}catch(e){console.error('Browser capture bridge:',e.message);}
@@ -789,7 +770,7 @@ let shutdownStarted=false,shutdownComplete=false;
 app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;
-  flushWorkspaces().then(()=>Promise.allSettled([rssService?.close(),bookmarks?.close(),webPreview?.close(),importQueue?.close(),captureBridge?.close(),smartIndex?.close(),localModel?.close(),assistantService?.close(),workbench?.close(),healthService?.cancel(),mediaCache?.cancelAndDrain([...mediaCache.pending.keys()])])).then(()=>{pendingLibrarySwitch?.();pendingLibrarySwitch=null;shutdownComplete=true;app.quit();}).catch(error=>{shutdownStarted=false;dialog.showErrorBox('Workspace could not be saved',error.message);});
+  flushWorkspaces().then(()=>Promise.allSettled([bookmarks?.close(),webPreview?.close(),importQueue?.close(),captureBridge?.close(),smartIndex?.close(),localModel?.close(),workbench?.close(),healthService?.cancel(),mediaCache?.cancelAndDrain([...mediaCache.pending.keys()])])).then(()=>{pendingLibrarySwitch?.();pendingLibrarySwitch=null;shutdownComplete=true;app.quit();}).catch(error=>{shutdownStarted=false;dialog.showErrorBox('Workspace could not be saved',error.message);});
 });
 app.on('will-quit', () => {library?.close();});
 module.exports = { importBuffer, importURL };

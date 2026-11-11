@@ -1,4 +1,0 @@
-trafilatura==1.12.2
-pyinstaller==6.13.0
-lxml-html-clean==0.4.6
-urllib3==1.26.20

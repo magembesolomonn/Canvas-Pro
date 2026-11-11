@@ -1,9 +1,9 @@
 .notes-section { margin-top: 0; }
 #notes-tree > summary { color: var(--muted); }
-#note-pages { padding-left: 13px; padding-bottom: 2px; }
+#note-pages { padding-left: 0; padding-bottom: 2px; }
 #note-pages button { min-width: 0; padding: 6px 8px; }
 #note-pages button span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#note-pages :is(.note-emoji,.sf-symbol), .notes-app-icon { flex: none; width: 22px; height: 22px; }
+#note-pages :is(.note-emoji,.sf-symbol) { flex: none; width: 20px; height: 20px; }
 #note-pages .note-emoji { display: grid; place-items: center; font: 17px/1 "Apple Color Emoji", sans-serif; }
 #note-pages .note-drop-target { outline: 1px solid currentColor; outline-offset: -2px; }
 .notes-footer { display: none; }
@@ -11,12 +11,36 @@
 .notes-active > #inspector,
 .notes-active main > :is(.filter-bar,#tags-bar,#gallery,#empty,footer) { display: none; }
 #notes-workspace { flex: 1; min-height: 0; overflow: auto; }
-.notes-document { width: min(100%, 820px); padding: 28px clamp(20px, 5vw, 60px) 60px; margin: 0 auto; }
+/* The note is the page: it sits on the window's own paper in every theme, so
+   there is never a slab in a second colour that ends halfway down. The
+   toolbar is the top of that page, not a separate band. */
+#notes-workspace { background: var(--bg); }
+.notes-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: min(100%, 820px);
+  margin: 0 auto;
+  padding: 10px clamp(20px, 5vw, 60px);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.notes-toolbar[hidden] { display: none; }
+.notes-document {
+  width: min(100%, 820px);
+  padding: 28px clamp(20px, 5vw, 60px) 60px;
+  margin: 0 auto;
+  background: transparent;
+}
 .notes-empty { padding-top: 12vh; }
 .notes-empty p { color: var(--muted); }
-.notes-active .notes-footer { display: flex; min-height: 34px; align-items: center; gap: 10px; padding: 5px 16px; border-top: 1px solid var(--line); color: var(--muted); }
-.notes-page-tools,.notes-add-block,.notes-table-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.notes-page-tools { margin-bottom: 14px; }
+.notes-active .notes-footer { display: flex; min-height: 34px; align-items: center; gap: 10px; padding: 5px 16px; border-top: 1px solid var(--line); background: var(--bg); color: var(--muted); }
+.notes-page-tools,.notes-table-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.notes-page-tools { margin-bottom: 0; margin-left: auto; }
 .notes-page-tools button,.notes-table-actions button { font-size: 12px; }
 .notes-page-menu,.note-block-actions { position: relative; }
 .notes-page-menu summary,.note-block-actions summary { cursor: pointer; padding: 5px 8px; }
@@ -28,7 +52,8 @@
 .note-block-actions summary::-webkit-details-marker { display: none; }
 #note-cover img { display: block; width: 100%; height: clamp(135px, 24vh, 255px); object-fit: cover; border-radius: 8px; }
 #note-title {
-  display: block; width: 100%; font: 700 clamp(26px, 4vw, 40px)/1.2 var(--app-font);
+  /* A note title, not a poster: 30px at most, like Apple Notes. */
+  display: block; width: 100%; font: 650 clamp(22px, 2.4vw, 30px)/1.25 var(--app-font);
   padding: 9px 5px; margin: 14px 0; border: 1px solid transparent; border-radius: 0;
   background: transparent; color: var(--text);
 }
@@ -59,8 +84,6 @@
 .note-format-toolbar button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 .note-format-bold { font-weight: 700; }
 .note-format-align { display: flex; border-left: 1px solid var(--line); padding-left: 3px; }
-.note-format-center { text-align: center; }
-.note-format-right { text-align: right; }
 @media (prefers-reduced-motion: no-preference) {
   .note-format-toolbar { transition: opacity 120ms ease-out, transform 120ms ease-out; }
 }
@@ -135,11 +158,6 @@
 .notes-table-wrap th { background: var(--panel); }
 .notes-table-wrap td:has(>button) { min-width: 0; width: 30px; }
 .notes-table-actions { padding: 7px 0; }
-.notes-add-block { align-items: center; gap: 4px; margin-top: 14px; }
-.notes-add-block button { min-height: 30px; border-color: transparent; background: transparent; color: var(--muted); }
-.notes-add-block button:hover,.notes-add-block button:focus-visible { background: var(--panel); color: var(--text); }
-#note-add-paragraph { padding-inline: 8px; }
-#note-insert-block,#note-insert-link { min-width: 30px; padding-inline: 7px; font-weight: 600; }
 #note-template-form label { display: block; margin-bottom: 5px; }
 #note-template { width: 100%; }
 
@@ -168,8 +186,10 @@
 .note-block[data-note-drop="before"]::after { top: -2px; }
 .note-block[data-note-drop="after"]::after { bottom: -2px; }
 
-#note-pages button { padding-inline-start: calc(8px + 10px * var(--note-depth, 0)); }
-#note-breadcrumbs { flex-direction: row; flex-wrap: wrap; margin-bottom: 8px; }
+/* The top-level note sits on the same icon column as every other row;
+   only its children step inwards. */
+#note-pages button { padding-inline-start: calc(10px + 10px * var(--note-depth, 0)); }
+#note-breadcrumbs { flex-direction: row; flex-wrap: wrap; margin-bottom: 0; min-width: 0; }
 #note-breadcrumbs[hidden] { display: none; }
 .note-tracker { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
 .note-tracker h3 { margin: 0 0 10px; }
@@ -187,6 +207,236 @@
 .tracker-lane { min-height: 100px; display: grid; align-content: start; gap: 6px; padding: 8px; background: var(--panel); border-radius: 6px; }
 .tracker-lane .tracker-card { cursor: grab; }
 .tracker-totals { margin-top: 8px; font-variant-numeric: tabular-nums; }
+/* ---------------------------------------------------------------------------
+   Every note dialogue has the same shape: a heading, a body, and an action
+   row. One shape means the app never surprises you with a different kind of
+   sheet.
+   --------------------------------------------------------------------------- */
+.note-tracker-dialog,
+#note-template-dialog,
+#note-image-dialog {
+  width: min(460px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.note-dialog-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--dialog-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 12px 20px;
+}
+.note-dialog-heading h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+}
+.note-dialog-close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+}
+.note-dialog-close:hover {
+  background: #ffffff12;
+  color: var(--text);
+}
+.note-dialog-close .sf-symbol {
+  width: 11px;
+  height: 11px;
+}
+.note-dialog-body {
+  padding: 0 20px;
+  overflow: auto;
+}
+.note-dialog-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.note-dialog-body select {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-field);
+  color: var(--text);
+  font: 12px var(--app-font);
+}
+.note-dialog-body #note-image-status {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.note-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.note-dialog-actions .dialog-error {
+  margin-right: auto;
+  color: #e2685f;
+  font-size: 11px;
+}
+/* The search field inside a sheet: the app's search field, at sheet size. */
+.note-dialog-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  margin-bottom: 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #ffffff0a;
+}
+/* A soft ring, the way macOS marks a focused field. */
+.note-dialog-search:focus-within {
+  border-color: color-mix(in srgb, var(--focus, var(--settings-accent)) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus, var(--settings-accent)) 20%, transparent);
+}
+.note-dialog-search .sf-symbol,
+.note-dialog-search-icon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: var(--muted);
+}
+/* A mask, not an inline style: the app's CSP does not allow inline styles. */
+.note-dialog-search-icon {
+  -webkit-mask: url("assets/symbols/search.png") center / contain no-repeat;
+  mask: url("assets/symbols/search.png") center / contain no-repeat;
+}
+.note-dialog-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 12px var(--app-font);
+  outline: none;
+}
+/* The ring lives on the field, not on the input inside it. */
+.note-dialog-search input:focus,
+.note-dialog-search input:focus-visible,
+body.light-mode .note-dialog-search input:focus,
+body.light-mode .note-dialog-search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+/* The block menu: an inline list at the caret, the way a slash menu should
+   feel. It floats over the page, so it keeps the popover material. */
+.note-block-menu {
+  position: fixed;
+  z-index: 40;
+  width: 264px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-menu);
+  box-shadow: var(--shadow-popover);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+.note-block-menu-search {
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #ffffff0a;
+  color: var(--text);
+  font: 12px var(--app-font);
+  outline: none;
+}
+.note-block-menu-search:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus, var(--settings-accent)) 22%, transparent);
+}
+.note-block-menu-search::placeholder {
+  color: var(--muted);
+}
+.note-block-menu-list {
+  max-height: 262px;
+  overflow: auto;
+  display: grid;
+  gap: 1px;
+}
+.note-block-menu-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+}
+.note-block-menu-list button:hover,
+.note-block-menu-list button[aria-selected="true"] {
+  background: #ffffff10;
+}
+.note-block-menu-list button .sf-symbol {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--muted);
+}
+.note-block-menu-list button[aria-selected="true"] .sf-symbol {
+  color: var(--text);
+}
+.note-block-menu-list button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-block-empty {
+  padding: 8px 8px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+body.light-mode .note-block-menu-search {
+  background: #00000008;
+}
+body.light-mode .note-block-menu-list button:hover,
+body.light-mode .note-block-menu-list button[aria-selected="true"] {
+  background: #0000000a;
+}
+body.light-mode .note-dialog-close {
+  background: transparent;
+}
+body.light-mode .note-dialog-close:hover {
+  background: #0000000a;
+}
+body.light-mode .note-dialog-search {
+  background: #00000008;
+}
+body.light-mode .note-dialog-search:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
 .note-tracker-dialog { width: min(550px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; }
 .note-tracker-dialog > :is(input,select), .note-tracker-dialog form > input { width: 100%; margin-bottom: 10px; }
 .tracker-record-panel { margin: auto 20px auto auto; }
@@ -246,3 +496,142 @@
 .note-block .note-heading-setting input[type="number"] { width: 64px; border-color: var(--line); }
 .note-block .note-heading-setting input[type="color"] { width: 64px; height: 28px; padding: 2px; cursor: pointer; }
 .note-block[tabindex]:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: 0; }
+
+/* The calendar: the app's own popover, in place of the browser's date
+   control. It uses the same material as every other floating panel here. */
+.calendar-field {
+  cursor: pointer;
+  text-align: left;
+}
+.calendar-popover {
+  position: fixed;
+  z-index: 60;
+  width: 252px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-menu);
+  box-shadow: var(--shadow-popover);
+  backdrop-filter: blur(18px) saturate(120%);
+  color: var(--text);
+}
+.calendar-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.calendar-nav {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+.calendar-nav:hover {
+  background: #ffffff12;
+  color: var(--text);
+}
+.calendar-nav .sf-symbol {
+  width: 13px;
+  height: 13px;
+}
+.calendar-title {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: 600 12px var(--app-font);
+  text-align: center;
+}
+.calendar-title:hover {
+  background: #ffffff12;
+}
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+.calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.calendar-months {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+.calendar-day,
+.calendar-month {
+  display: grid;
+  place-items: center;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: 12px var(--app-font);
+}
+.calendar-day:hover,
+.calendar-month:hover {
+  background: #ffffff12;
+}
+.calendar-day.is-empty {
+  pointer-events: none;
+}
+.calendar-day.is-today {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.calendar-day.is-selected,
+.calendar-month.is-selected {
+  background: var(--settings-accent);
+  color: #ffffff;
+}
+.calendar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.calendar-clear,
+.calendar-now {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--settings-accent);
+  font: 12px var(--app-font);
+}
+.calendar-clear:hover,
+.calendar-now:hover {
+  background: #ffffff12;
+}
+body.light-mode .calendar-day:hover,
+body.light-mode .calendar-month:hover {
+  background: #0000000a;
+}
+body.light-mode .calendar-day.is-selected,
+body.light-mode .calendar-month.is-selected {
+  color: #ffffff;
+}
+body.light-mode .calendar-clear:hover,
+body.light-mode .calendar-now:hover {
+  background: #0000000a;
+}

@@ -20,6 +20,9 @@ class Library {
       CREATE TABLE IF NOT EXISTS aspect_ratios (id TEXT PRIMARY KEY REFERENCES assets(id), ratio REAL NOT NULL);`);
     const columns=this.db.prepare('PRAGMA table_info(assets)').all();if(!columns.some(c=>c.name==='favorite')){this.db.exec('ALTER TABLE assets ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0; UPDATE assets SET favorite=1 WHERE rating>=4');}
     if(!this.db.prepare('PRAGMA table_info(folders)').all().some(c=>c.name==='id'))this.db.exec('ALTER TABLE folders ADD COLUMN id TEXT');for(const folder of this.db.prepare('SELECT name FROM folders WHERE id IS NULL').all())this.db.prepare('UPDATE folders SET id=? WHERE name=?').run(crypto.randomUUID(),folder.name);this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS folders_id ON folders(id)');
+    // The Movies tracker and the RSS reader were removed. Their tables are
+    // dropped so existing libraries do not keep orphaned data around.
+    for(const table of ['movie_tracker','rss_articles','rss_feeds','rss_settings'])this.db.exec(`DROP TABLE IF EXISTS ${table};`);
     this.assetStatement=this.db.prepare('SELECT * FROM assets WHERE id=?');
     this.updateStatements=new Map();
     this.deleting=new Set();

@@ -16,8 +16,8 @@ function setGalleryLayout(mode){
  if(!['masonry','waterfall','justified'].includes(mode))return;
  const gallery=$('#gallery'),anchor=layout?AssetLayout.anchorAt(layout,gallery.scrollTop,gallery.clientHeight):null;
  stopHover();galleryLayout=mode;localStorage.setItem('gallery-layout',mode);document.body.dataset.layout=mode;
- for(const option of document.querySelectorAll('#layout-menu [data-layout]'))option.setAttribute('aria-checked',String(option.dataset.layout===mode));
- $('#layout-button').title='Gallery layout · '+mode[0].toUpperCase()+mode.slice(1);
+ for(const option of document.querySelectorAll('#view-menu [data-view-layout]'))option.setAttribute('aria-checked',String(option.dataset.viewLayout===mode));
+ const button=$('#view-menu-button');if(button)button.title='View · '+mode[0].toUpperCase()+mode.slice(1)+' layout';
  layoutDirty=true;renderWindow(anchor);
 }
 function applyAppearance(state){
@@ -28,8 +28,8 @@ function applyAppearance(state){
 function initViewPreferences(){
  const saved=localStorage.getItem('gallery-layout');galleryLayout=['masonry','waterfall','justified'].includes(saved)?saved:'masonry';document.body.dataset.layout=galleryLayout;
  const savedSort=localStorage.getItem('sort-order');if(['new','old','name','size'].includes(savedSort))$('#sort').value=savedSort;
- const menu=$('#layout-menu'),button=$('#layout-button'),options=[...menu.querySelectorAll('[data-layout]')];
- for(const option of options){option.setAttribute('aria-checked',String(option.dataset.layout===galleryLayout));option.onclick=()=>{setGalleryLayout(option.dataset.layout);menu.hidePopover();button.focus({preventScroll:true});};}
+ const menu=$('#view-menu'),button=$('#view-menu-button'),options=[...menu.querySelectorAll('[data-view-layout]')];
+ for(const option of options){option.setAttribute('aria-checked',String(option.dataset.viewLayout===galleryLayout));option.onclick=()=>{setGalleryLayout(option.dataset.viewLayout);menu.hidePopover();button.focus({preventScroll:true});};}
  function positionMenu(){if(!menu.matches(':popover-open'))return;const rect=button.getBoundingClientRect();menu.style.top=(rect.bottom+8)+'px';menu.style.left=Math.max(8,Math.min(innerWidth-menu.offsetWidth-8,rect.right-menu.offsetWidth))+'px';}
  let pointerOpening = false;
  button.addEventListener('click', event => { pointerOpening = event.detail > 0; });

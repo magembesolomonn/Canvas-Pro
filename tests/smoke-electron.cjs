@@ -59,15 +59,16 @@ require(process.env.ASSET_LIBRARY_MAIN||'../electron/main.cjs');
   if(audio){const result=await evalJS(`(async()=>{select('${audio}');openPreview();const info=await window.library.mediaInfo('${audio}',true);return {duration:info.duration,peaks:info.peaks?.length,artwork:info.artwork,playing:!previewPlayer.media.paused,controls:!!document.querySelector('.full-player .seek'),nativeControls:previewPlayer.media.controls};})()`);console.log('AUDIO',JSON.stringify(result));if(result.peaks!==512)throw new Error('Audio waveform was not generated');await evalJS('closePreview()');}
   await evalJS("setView('audio')");
   const hover=await evalJS(`(async()=>{const card=document.querySelector('.card');card.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));await new Promise(resolve=>setTimeout(resolve,400));const playing=!!hoverPlayer&&!hoverPlayer.media.paused;card.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));return {playing,released:hoverPlayer===null};})()`);console.log('HOVER',JSON.stringify(hover));if(!hover.playing||!hover.released)throw new Error('Hover playback failed');await new Promise(resolve=>setTimeout(resolve,1000));
-  const audioSpace=await evalJS(`(async()=>{
-    const card=document.querySelector('.card[data-id="${audio}"]')||document.querySelector('.card');card.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
+  // Artwork-specific hover checks require an M4A fixture; the WAV fallback is covered below.
+  if(audio){const audioSpace=await evalJS(`(async()=>{
+    const card=document.querySelector('.card[data-id="${audio}"]');card.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
     await new Promise(r=>setTimeout(r,250));
     const noHoverWave=!hoverPlayer.element.querySelector('canvas'),cover=!!hoverPlayer.element.querySelector('.cover-art');
     const art=hoverPlayer.element.querySelector('.cover-art img');if(art){const tile=hoverPlayer.element.parentElement.getBoundingClientRect(),bounds=art.getBoundingClientRect();if(Math.abs(tile.width-bounds.width)>2||Math.abs(tile.height-bounds.height)>2)throw Error('Hover artwork shrinks inside the audio tile');}const hovered=hoverPlayer.id,seek=hoverPlayer.element.querySelector('.seek');seek.focus();
     seek.dispatchEvent(new KeyboardEvent('keydown',{key:' ',code:'Space',bubbles:true}));
     const opened=!$('#preview').hidden&&selected===hovered&&!!previewPlayer&&hoverPlayer===null;
     closePreview();return {noHoverWave,cover,opened};
-  })()`);console.log('AUDIO_SPACE',JSON.stringify(audioSpace));if(!audioSpace.noHoverWave||!audioSpace.cover||!audioSpace.opened)throw new Error('Audio hover or Space preview regression');
+  })()`);console.log('AUDIO_SPACE',JSON.stringify(audioSpace));if(!audioSpace.noHoverWave||!audioSpace.cover||!audioSpace.opened)throw new Error('Audio hover or Space preview regression');}
   fs.writeFileSync('/private/tmp/asset-library-gallery.png',(await win.webContents.capturePage()).toPNG());
   if(audio){await evalJS(`select('${audio}');openPreview()`);await new Promise(resolve=>setTimeout(resolve,500));const coverOnly=await evalJS("!document.querySelector('.full-player .cover-art img')||!document.querySelector('.full-player .player-wave')");if(!coverOnly)throw Error('Audio artwork still has a waveform in the viewer');console.log('AUDIO_ARTWORK_WITHOUT_WAVEFORM_OK');fs.writeFileSync('/private/tmp/asset-library-audio.png',(await win.webContents.capturePage()).toPNG());}
   const noArt=await evalJS(`(async()=>{const a=assets.find(a=>a.ext==='wav');select(a.id);openPreview();await window.library.mediaInfo(a.id,true);await new Promise(resolve=>setTimeout(resolve,100));return {noCover:!!document.querySelector('.audio-stage.no-cover'),peaks:(await getMediaInfo(a,true)).peaks?.length};})()`);console.log('NO_ART_AUDIO',JSON.stringify(noArt));if(!noArt.noCover||noArt.peaks!==512)throw new Error('Waveform fallback failed');
@@ -78,15 +79,16 @@ require(process.env.ASSET_LIBRARY_MAIN||'../electron/main.cjs');
     closePreview();renderInspector();await wait(100);
     const inspectorFallback=!!document.querySelector('.inspector-audio .file-placeholder .sf-symbol');
     const art=assets.find(a=>a.ext==='m4a');let inspectorArtwork=true;
-    if(art){select(art.id);renderInspector();await wait(400);inspectorArtwork=!!document.querySelector('.inspector-audio img');}
-    const image=assets.find(a=>a.name==='Landscape study.png');select(image.id);renderInspector();await wait(250);
-    const img=document.querySelector('.inspector-media>img'),rect=img.getBoundingClientRect();
+    if(art){setView('audio');select(art.id);renderInspector();await wait(400);inspectorArtwork=!!document.querySelector('.inspector-audio img');}
+    setView('image');await wait(200);const image=visible.find(a=>a.name==='Landscape study.png');if(!image)throw Error('Landscape fixture is missing');select(image.id);renderInspector();await wait(250);
+    const img=document.querySelector('.inspector-media>img');if(!img)throw Error('Image inspector preview is missing');const rect=img.getBoundingClientRect();
     const naturalRatio=Math.abs(rect.width/rect.height-img.naturalWidth/img.naturalHeight)<.02;
+    const dimensions=[...document.querySelectorAll('.properties dt')].find(dt=>dt.textContent==='Dimensions')?.nextElementSibling?.textContent||'';
     $('#search').focus();const searchOutline=getComputedStyle($('#search')).outlineStyle;
-    return {waveHeight,fallbackVisible,inspectorFallback,inspectorArtwork,naturalRatio,searchOutline};
+    return {waveHeight,fallbackVisible,inspectorFallback,inspectorArtwork,naturalRatio,dimensions,searchOutline};
   })()`);console.log('PREVIEW_POLISH',JSON.stringify(polish));
-  if(polish.waveHeight>64||!polish.fallbackVisible||!polish.inspectorFallback||!polish.inspectorArtwork||!polish.naturalRatio||polish.searchOutline!=='none')throw new Error('Audio, inspector or search styling regression');
-  await evalJS(`const fixture=assets.find(a=>a.ext==='wav');select(fixture.id);openPreview()`);
+  if(polish.waveHeight>64||!polish.fallbackVisible||!polish.inspectorFallback||!polish.inspectorArtwork||!polish.naturalRatio||!/^\d+ × \d+$/.test(polish.dimensions)||polish.searchOutline!=='none')throw new Error('Audio, inspector, dimensions or search styling regression');
+  await evalJS(`setView('all');const fixture=assets.find(a=>a.ext==='wav');select(fixture.id);openPreview()`);
 
   const keyboard=await evalJS(`(()=>{const canvas=document.querySelector('.full-player canvas');canvas.focus();canvas.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));return {closed:document.querySelector('#preview').hidden};})()`);console.log('KEYBOARD',JSON.stringify(keyboard));if(!keyboard.closed)throw new Error('Escape failed after waveform focus');
   const zoom=await evalJS(`(()=>{setView('all');const g=$('#gallery');g.scrollTop=layout.height*.8;renderWindow();const before=AssetLayout.anchorAt(layout,g.scrollTop,g.clientHeight);$('#zoom').value=360;$('#zoom').dispatchEvent(new Event('input'));const position=layout.byId.get(before.id);return {mounted:mounted.size,anchorError:Math.abs(g.scrollTop-(position.y+before.offset*position.width/before.width))};})()`);console.log('ZOOM',JSON.stringify(zoom));if(zoom.anchorError>2||zoom.mounted>100)throw new Error('Zoom anchor failed');

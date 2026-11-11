@@ -1,7 +1,9 @@
 (function(root){
 function ratioOf(item,ratioFor){const value=ratioFor(item);return Number.isFinite(value)&&value>0?value:1;}
+function getGap(){try{return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gallery-gap').trim())||16;}catch{return 16;}}
+function getPad(){try{return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gallery-pad').trim())||22;}catch{return 22;}}
 function createColumns(items,width,target=230,ratioFor=a=>a.aspectRatio||1,mode='masonry',footerHeight=()=>48){
- const gap=18,pad=22,available=Math.max(1,width-pad*2),columns=Math.max(1,Math.floor((available+gap)/(target+gap))),tile=(available-gap*(columns-1))/columns,heights=Array(columns).fill(pad),columnItems=Array.from({length:columns},()=>[]),positions=[],byId=new Map();
+ const gap=getGap(),pad=getPad(),available=Math.max(1,width-pad*2),columns=Math.max(1,Math.floor((available+gap)/(target+gap))),tile=(available-gap*(columns-1))/columns,heights=Array(columns).fill(pad),columnItems=Array.from({length:columns},()=>[]),positions=[],byId=new Map();
  for(let index=0;index<items.length;index++){
   let column=mode==='waterfall'?index%columns:0;
   if(mode==='masonry')for(let c=1;c<columns;c++)if(heights[c]<heights[column])column=c;
@@ -13,7 +15,7 @@ function createColumns(items,width,target=230,ratioFor=a=>a.aspectRatio||1,mode=
 }
 function createMasonry(items,width,target=230,ratioFor=a=>a.aspectRatio||1){return createColumns(items,width,target,ratioFor,'masonry');}
 function createJustified(items,width,target=230,ratioFor=a=>a.aspectRatio||1,footerHeight=()=>48){
- const gap=18,pad=22,available=Math.max(1,width-pad*2),positions=[],byId=new Map(),columnItems=[],rowItems=[];
+ const gap=getGap(),pad=getPad(),available=Math.max(1,width-pad*2),positions=[],byId=new Map(),columnItems=[],rowItems=[];
  let row=[],sum=0,y=pad;
  function flush(fill){
   if(!row.length)return;

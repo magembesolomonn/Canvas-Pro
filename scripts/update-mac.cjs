@@ -5,8 +5,9 @@ const contents=path.join(bundle,'Contents');if(!fs.existsSync(path.join(contents
 const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));delete pkg.scripts;delete pkg.devDependencies;
 const stamp=new Date().toISOString().replaceAll(':','-');const backup=path.join(root,'.updates',stamp);fs.mkdirSync(backup,{recursive:true});
 const resources=path.join(contents,'Resources'),current=path.join(resources,'app'),staged=path.join(resources,'app-update-'+stamp);fs.mkdirSync(staged);
-for(const entry of ['electron','src','bin','chrome-extension'])fs.cpSync(path.join(root,entry),path.join(staged,entry),{recursive:true});fs.writeFileSync(path.join(staged,'package.json'),JSON.stringify(pkg,null,2));
-for(const helper of ['media-tool','analysis-tool','rss-extractor']) execFileSync('/usr/bin/codesign',['--force','--sign','-',path.join(staged,'bin',helper)]);
+for(const entry of ['electron','src','bin','chrome-extension'])fs.cpSync(path.join(root,entry),path.join(staged,entry),{recursive:true});
+fs.writeFileSync(path.join(staged,'package.json'),JSON.stringify(pkg,null,2));
+for(const helper of ['media-tool','analysis-tool']) execFileSync('/usr/bin/codesign',['--force','--sign','-',path.join(staged,'bin',helper)]);
 fs.copyFileSync(path.join(contents,'Info.plist'),path.join(backup,'Info.plist'));fs.cpSync(path.join(contents,'_CodeSignature'),path.join(backup,'_CodeSignature'),{recursive:true});
 const priorIcon=path.join(resources,'AssetLibrary.icns'),hadIcon=fs.existsSync(priorIcon);if(hadIcon)fs.copyFileSync(priorIcon,path.join(backup,'AssetLibrary.icns'));
 fs.renameSync(current,path.join(backup,'app'));fs.renameSync(staged,current);

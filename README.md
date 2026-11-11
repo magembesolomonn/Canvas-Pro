@@ -15,7 +15,6 @@ npm run build:native
 npm start
 ```
 
-`npm start` builds the RSS parser and a standalone Trafilatura helper before launching. The helper is built in a local ignored Python virtual environment from `requirements-rss.txt`; the first build needs internet access to download the pinned Python packages. Python is only needed to build the helper—the bundled app runs it without a separate Python installation. The media and analysis helpers are generated in ignored `bin/` too. To build a double-clickable app instead of starting the development app, run `npm run build:mac`; it compiles the helpers automatically and creates `dist/Canvas Pro.app`. The app is signed locally for development and is not notarized for public distribution. Building does not modify the source files or your personal library. `npm ci` installs the exact dependencies from `package-lock.json`; it may download Electron during installation.
 
 ## Import and browse
 
@@ -37,18 +36,21 @@ Imports copy originals, never move source files. SHA-256 detects exact duplicate
 
 The library is in Electron's application-data directory (normally `~/Library/Application Support/Asset Library/Library`). Use **Library on this Mac** to find the actual location. It contains `originals/`, `thumbnails/`, and `library.sqlite`. Quit the app before copying the entire Library folder as a backup. Never edit the managed originals or database directly. **Export copy** saves an individual original to a chosen location. Trash is reversible; there is no permanent-delete operation yet.
 
-## RSS reader
+## Notes, quotes and appearance
 
-The **RSS Feed** sidebar section accepts RSS and Atom URLs, Google News RSS links, or a website address. It discovers advertised feeds and common endpoints such as `/rss`; if a publisher homepage returns HTTP 403, it can subscribe to that publisher's public Google News RSS search instead. When a website has no feed but is accessible, it can create a reader-only subscription from recent article links. Right-click a feed in the sidebar to unsubscribe. It refreshes subscriptions every 30 minutes and stores feeds, articles, read/unread state, stars and extracted article caches in the active library's SQLite database.
+Notes live in their own workspace. A note is a list of blocks: paragraphs, headings, bulleted items, checklist items, toggles, tables, trackers, library images and links to other pages or files. Press **Enter** in an empty bullet, checklist item or toggle to return to a plain paragraph. Type **/** in an empty paragraph for the block menu, or **@** to link to a page or file. There is no row of add buttons; the menu is the way in.
 
-**Automatically Extract Full Articles** is enabled by default in Settings. RSS excerpts are shown immediately while up to two article pages are fetched in the background; opening an article moves it ahead of unstarted extraction work. Trafilatura is the primary extractor; Mozilla Readability is used if Trafilatura errors, returns no useful content, or produces structurally insufficient content. Successful HTML, title, author, publication date, description, image, extraction method and timestamp are cached locally. If a feed item lacks an image, the app checks recent article pages in the background for Open Graph/Twitter image metadata or an image in the article body—even when the RSS body is already complete. Failures are retained with their status and error and are not automatically retried on each refresh; the reader offers retry and cache refresh actions. A feed's explicit full-content field is used without fetching its article text, while descriptions and content marked as truncated are treated as excerpts. When a direct page fetch fails or returns a paywall/login signal, the reader tries public retrieval fallbacks in order—Googlebot, the Wayback Machine, Jina Reader and archive.today—and keeps the longest extraction that is not paywalled. This is best-effort: a publisher or archive may still withhold the article, in which case the feed excerpt and publisher link remain. **Use Archives for Blocked Pages** is enabled by default in Settings and can be turned off; when enabled, article links are sent to those third-party services. Google News search feeds provide headlines and excerpts only when the publisher URL cannot be reached; article pages are still fetched directly from publishers and are not extracted from Google News pages. Pages that require JavaScript are not browser-rendered locally, but an archive or reader-service copy may still provide the article text.
+Pasted text is saved as a quote and shown on a card with the whole excerpt, shrinking slightly and only then adding an ellipsis. Every card draws one of eight muted paper tints, chosen from the item's identifier so a card keeps its colour. The full preview uses the same tint.
 
-`npm run build:rss-extractor` can build the standalone helper separately. `npm run test:rss` tests the asynchronous queue, cache, failure/retry behavior, extraction metadata, paywall policy, crawler/archive fallback ordering, and Electron UI with deterministic fixtures; it does not depend on live publisher sites.
+Tracker tables use the app's own calendar for date and month fields: a popover with the usual arrows, months and days, in the app's material, instead of the browser's date control. The stored value stays in the format the tracker keeps ("YYYY-MM" and "YYYY-MM-DD").
+
+The note page sits on the window's own background in both light and dark appearance, so there is no second slab of colour behind the text. File Details shows the preview, the name, notes, tags, collections and properties; the star is on the card and in the right-click menu, and **Copy Path** is in the right-click menu.
+
+There is no chat assistant and no star rating. The star on a card marks a Favourite; finding similar images, colour palettes, automatic tags and text search come from the on-device model in Settings → Experimental.
 
 ## Validation
 
-`npm run check` checks JavaScript syntax. `npm test` verifies byte-preserving import, exact duplicate detection, cross-collection duplicate membership, metadata persistence, rating validation and reversible Trash. `npm run test:rss` builds the RSS parser and tests feed discovery/parsing, library persistence, article state, paywall fallback and the Electron reader UI. These checks do not replace macOS interaction testing.
-
+`npm run check` checks JavaScript syntax. `npm test` verifies byte-preserving import, exact duplicate detection, cross-collection duplicate membership, metadata persistence, rating validation and reversible Trash.
 Manual acceptance checklist:
 
 1. Import images, video, PDF and a proprietary design file; confirm thumbnails or clear placeholders.
@@ -249,7 +251,7 @@ Build additions: `npm run build:smart`, `npm run build:analysis`. Integration ve
 
 Run `npm run prototype` for a separate persistent prototype profile and blank library in `.prototype/`. This leaves the installed app and your regular library alone. No new DMG or extension ZIP has been built for this iteration. Load `chrome-extension/` unpacked in a test browser profile to try the browser side panel (Chrome 116+).
 
-The prototype adds file undo/redo, palette colour matching, visual find-similar, a searchable shortcut reference, optional backup reminders, library backup and hash-verified missing-original recovery. File undo covers metadata and collection membership, not permanent deletion or imported file bytes. Identical imports are already deduplicated by hash; visual similarity requires completed local indexing and remains a review aid, not proof of duplication. Technical inspector sections collapse, and preview support is explained per format.
+The prototype adds file undo/redo, palette colour matching, visual find-similar, a searchable shortcut reference, optional backup reminders, library backup and hash-verified missing-original recovery. File undo covers metadata and collection membership, not permanent deletion or imported file bytes. Identical imports are already deduplicated by hash; visual similarity requires completed local indexing and remains a review aid, not proof of duplication.
 
 Create a collection/canvas with an optional macOS symbol or single emoji; change it later from its context menu. Icon choices and backup preferences live in the portable library database. PNG and PDF canvas exports support the whole board or a selection, with cached media stills; PDF text and shapes remain vectors. Very large boards must be exported in smaller selections.
 
