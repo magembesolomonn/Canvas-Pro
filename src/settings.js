@@ -217,11 +217,18 @@
         setGalleryLayout(button.dataset.layout);
         this.syncLayouts();
       });
+      const names = $('#settings-file-names');
+      names.onchange = () => {
+        setShowFileNames(names.checked);
+        this.syncLayouts();
+      };
     },
 
     syncLayouts() {
       for (const button of document.querySelectorAll('#settings-layouts [data-layout]'))
         button.setAttribute('aria-checked', String(button.dataset.layout === galleryLayout));
+      const names = $('#settings-file-names');
+      if (names) names.checked = showFileNamesEnabled();
     },
 
     wireExperimental() {

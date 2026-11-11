@@ -234,6 +234,13 @@ class Bookmarks{
    if(asset.trash||info?.type!=='social'||info.url!==asset.url||!source)return new Response(null,{status:404});
    return this.publicImage([source],signal,8);
  }
+ // The cover is normally saved to disk during enrichment. If that download
+ // failed, the card can still borrow the page's own feature image.
+ async webImage(id,signal){
+   const {asset,info}=this.cached(id);
+   if(asset.trash||info?.url!==asset.url||!['webpage','article'].includes(info?.type)||!info.imageURL)return new Response(null,{status:404});
+   return this.publicImage([info.imageURL],signal,8);
+ }
  async publicImage(sources,signal,megabytes){
    const deadline=AbortSignal.any([signal,AbortSignal.timeout(10000)]);
    for(const source of sources){

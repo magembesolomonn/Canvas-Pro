@@ -29,7 +29,7 @@
    <button id="empty-trash" class="danger" hidden>Empty Trash…</button>
   </div>
   <label class="zoom-label" hidden title="Thumbnail size"><input id="zoom" type="range" min="140" max="360" value="230" aria-label="Thumbnail size"></label>
-  <select id="type" hidden aria-label="File type"><option value="all">All types</option><option value="image">Images</option><option value="video">Videos</option><option value="pdf">PDFs</option><option value="audio">Audio</option><option value="link">Web links</option><option value="other">Design &amp; other</option></select>
+  <select id="type" hidden aria-label="File type"><option value="all">All types</option><option value="image">Images</option><option value="video">Videos</option><option value="pdf">PDFs</option><option value="audio">Audio</option><option value="social">Social posts</option><option value="recipe">Recipes</option><option value="link">Web links</option><option value="other">Design &amp; other</option></select>
   <select id="sort" hidden aria-label="Sort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="name">Name A–Z</option><option value="size">Largest first</option></select>
  </div>
  <div id="tags-bar" class="tags-bar" hidden></div>
@@ -87,6 +87,8 @@
   <button type="button" role="menuitemradio" data-view-type="video">Videos</button>
   <button type="button" role="menuitemradio" data-view-type="pdf">PDFs</button>
   <button type="button" role="menuitemradio" data-view-type="audio">Audio</button>
+  <button type="button" role="menuitemradio" data-view-type="social">Social posts</button>
+  <button type="button" role="menuitemradio" data-view-type="recipe">Recipes</button>
   <button type="button" role="menuitemradio" data-view-type="link">Web links</button>
   <button type="button" role="menuitemradio" data-view-type="other">Design &amp; other</button>
  </div>
@@ -223,6 +225,13 @@
       <button type="button" class="settings-row settings-row-radio" role="radio" aria-checked="true" data-layout="masonry"><span class="settings-radio" aria-hidden="true"></span><span class="settings-copy"><strong>Masonry</strong><small>Balance column heights</small></span></button>
       <button type="button" class="settings-row settings-row-radio" role="radio" aria-checked="false" data-layout="waterfall"><span class="settings-radio" aria-hidden="true"></span><span class="settings-copy"><strong>Waterfall</strong><small>Fill columns in order</small></span></button>
       <button type="button" class="settings-row settings-row-radio" role="radio" aria-checked="false" data-layout="justified"><span class="settings-radio" aria-hidden="true"></span><span class="settings-copy"><strong>Justified</strong><small>Fit items into rows</small></span></button>
+     </div>
+     <h3 class="settings-section-label">Items</h3>
+     <div class="settings-card">
+      <label class="settings-row settings-row-switch">
+       <span class="settings-copy"><strong>Show file names</strong><small>Show each item's name under its thumbnail.</small></span>
+       <input type="checkbox" class="settings-switch" id="settings-file-names">
+      </label>
      </div>
      <p class="settings-note">Thumbnail size lives on the toolbar slider. Your choice is remembered per library.</p>
     </section>

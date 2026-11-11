@@ -376,6 +376,7 @@ app.whenReady().then(async () => {
         if(!/^[0-7]$/.test(index))return new Response('',{status:400});
         return await bookmarks.socialImage(id,Number(index),request.signal);
       }
+      if(u.hostname==='web-image')return await bookmarks.webImage(id,request.signal);
       if(u.hostname==='reader-image'){
         const index=u.searchParams.get('block')||'';
         if(index!=='featured'&&!/^\d{1,4}$/.test(index))return new Response('',{status:400});
@@ -616,6 +617,7 @@ app.whenReady().then(async () => {
     const limit=Math.max(1,Math.min(500,Math.floor(Number(data.limit)||120)));
     const result=library.page({offset,limit,view:String(data.view||'all'),folder:String(data.folder||'').slice(0,120),
       tag:String(data.tag||'').slice(0,500),sort:String(data.sort||'new'),query:String(data.query||'').toLowerCase().slice(0,500),
+      bookmark:['social','recipe'].includes(String(data.bookmark||''))?String(data.bookmark):'',excludeBookmarks:data.excludeBookmarks===true,
       other:data.other===true,knownExtensions:Array.isArray(data.knownExtensions)?data.knownExtensions.filter(value=>typeof value==='string').slice(0,100):[],
       extensions:Array.isArray(data.extensions)?data.extensions.filter(value=>typeof value==='string').slice(0,100):[],
       matches:Array.isArray(data.matches)?data.matches.filter(value=>typeof value==='string').slice(0,3000):[]});

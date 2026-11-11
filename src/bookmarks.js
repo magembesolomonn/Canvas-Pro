@@ -45,7 +45,18 @@ function applyBookmarkInfo(id,info){
  if(view==='canvas')CanvasWorkspace.assetChanged(id);
  for(const node of document.querySelectorAll('.link-visual'))if(node.dataset.id===id)paintBookmarkVisual(node,a,info);
 }
-function paintBookmarkVisual(node,a,info=a.captureMetadata?.linkPreview){const version=(info?.updatedAt||0)+':'+(info?.cover||false)+':'+(info?.icon||false);if(node.dataset.version===version)return;node.dataset.version=version;node.dataset.url=a.url;node.replaceChildren();if(info?.type&&info.type!=='webpage'&&typeof SmartCards!=='undefined'){SmartCards.paint(node,a,info);return;}let domain='Web link';try{domain=new URL(a.url).hostname.replace(/^www\./,'');}catch{}const monogram=el('div','link-monogram',domain[0].toUpperCase());node.append(monogram);if(info?.cover){const image=el('img','link-cover');image.alt=info.title||a.name;image.decoding='async';image.src='asset://link-cover/'+a.id+'?v='+info.updatedAt;image.onerror=()=>image.remove();node.append(image);}const footer=el('div','link-site'),icon=el('span','link-site-icon',domain[0].toUpperCase());if(info?.icon){const image=el('img');image.alt='';image.src='asset://link-icon/'+a.id+'?v='+info.updatedAt;image.onerror=()=>image.remove();icon.replaceChildren(image);}footer.append(icon,el('span','',domain));node.append(footer);node.title=info?.description||a.url;}
+function paintBookmarkVisual(node,a,info=a.captureMetadata?.linkPreview){
+ const version=(info?.updatedAt||0)+':'+(info?.cover||false)+':'+(info?.icon||false);
+ if(node.dataset.version===version)return;
+ node.dataset.version=version;node.dataset.url=a.url;node.replaceChildren();
+ if(info?.type&&typeof SmartCards!=='undefined'){SmartCards.paint(node,a,info);return;}
+ let domain='Web link';try{domain=new URL(a.url).hostname.replace(/^www\./,'');}catch{}
+ node.append(el('div','link-monogram',domain[0].toUpperCase()));
+ if(info?.cover){const image=el('img','link-cover');image.alt=info.title||a.name;image.decoding='async';image.src='asset://link-cover/'+a.id+'?v='+info.updatedAt;image.onerror=()=>image.remove();node.append(image);}
+ const footer=el('div','link-site'),icon=el('span','link-site-icon',domain[0].toUpperCase());
+ if(info?.icon){const image=el('img');image.alt='';image.src='asset://link-icon/'+a.id+'?v='+info.updatedAt;image.onerror=()=>image.remove();icon.replaceChildren(image);}
+ footer.append(icon,el('span','',domain));node.append(footer);node.title=info?.description||a.url;
+}
 function bookmarkVisual(a){const node=el('div','link-visual');node.dataset.id=a.id;paintBookmarkVisual(node,a);bookmarkInfo(a);return node;}
 function mountWebBookmark(a){const token=crypto.randomUUID(),element=el('div','web-bookmark'),toolbar=el('div','web-bookmark-toolbar'),slot=el('div','web-bookmark-slot'),notice=el('p','web-bookmark-notice','Opening website…');let disposed=false,opened=false;
  const command=kind=>api.webCommand(token,kind),back=action('‹',()=>command('back')),forward=action('›',()=>command('forward')),reload=action('↻',()=>command('reload')),address=el('span','web-address',a.url),original=action('Original page',()=>command('original')),save=action('Save a copy',async()=>{save.disabled=true;save.textContent='Saving…';try{await api.webSave(token);notify('Offline page saved to your library.');}finally{if(!disposed){save.disabled=false;save.textContent='Save a copy';}}});

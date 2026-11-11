@@ -30,7 +30,7 @@ class Library {
     recoverImports(this);
   }
   list(ids) { const where=ids?' WHERE assets.id IN ('+ids.map(()=>'?').join(',')+')':'';return this.db.prepare('SELECT assets.*, assets.rowid AS importOrder, aspect_ratios.ratio AS aspectRatio, capture_metadata.json AS captureJSON, asset_analysis.summary AS smartJSON FROM assets LEFT JOIN aspect_ratios ON assets.id=aspect_ratios.id LEFT JOIN capture_metadata ON assets.id=capture_metadata.id LEFT JOIN asset_analysis ON assets.id=asset_analysis.id'+where+' ORDER BY imported DESC, assets.rowid DESC').all(...(ids||[])).map(a => ({ ...a, captureMetadata: a.captureJSON?JSON.parse(a.captureJSON):null, captureJSON:undefined,smart:a.smartJSON?JSON.parse(a.smartJSON):null,smartJSON:undefined, tags: JSON.parse(a.tags), folders: JSON.parse(a.folders) })); }
-  page({view='all',folder='',tag='',sort='new',query='',matches=[],extensions=[],other=false,knownExtensions=[],offset=0,limit=120}={}){
+  page({view='all',folder='',tag='',sort='new',query='',matches=[],extensions=[],bookmark='',excludeBookmarks=false,other=false,knownExtensions=[],offset=0,limit=120}={}){
     const where=['a.trash=?'],params=[view==='trash'?1:0];
     const clause=(sql,...values)=>{where.push(sql);params.push(...values);};
     if(view==='favorites')clause('a.favorite=1');
@@ -38,6 +38,8 @@ class Library {
     if(view==='folder')clause('EXISTS(SELECT 1 FROM json_each(a.folders) WHERE value=?)',folder);
     if(tag)clause('EXISTS(SELECT 1 FROM json_each(a.tags) WHERE value=?)',tag);
     if(extensions.length)clause('a.ext IN (SELECT value FROM json_each(?))',JSON.stringify(extensions));
+    if(bookmark==='social'||bookmark==='recipe')clause("EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND json_extract(m.json,'$.linkPreview.type')=?)",bookmark);
+    if(excludeBookmarks)clause("NOT EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND json_extract(m.json,'$.linkPreview.type') IN ('social','recipe'))");
     if(other)clause('a.ext NOT IN (SELECT value FROM json_each(?))',JSON.stringify(knownExtensions));
     if(query||matches.length){
       if(!this.searchFunctions){
@@ -63,7 +65,8 @@ class Library {
     const extensions=this.db.prepare('SELECT ext, COUNT(*) AS count FROM assets WHERE trash=0 GROUP BY ext').all();
     const tags=this.db.prepare('SELECT DISTINCT value FROM assets,json_each(assets.tags) WHERE trash=0 ORDER BY value').all().map(row=>row.value);
     const members=this.db.prepare('SELECT value,COUNT(*) AS count FROM assets,json_each(assets.folders) WHERE trash=0 GROUP BY value').all().map(row=>[row.value,row.count]);
-    return {counts,extensions,tags,members};
+    const linkTypes=this.db.prepare("SELECT json_extract(m.json,'$.linkPreview.type') AS type,COUNT(*) AS count FROM capture_metadata m JOIN assets a ON a.id=m.id WHERE a.trash=0 AND json_extract(m.json,'$.linkPreview.type') IN ('social','recipe') GROUP BY type").all();
+    return {counts,extensions,tags,members,linkTypes};
   }
   folders() { return this.db.prepare('SELECT name FROM folders ORDER BY name').all().map(f => f.name); }
   folderRecords(){return this.db.prepare('SELECT id,name FROM folders ORDER BY name').all();}

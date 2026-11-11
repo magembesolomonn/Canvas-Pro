@@ -57,6 +57,16 @@ The note page sits on the window's own background in both light and dark appeara
 
 There is no chat assistant and no star rating. The star on a card marks a Favourite; finding similar images, colour palettes, automatic tags and text search come from the on-device model in Settings → Experimental.
 
+## Links, cards and recipes
+
+A saved link is classified by the site it comes from. Posts from X, Instagram, Reddit, Facebook, Pinterest, TikTok, Threads and Bluesky are **Social**, and recipes are **Recipes**: both live in their own section of the sidebar's media list, next to Images, Video, Audio and Documents. Everything else stays under **Web links**, so a board of saved pages is not mixed with a timeline of posts. The Library still shows every item, and the View menu can filter by Social posts or Recipes.
+
+A website card looks like the page it came from: the feature image fills the card, and underneath sit the title, the site's favicon and its address. When the page's picture could not be saved with the link, the app fetches it again on demand, and if that fails the favicon — or the site's first letter — stands in. The card carries the whole story, so its filename is not repeated underneath it.
+
+A recipe opens in a cooking view rather than a reader. The ingredients are a checklist that remembers what you already have, the method stands beside them instead of a screen below, and **Copy shopping list** puts the ingredients on the clipboard.
+
+Settings → Galleries has **Show file names**. Turn it off to see thumbnails only; turn it on to see each item's name under it. Your choice is remembered.
+
 ## Validation
 
 `npm run check` checks JavaScript syntax. `npm test` verifies byte-preserving import, exact duplicate detection, cross-collection duplicate membership, metadata persistence, rating validation and reversible Trash.
@@ -216,7 +226,7 @@ Validation details: [workflow audit](audits/2026-11-03-workflows.md). Quit/reope
 
 ## 0.10.0 — Open canvases
 
-Create a named board with **Canvas +** in the sidebar. Select library files and choose **Add to Canvas** from File Details or the right-click menu. Drag files onto a sidebar board, or open a board's Library tray to drag files, bookmarks and collections into place. Normal file dragging targets boards; Option-drag retains Finder export.
+Create a named board with **Canvas +** in the sidebar. Select library files and choose **Add to Canvas** from File Details or the right-click menu. Drag from a board's Library tray, or Option-drag a library card, to place files, bookmarks and collections on a board. Dragging a card out of the window hands over the original file.
 
 Boards support moving and resizing multiple items, editable text, rectangles, ellipses, colours, undo/redo and duplication. Corners preserve proportions; hold Shift for free resizing. Use Space-drag or the Hand tool to pan, pinch to zoom and Command–0 to fit. V/H/T/R/O select the tools; Command–D duplicates. Delete removes board items without trashing the underlying files. Collections remain linked when renamed, and boards reference existing originals rather than copying them.
 

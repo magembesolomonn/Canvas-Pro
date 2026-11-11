@@ -12,6 +12,18 @@ function revealFromTrigger(surface, trigger) {
  ], { duration: 125, easing: 'cubic-bezier(.23,1,.32,1)' });
 }
 
+function showFileNamesEnabled(){
+ return localStorage.getItem('show-file-names')!=='false';
+}
+function applyFileNamesPreference(){
+ document.body.classList.toggle('hide-file-names',!showFileNamesEnabled());
+}
+function setShowFileNames(show){
+ localStorage.setItem('show-file-names',String(!!show));
+ applyFileNamesPreference();
+ layoutDirty=true;
+ renderWindow();
+}
 function setGalleryLayout(mode){
  if(!['masonry','waterfall','justified'].includes(mode))return;
  const gallery=$('#gallery'),anchor=layout?AssetLayout.anchorAt(layout,gallery.scrollTop,gallery.clientHeight):null;
@@ -27,6 +39,7 @@ function applyAppearance(state){
 }
 function initViewPreferences(){
  const saved=localStorage.getItem('gallery-layout');galleryLayout=['masonry','waterfall','justified'].includes(saved)?saved:'masonry';document.body.dataset.layout=galleryLayout;
+ applyFileNamesPreference();
  const savedSort=localStorage.getItem('sort-order');if(['new','old','name','size'].includes(savedSort))$('#sort').value=savedSort;
  const menu=$('#view-menu'),button=$('#view-menu-button'),options=[...menu.querySelectorAll('[data-view-layout]')];
  for(const option of options){option.setAttribute('aria-checked',String(option.dataset.viewLayout===galleryLayout));option.onclick=()=>{setGalleryLayout(option.dataset.viewLayout);menu.hidePopover();button.focus({preventScroll:true});};}
