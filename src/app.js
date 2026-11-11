@@ -378,7 +378,16 @@ function mountRasterPreview(a,unsupported){
  const cached=mounted.get(a.id)?.querySelector('.card-surface img');
  image.src=cached?.naturalWidth?cached.currentSrc:'asset://thumb/'+a.id+'?v=2&cached';
  element.append(image);
- function paint(){image.style.transform=`translate(${offset.x}px,${offset.y}px) scale(${zoom})`;}
+ // Scrubbing a picture is only useful if it can be reached: the controls
+ // zoom in and out, and the picture can then be pulled around by hand.
+ const controls=el('div','raster-preview-controls');
+ const zoomOut=el('button','raster-preview-button','\u2212'),zoomLabel=el('span','raster-preview-zoom','100%'),zoomIn=el('button','raster-preview-button','+');
+ zoomOut.setAttribute('aria-label','Zoom out');zoomIn.setAttribute('aria-label','Zoom in');
+ zoomOut.onclick=event=>{event.stopPropagation();setZoom(zoom/1.4);};
+ zoomIn.onclick=event=>{event.stopPropagation();setZoom(zoom*1.4);};
+ controls.append(zoomOut,zoomLabel,zoomIn);
+ element.append(controls);
+ function paint(){image.style.transform=`translate(${offset.x}px,${offset.y}px) scale(${zoom})`;zoomLabel.textContent=Math.round(zoom*100)+'%';zoomOut.disabled=zoom<=1.01;zoomIn.disabled=zoom>=7.99;}
  function load(){
   if(disposed)return;
   const rect=element.getBoundingClientRect(),wanted=Math.max(rect.width,rect.height)*Math.min(devicePixelRatio||1,2)*zoom;

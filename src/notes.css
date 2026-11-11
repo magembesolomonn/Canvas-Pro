@@ -234,7 +234,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 16px 12px 20px;
+  padding: 18px 16px 10px 20px;
 }
 .note-dialog-heading h2 {
   margin: 0;
@@ -262,7 +262,9 @@
   height: 11px;
 }
 .note-dialog-body {
-  padding: 0 20px;
+  /* The label sits clear of the title, and the field is not crowded against
+     the divider below it. */
+  padding: 10px 20px 0;
   overflow: auto;
 }
 .note-dialog-label {

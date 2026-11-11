@@ -68,7 +68,7 @@ let server,lib;
  await poll(()=>run("$('.raster-preview img')?.naturalWidth>0"));
  const first=await run("$('.raster-preview img').naturalWidth");
  assert.ok(first<4600);
- assert.equal(await run("!!$('.raster-preview-controls')"),false);
+ assert.equal(await run("!!$('.raster-preview-controls')"),true);assert.equal(await run("document.querySelectorAll('.raster-preview-controls button').length"),2);await run("$('.raster-preview-controls button:last-child').click()");await wait(120);assert.ok(await run("$('.raster-preview-zoom').textContent")!=='100%');await run("$('.raster-preview-controls button:first-child').click()");await wait(120);assert.equal(await run("$('.raster-preview-zoom').textContent"),'100%');
  for(let i=0;i<4;i++){
   win.webContents.sendInputEvent({type:'keyDown',keyCode:'=',modifiers:['meta']});
   win.webContents.sendInputEvent({type:'keyUp',keyCode:'=',modifiers:['meta']});

@@ -230,6 +230,8 @@ Create a named board with **Canvas +** in the sidebar. Select library files and 
 
 A board carries a flick: pan it and let go, and the board keeps travelling at the speed your hand left it, then settles where the gesture was heading. Catch it in flight and it stops where it is, with no jump. A slow drag stays a slow drag. Pressing an item in the library answers at once, and the preview arrives by growing slightly into place. With **Reduce motion** in macOS settings the glide is off, the preview fades, and the press settles without a bounce.
 
+A large picture opens with zoom controls in the corner: use them, or Command–plus and Command–minus, to look closer, then pull the picture around by hand to scrub to the part you want. The library no longer pops a backup reminder over your work; the reminder lives in Settings → Media → Library backup.
+
 Boards support moving and resizing multiple items, editable text, rectangles, ellipses, colours, undo/redo and duplication. Corners preserve proportions; hold Shift for free resizing. Use Space-drag or the Hand tool to pan, pinch to zoom and Command–0 to fit. V/H/T/R/O select the tools; Command–D duplicates. Delete removes board items without trashing the underlying files. Collections remain linked when renamed, and boards reference existing originals rather than copying them.
 
 Layouts save automatically, including when closing or quitting immediately after an edit. Failed saves retain edits and expose Retry. Media plays on request, with one active player; detailed offscreen elements are removed. A lightweight overview replaces distant cards when zoomed out. The workspace has no fixed page boundary, while practical capacity still depends on the Mac and media.

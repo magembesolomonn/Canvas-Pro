@@ -457,17 +457,9 @@ kbd {
   user-select: none;
   contain: layout style;
 }
-/* Pressing an item answers on the way down: the card settles under the
-   pointer at once, and springs back when the press ends. */
-@media (prefers-reduced-motion: no-preference) {
-  .card {
-    transition: scale 160ms var(--ease-out);
-  }
-  .card:active {
-    scale: 0.988;
-    transition-duration: 0s;
-  }
-}
+/* Pressing an item changes nothing about how it looks. The card stays
+   exactly as it was: no bounce under the pointer, and no hover light-up
+   while the button is down. Only the selection says that it was chosen. */
 .card-surface {
   height: var(--surface-height, 150px);
   background: var(--surface-raised);
@@ -6231,6 +6223,70 @@ body.light-mode .social-card-icon[alt="X"] {
   min-height: 0;
   object-fit: contain;
   transform-origin: center;
+}
+/* The zoom controls: a quiet group in the corner of the picture. They are how
+   a large photograph is scrubbed by hand. */
+.raster-preview-controls {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #ffffff1f;
+  border-radius: 8px;
+  background: #1b1b1de0;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 18px #0000004d;
+  opacity: 0.55;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.raster-preview:hover .raster-preview-controls,
+.raster-preview-controls:focus-within {
+  opacity: 1;
+}
+.raster-preview-button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #e6e6e8;
+  font-size: 14px;
+  line-height: 1;
+}
+.raster-preview-button:hover:not(:disabled) {
+  background: #ffffff1f;
+}
+.raster-preview-button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.raster-preview-zoom {
+  min-width: 42px;
+  padding: 0 4px;
+  color: #c9c9cd;
+  font-size: 11px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+body.light-mode .raster-preview-controls {
+  border-color: #0000001f;
+  background: #ffffffe0;
+  box-shadow: 0 4px 18px #00000026;
+}
+body.light-mode .raster-preview-button {
+  color: #1c1c1e;
+}
+body.light-mode .raster-preview-button:hover:not(:disabled) {
+  background: #00000012;
+}
+body.light-mode .raster-preview-zoom {
+  color: #6b6b70;
 }
 #ai-activity {
   display: flex;

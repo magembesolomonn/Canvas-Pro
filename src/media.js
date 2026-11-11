@@ -55,7 +55,7 @@ function createPlayer(a,{compact=false,muted=false,scrubHover=true}={}){
     root.style.width=Math.max(width,Math.min(rect.width,260))+'px';
     root.style.height=(width/ratio)+'px';
   }
-  if(kind(a)==='video'){stage.append(media);media.poster='asset://thumb/'+a.id;if(!compact)media.addEventListener('click',()=>media.paused?play():media.pause());if(compact&&scrubHover)stage.addEventListener('pointermove',event=>{if(event.pointerType==='touch')return;const bounds=stage.getBoundingClientRect();if(bounds.width)requestSeek(Math.max(0,Math.min(1,(event.clientX-bounds.left)/bounds.width))*media.duration);});}
+  if(kind(a)==='video'){stage.append(media);media.poster='asset://thumb/'+a.id;if(!compact)media.addEventListener('click',()=>media.paused?play():media.pause());if(compact&&scrubHover)stage.addEventListener('pointermove',event=>{if(event.pointerType==='touch')return;if(window.CanvasWorkspace?.gesture)return;const bounds=stage.getBoundingClientRect();if(bounds.width)requestSeek(Math.max(0,Math.min(1,(event.clientX-bounds.left)/bounds.width))*media.duration);});}
   else {
     stage.classList.add('audio-stage');stage.append(media);
     const art=document.createElement('div');art.className='cover-art';art.append(glyph('audio'));stage.append(art);if(!compact){const title=document.createElement('h2');title.textContent=a.name.replace(/\.[^.]+$/,'');stage.append(title);const caption=document.createElement('p');caption.className='audio-caption';caption.textContent=a.ext.toUpperCase()+' audio';stage.append(caption);}
