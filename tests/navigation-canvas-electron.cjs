@@ -8,7 +8,9 @@ require('../electron/main.cjs');
 
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function poll(check){
- for(let i=0;i<250;i++){const value=await check();if(value)return value;await wait(20);}
+ // The same patience as the canvas suite: a busy machine needs more than
+ // five seconds to open the editor.
+ for(let i=0;i<600;i++){const value=await check();if(value)return value;await wait(20);}
  throw Error('Navigation test timed out');
 }
 (async()=>{

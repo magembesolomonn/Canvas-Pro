@@ -81,7 +81,9 @@ function key(keyCode,modifiers=[]) {
   await run("$('#notes-tree > summary').click()");
   await pause(150);
   assert.equal(await run("$('#notes-tree').open"),true);
-  await until(()=>run("!!$('.note-block-paragraph textarea')"));
+  // The editor is inert until the note has finished opening; focusing an
+  // inert field does nothing, so wait for it to be ready.
+  await until(()=>run("!$('#notes-editor').inert && !!$('.note-block-paragraph textarea')"));
   await run("$('.note-block-paragraph textarea').focus()");
   await until(()=>run("getComputedStyle($('.note-format-toolbar')).opacity==='1'"));
   assert.equal(await run("$('.note-format-toolbar select').value"),'paragraph');

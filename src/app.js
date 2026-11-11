@@ -338,47 +338,17 @@ function renderInspector() {
   if(k==='image'){box.append(SmartCards.paletteSection(a));}
   else if(k==='video'||k==='audio'){const mediaDetails=el('p','hint','Reading media information…');box.append(mediaDetails);api.mediaInfo(a.id,true).then(info=>{if(selected!==a.id||!mediaDetails.isConnected)return;mediaDetails.textContent=[info.duration?'Duration '+timecode(info.duration):'',info.width&&info.height?info.width+' × '+info.height:'',info.codec||'',info.artist||'',info.album||''].filter(Boolean).join(' · ')||'Media information unavailable';}).catch(()=>mediaDetails.textContent='Media information unavailable');}
   else if(k==='link'&&a.captureMetadata){const metadata=a.captureMetadata;const source=section('Website');const details=el('dl','properties');for(const [label,value]of [['Original URL',metadata.pageUrl],['Website title',metadata.pageTitle],['Domain',metadata.pageUrl?new URL(metadata.pageUrl).hostname:''],['Capture date',metadata.capturedAt?new Date(metadata.capturedAt).toLocaleString():'']])if(value)details.append(el('dt','',label),el('dd','',String(value)));source.append(details);box.append(source);}
-  // Tags, with the local model offering words for this picture. The model
-  // runs on this Mac; nothing is sent anywhere.
+  // Tags, with the local model offering words for this picture.
   const tags=el('section');
   const tagHead=el('div','inspector-section-head');
   tagHead.append(el('h3','','Tags'));
-  const suggest=el('button','ai-suggest');
-  suggest.type='button';
-  suggest.setAttribute('aria-label','Suggest tags with the local model');
-  suggest.title='Suggest tags with the local model';
-  suggest.append(glyph('sparkles'));
-  const suggestions=el('div','ai-suggestions');
-  suggest.onclick=()=>safe(async()=>{
-   if(suggest.disabled)return;
-   suggest.disabled=true;
-   suggestions.replaceChildren(el('p','hint','Asking the local model…'));
-   try{
-    await SmartSearch.suggestTags(a.id,(list,message)=>{
-     suggestions.replaceChildren();
-     if(message){suggestions.append(el('p','hint',message));return;}
-     if(!list.length){suggestions.append(el('p','hint','No suggestions for this file.'));return;}
-     for(const tag of list){
-      const chip=el('button','chip chip-suggestion',tag);
-      chip.type='button';
-      chip.title='Add “'+tag+'”';
-      // A suggestion is added by clicking it. Nothing to type, nothing to
-      // confirm with a second key press.
-      chip.onclick=()=>safe(()=>update({tags:[...new Set([...a.tags,tag])]}));
-      suggestions.append(chip);
-     }
-     suggestions.append(el('p','hint','Click a suggestion to add it as a tag.'));
-    });
-   }finally{
-    suggest.disabled=false;
-   }
-  });
-  tagHead.append(suggest);
+  const suggestions=TagSuggestions.mount(a,{add:tag=>update({tags:[...new Set([...a.tags,tag])]})});
+  tagHead.append(suggestions.button);
   tags.append(tagHead);
   const chips=el('div','chips');for(const t of a.tags){const chip=el('span','chip',t);chip.append(action('×',()=>update({tags:a.tags.filter(x=>x!==t)})));chips.append(chip);}tags.append(chips);
   const add=field('','Add tags, separated by commas',v=>update({tags:[...a.tags,...v.split(',')]}));add.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add.blur();}};tags.append(add);
-  tags.append(suggestions);
-  box.append(tags);
+  tags.append(suggestions.results);
+    box.append(tags);
   const coll=section('Collections'); const assigned=el('div','chips');for(const f of a.folders){const chip=el('span','chip',f);chip.append(action('×',()=>update({folders:a.folders.filter(x=>x!==f)})));assigned.append(chip);}coll.append(assigned);const choose=el('select');choose.setAttribute('aria-label','Add to collection');const first=el('option','','Add to collection…');first.value='';choose.append(first);for(const f of folders.filter(f=>!a.folders.includes(f))){const o=el('option','',f);o.value=f;choose.append(o);}choose.onchange=()=>safe(()=>update({folders:[...a.folders,choose.value]}));coll.append(choose);box.append(coll);
   if(k==='image'){
    const props=section('Image properties'),dl=el('dl','properties'),sizeLabel=el('dt','','Dimensions'),sizeValue=el('dd','','Reading…');

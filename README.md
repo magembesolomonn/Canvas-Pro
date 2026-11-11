@@ -38,7 +38,7 @@ The library is in Electron's application-data directory (normally `~/Library/App
 
 ## Finding files
 
-- **Search:** the search field matches words in names, text and metadata. When the on-device model is installed, the same search also returns the pictures that show what you asked for — everything runs on this Mac.
+- **Search:** the search field reads a sentence, not a list of keywords. The words that carry the meaning are kept, so "dark moody screenshots from the app" looks for dark, moody, screenshots and app, and a file matches if it answers to any of them — its name, the name it had before it was renamed, the text in it, what the model saw in it, and how bright and colourful it is. When the on-device model is installed, the same search also returns the pictures that show what you asked for. Everything runs on this Mac.
 - **Find similar:** File Details → Find similar opens the library filtered to the files that look like the one you picked, closest first.
 - **Colours:** clicking a colour in File Details → Colours opens the library filtered to every file that uses that colour, closest first. It is a filter, not a report.
 - **Suggested tags:** the sparkles button next to Tags asks the on-device model for words for that picture. Pick the ones you want and they type themselves into the tag field; press Return to add them. Nothing leaves the Mac.

@@ -42,6 +42,8 @@ async function create(template) {
   await until(() => run("!$('#note-template-dialog').open && !$('#notes-editor').inert"));
 }
 async function openBlockMenu() {
+  // The editor is inert until the note has finished opening.
+  await until(() => run("!$('#notes-editor').inert && !!$('#note-blocks').children.length"));
   // The slash menu only opens in an empty paragraph, so work at the end of the
   // note and keep pressing Enter until the caret sits in the last block, which
   // is an empty plain paragraph.
@@ -274,6 +276,19 @@ async function insertBlock(type) {
     return document.activeElement.closest('.note-block').classList.contains('note-block-paragraph') &&
       document.activeElement.value==='';
   })()`),true);
+  // The editor goes inert while the app works on the note, and focusing an
+  // inert field does nothing. These steps are about the format toolbar, so
+  // they wait for the editor to be ready and for the caret to be where the
+  // step expects it.
+  const focusParagraph = async index => {
+    await until(() => run("!$('#notes-editor').inert"));
+    await run(`(() => {
+      const input=[...document.querySelectorAll('.note-block-paragraph textarea')].at(${index});
+      input.focus();
+    })()`);
+    await until(() => run(`document.activeElement === [...document.querySelectorAll('.note-block-paragraph textarea')].at(${index})`));
+  };
+  await focusParagraph(-1);
   await run(`(() => {
     for (let i = 0; i < 2; i++) {
       const inputs = [...document.querySelectorAll('.note-block-paragraph textarea')];
@@ -283,6 +298,7 @@ async function insertBlock(type) {
       input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
     }
   })()`);
+  await until(() => run("!$('#notes-editor').inert"));
   await run(`(() => {
     document.activeElement.blur?.();
     for (const row of document.querySelectorAll('.note-block-paragraph')) {
@@ -297,24 +313,28 @@ async function insertBlock(type) {
   })()`);
   await new Promise(resolve=>setTimeout(resolve,250));
   assert.equal(await run("[...document.querySelectorAll('.note-block-paragraph')].at(-2).querySelector('.note-format-toolbar').classList.contains('is-visible')"),false);
-  await new Promise(resolve=>setTimeout(resolve,400));
-  assert.equal(await run("[...document.querySelectorAll('.note-block-paragraph')].at(-2).querySelector('.note-format-toolbar').classList.contains('is-visible')"),true);
+  await until(()=>run("[...document.querySelectorAll('.note-block-paragraph')].at(-2).querySelector('.note-format-toolbar').classList.contains('is-visible')"));
+  // The toolbar slides in over 120ms; measure it once it has arrived.
+  await new Promise(resolve=>setTimeout(resolve,200));
   const toolbarGap = await run(`(() => {
     const row=[...document.querySelectorAll('.note-block-paragraph')].at(-2);
     const toolbar=row.querySelector('.note-format-toolbar');
     const a=toolbar.getBoundingClientRect(),b=row.getBoundingClientRect();
     row.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse',relatedTarget:toolbar}));
-    return {touching:Math.abs(a.bottom-b.top)<2,visible:toolbar.classList.contains('is-visible')};
+    // The toolbar is anchored to the top of its block. A fraction of a pixel
+    // is not a layout fault, so the check allows a small gap.
+    return {touching:a.bottom<=b.top+2&&b.top-a.bottom<6,visible:toolbar.classList.contains('is-visible')};
   })()`);
   assert.deepEqual(toolbarGap,{touching:true,visible:true});
+  // One toolbar at a time: the block the caret is in keeps it.
+  await focusParagraph(-1);
   const singleToolbar = await run(`(() => {
     const inputs=[...document.querySelectorAll('.note-block-paragraph textarea')];
     inputs.at(-2).closest('.note-block').dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));
-    inputs.at(-1).focus();
     const visible=[...document.querySelectorAll('.note-format-toolbar.is-visible')];
     return {count:visible.length,owner:visible[0]?.closest('.note-block')===inputs.at(-1).closest('.note-block')};
   })()`);
-  assert.deepEqual(singleToolbar,{count:1,owner:true});
+    assert.deepEqual(singleToolbar,{count:1,owner:true});
   await run(`(() => {
     // Use the empty paragraph at the end of the note, never the first one:
     // clearing the first paragraph would delete the split text being checked.

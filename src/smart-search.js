@@ -265,10 +265,6 @@ const SmartSearch=(()=>{
   if(next&&next.ready){enabled=true;localStorage.setItem('local-ai-enabled','true');start();updateActivityLabel();}
   return !!(next&&next.ready);
  }
- // Words the model can recognise in a picture. Together with the tags you
- // already use, they are the vocabulary a suggestion is drawn from.
- const TAG_VOCABULARY=[
-  'landscape','portrait','photo','screenshot','document','receipt','invoice','chart','diagram','illustration','sketch','drawing','logo','product','packaging','food','drink','coffee','dessert','restaurant','street','city','architecture','building','interior','furniture','plant','flower','garden','park','beach','ocean','mountain','forest','desert','sky','sunset','night','snow','winter','autumn','travel','holiday','hotel','airport','train','car','vehicle','bike','boat','road','bridge','people','portrait photo','family','children','wedding','party','concert','music','album cover','movie poster','book cover','book','magazine','newspaper','text','handwriting','form','contract','resume','presentation','slide','meeting','office','desk','computer','laptop','phone','screen','code','settings','file','folder','certificate','award','ticket','map','plan','blueprint','model','3d render','game','sport','football','basketball','swimming','gym','yoga','health','medical','science','education','school','library','museum','theatre','studio','fashion','shoes','jewellery','watch','accessory','animal','dog','cat','bird','horse','cow','sheep','wildlife','insect','fish','farm','market','shop','money','budget','report','finance','sticker','emoji','pattern','texture','background','abstract','minimal','dark','bright','colorful','monochrome','sports','baby','wedding','picnic','camping','hiking','fishing','hair','makeup','cosmetic'];
  function libraryTags(){
   const set=new Set();
   for(const asset of (typeof assets!=='undefined'?assets:[]))for(const tag of (asset.tags||[]))if(tag&&tag.length<=40)set.add(tag);
