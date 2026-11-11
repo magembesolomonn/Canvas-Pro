@@ -1,6 +1,6 @@
 {
   "repository": "onnx-community/Florence-2-base-ft",
-  "revision": "main",
+  "revision": "e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f",
   "files": [
     {
       "path": "config.json",

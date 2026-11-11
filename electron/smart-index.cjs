@@ -34,6 +34,12 @@ function textChunks(text){
 }
 const textTool=path.join(__dirname,'../bin/text-tool');
 let textDimensions=0;
+function normalise(values){
+  let length=0;
+  for(const v of values)length+=v*v;
+  length=Math.sqrt(length)||1;
+  return values.map(v=>v/length);
+}
 function embedText(text){
   const value=String(text||'').trim();
   if(!value)return null;
@@ -43,12 +49,23 @@ function embedText(text){
     if(!Array.isArray(values)||!values.length)return null;
     textDimensions=values.length;
     // The comparison is a dot product, so the vector is normalised once.
-    let length=0;
-    for(const v of values)length+=v*v;
-    length=Math.sqrt(length)||1;
-    return values.map(v=>v/length);
+    return normalise(values);
   }catch(error){
     return null;
+  }
+}
+// Several texts in one call: a document is a dozen pieces, and a dozen
+// processes for it is a dozen times the work.
+function embedTexts(texts){
+  const lines=texts.map(text=>String(text||'').replace(/\s+/g,' ').trim()).filter(Boolean);
+  if(!lines.length)return [];
+  try{
+    const stdout=execFileSync(textTool,['embed-many'],{input:lines.join('\n'),encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
+    const values=JSON.parse(stdout);
+    if(!Array.isArray(values))return [];
+    return values.filter(Array.isArray).map(normalise);
+  }catch(error){
+    return [];
   }
 }
 const MODEL='clip-vit-base-patch32-q8-v1';
@@ -129,7 +146,7 @@ class SmartIndex{
      let textVector=null;
      if(!error&&extracted){
       const chunks=textChunks(extracted);
-      const vectors=chunks.map(chunk=>embedText(chunk)).filter(Boolean);
+      const vectors=embedTexts(chunks);
       if(vectors.length){
        textVector=vectors[0];
        this.putChunks(id,vectors);
@@ -238,7 +255,9 @@ class SmartIndex{
   const value=String(text||'').trim().slice(0,400);
   if(!value)return null;
   const summary={...(this.info(id)||{}),caption:value};
-  this.put(id,{summary:{caption:value},version:1});
+  // The version belongs to the index: a caption must not mark a file as
+  // analysed, or the palette and the recognised text would never be read.
+  this.put(id,{summary:{caption:value}});
   return summary;
  }
  deferVisual(id,now=Date.now()){

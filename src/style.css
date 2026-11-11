@@ -320,6 +320,19 @@ h1 {
   align-items: center;
   gap: 9px;
 }
+/* The top bar is the title bar. Dragging it moves the window, the way a
+   native one does; the controls in it do not drag. */
+.library-header {
+  -webkit-app-region: drag;
+}
+.library-header button,
+.library-header input,
+.library-header select,
+.library-header textarea,
+.library-header .toolbar-actions,
+.library-header kbd {
+  -webkit-app-region: no-drag;
+}
 .toolbar button {
   font-size: 11px;
 }
@@ -2262,17 +2275,19 @@ body.light-mode .settings-search input:focus-visible {
   color: var(--muted);
 }
 /* The models the app can use: what each one is for, and its own button. */
+.settings-models-section {
+  margin-bottom: 20px;
+}
 .settings-models {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 0 0 18px;
+  gap: 10px;
 }
 .settings-model {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 11px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel) 82%, #ffffff 5%);
@@ -2292,11 +2307,15 @@ body.light-mode .settings-search input:focus-visible {
   height: 14px;
 }
 .settings-model .settings-copy {
-  gap: 3px;
+  gap: 4px;
+}
+.settings-model .settings-copy strong {
+  font-size: 13px;
 }
 .settings-model-size {
   color: var(--muted);
   font-size: 10px;
+  margin-top: 1px;
 }
 .settings-model .settings-button {
   flex: none;

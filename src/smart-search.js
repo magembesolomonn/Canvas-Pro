@@ -223,6 +223,7 @@ const SmartSearch=(()=>{
  const modelRows=new Map();
  const modelsBox=el('div','settings-models');
  const modelsLabel=el('div','settings-section-label','Models');
+ const modelsSection=el('div','settings-models-section');
  for(const model of MODELS){
   const entry=el('div','settings-model');
   const icon=el('span','settings-model-icon');
@@ -247,7 +248,11 @@ const SmartSearch=(()=>{
   button.textContent=state.ready?'Installed':state.state==='failed'?'Retry download':'Download';
  };
  Promise.all(MODELS.map(model=>api.modelState(model.name))).then(states=>states.forEach(paintModel));
- box.append(modelsLabel,modelsBox,statusRow,progress,modelStatus,actions,idleLabel);$('#settings-local-intelligence').append(box);
+ // The models are their own section, the way the rest of Settings is laid
+ // out: a heading above, then the rows.
+ modelsSection.append(modelsLabel,modelsBox);
+ $('#settings-local-intelligence').before(modelsSection);
+ box.append(statusRow,progress,modelStatus,actions,idleLabel);$('#settings-local-intelligence').append(box);
  api.onSmartWork(wakeIndex);
  api.onModelProgress(model=>{paintModel(model);updateStatus(model.state==='downloading'?('Downloading '+(model.model||model.name)+' · '+Math.round(model.bytes/Math.max(1,model.total)*100)+'%'):model.error||status);});
  api.onSmartChanged(({id,smart,name})=>{const a=assetById.get(id);if(!a)return;a.smart=smart;if(name&&name!==a.name){a.name=name;const card=mounted.get(id);const label=card?.querySelector('.card-name');if(label)label.textContent=name;card?.setAttribute('aria-label',name);}a.searchText=SmartCards.enrichSearch(a);if(SmartCards.isNote(a)){const card=mounted.get(id),surface=card?.querySelector('.card-surface');if(surface&&!surface.querySelector('.smart-note-card')){surface.querySelector('img,.file-placeholder')?.remove();surface.prepend(SmartCards.fileVisual(a));layoutDirty=true;scheduleGallery();}}if(selected===id&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]'))scheduleInspector();});

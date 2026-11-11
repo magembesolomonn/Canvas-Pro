@@ -17,7 +17,7 @@ import NaturalLanguage
  static func main() {
     let arguments = CommandLine.arguments
     guard arguments.count >= 2 else {
-        writeError("Usage: text-tool embed <text> | text-tool dimension")
+        writeError("Usage: text-tool embed <text> | text-tool embed-many | text-tool dimension")
         exit(2)
     }
     switch arguments[1] {
@@ -27,6 +27,21 @@ import NaturalLanguage
             exit(1)
         }
         print(embedding.dimension)
+    case "embed-many":
+        // Several texts at once, one per line, so a whole document is
+        // understood in a single call.
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        let input = String(data: data, encoding: .utf8) ?? ""
+        guard let embedding = NLEmbedding.sentenceEmbedding(for: .english) else {
+            writeError("This Mac has no English sentence embedding.")
+            exit(1)
+        }
+        var vectors: [[String]] = []
+        for line in input.split(separator: "\n", omittingEmptySubsequences: false) {
+            guard let values = embedding.vector(for: String(line)) else { continue }
+            vectors.append(values.map { String($0) })
+        }
+        print("[" + vectors.map { "[" + $0.joined(separator: ",") + "]" }.joined(separator: ",") + "]")
     case "embed":
         guard arguments.count >= 3 else {
             writeError("Usage: text-tool embed <text>")
@@ -46,7 +61,7 @@ import NaturalLanguage
         }
         print("[" + parts.joined(separator: ",") + "]")
     default:
-        writeError("Usage: text-tool embed <text> | text-tool dimension")
+        writeError("Usage: text-tool embed <text> | text-tool embed-many | text-tool dimension")
         exit(2)
     }
  }
