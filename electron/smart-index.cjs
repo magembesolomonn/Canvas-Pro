@@ -6,6 +6,39 @@ const visualRetryDelays=[1,5,30,60].map(minutes=>minutes*60000);
 const colors={red:[210,55,55],orange:[225,135,40],yellow:[220,205,60],green:[65,150,75],blue:[50,110,200],purple:[135,75,175],pink:[215,125,165],brown:[125,90,55],black:[25,25,25],white:[235,235,235],grey:[135,135,135]};
 function palette(image){if(!image||image.isEmpty())return [];const {width,height}=image.getSize(),scale=Math.min(1,64/Math.max(width,height));const tiny=scale===1?image:image.resize({width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))});const bytes=tiny.toBitmap(),bins=new Map();for(let i=0;i<bytes.length;i+=4){if(bytes[i+3]<128)continue;const b=bytes[i],g=bytes[i+1],r=bytes[i+2],key=(r>>5)*64+(g>>5)*8+(b>>5),bin=bins.get(key)||[0,0,0,0];bin[0]+=r;bin[1]+=g;bin[2]+=b;bin[3]++;bins.set(key,bin);}const chosen=[];for(const bin of [...bins.values()].sort((a,b)=>b[3]-a[3])){const rgb=bin.slice(0,3).map(v=>Math.round(v/bin[3]));if(chosen.some(c=>c.rgb.reduce((n,v,i)=>n+(v-rgb[i])**2,0)<1800))continue;const hex='#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join('');let color='grey',distance=Infinity;for(const [name,value]of Object.entries(colors)){const d=value.reduce((n,v,i)=>n+(v-rgb[i])**2,0);if(d<distance){distance=d;color=name;}}chosen.push({hex,name:color,rgb});if(chosen.length===6)break;}return chosen.map(({hex,name})=>({hex,name}));}
 function terms(value){return String(value).toLowerCase().normalize('NFKC').match(/[\p{L}\p{N}]+/gu)||[];}
+// Names that say nothing about what is inside the file. These are the ones
+// that get a real name once the local analysis has read the picture.
+const MEANINGLESS_NAMES=[
+ /^image\s*\d*\.?$/i,/^img[\s_-]?\d*\.?$/i,/^photo\s*\d*\.?$/i,/^picture\s*\d*\.?$/i,
+ /^pic\s*\d*\.?$/i,/^file\s*\d*\.?$/i,/^untitled(\s*\d*)?$/i,/^unknown(\s*\d*)?$/i,
+ /^download(\s*\d*)?$/i,/^temp(\s*\d*)?$/i,/^tmp[\s_-]?\d*$/i,/^scan[\s_-]?\d*$/i,
+ /^new[\s_-]?file(\s*\d*)?$/i,/^screenshot(\s*\d+)?$/i,/^screen[\s_-]?shot(\s*\d+)?$/i,
+ /^wechat[\s_-]?image.*$/i,/^pxl[\s_-]?\d+$/i,/^dsc[\s_-]?\d+$/i,/^img[\s_-]?\d+$/i,
+ /^screenshot\s+\d{4}-\d{2}-\d{2}.*$/i,/^screen[\s_-]?shot.*$/i,/^\d+$/];
+function meaninglessName(name){
+ const base=String(name||'').replace(/\.[^.]+$/,'').trim();
+ if(!base)return true;
+ return MEANINGLESS_NAMES.some(pattern=>pattern.test(base));
+}
+// The name the file should have: what the text in it says, or what the model
+// sees in it, and only then the kind of file and the day it arrived.
+function proposedName(asset,text,labels){
+ const lines=String(text||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+ for(const line of lines.slice(0,8)){
+  let cleaned=line.replace(/https?:\/\/\S+/g,' ').replace(/[^\p{L}\p{N} ,.'\u2019\-&()/]+/gu,' ').replace(/\s+/g,' ').trim();
+  // A cut-off word at the end of a line is not part of the name.
+  cleaned=cleaned.replace(/\s\S$/,'').trim();
+  const words=cleaned.split(' ').filter(Boolean);
+  if(cleaned.length>=3&&words.length<=10&&cleaned.length<=64)return cleaned;
+ }
+ const day=new Date(asset.imported||Date.now()).toISOString().slice(0,10);
+ if(labels&&labels.length){
+  const names=labels.map(label=>String(label.label||'').trim()).filter(label=>label&&label.length<=40).slice(0,2);
+  if(names.length)return names.join(' \u00b7 ')+' \u00b7 '+day;
+ }
+ const kind={image:'Image',pdf:'Document',video:'Video',audio:'Audio',txt:'Note',md:'Note',csv:'Table'}[asset.ext]||'File';
+ return kind+' \u00b7 '+day;
+}
 function expand(query){const groups=[['iphone','iphones','smartphone','smartphones','cellphone','cellular','phone','phones'],['car','cars','automobile','vehicle','vehicles'],['movie','movies','film','films','cinema'],['series','tv','television','show','shows'],['album','albums','song','songs','track','tracks','music','playlist'],['book','books','reading','novel'],['product','products','shopping'],['recipe','recipes','cooking','food'],['grey','gray']];return [...new Set(terms(query))].slice(0,40).map(term=>groups.find(g=>g.includes(term))||[term]);}
 class SmartIndex{
  constructor({library,thumbnail,nativeImage,onUpdate=()=>{},onWork=()=>{},delay=()=>650,testMode=false}){Object.assign(this,{library,thumbnail,nativeImage,onUpdate,onWork,delay});this.db=library.db;this.closed=false;this.paused=testMode;this.powerPause=null;this.queue=new Set();this.db.exec(`CREATE TABLE IF NOT EXISTS asset_analysis(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,summary TEXT NOT NULL DEFAULT '{}',text TEXT NOT NULL DEFAULT '',vector BLOB,model TEXT,version INTEGER NOT NULL DEFAULT 0);CREATE VIRTUAL TABLE IF NOT EXISTS smart_fts USING fts5(id UNINDEXED,body,tokenize='unicode61');CREATE TRIGGER IF NOT EXISTS smart_delete AFTER DELETE ON assets BEGIN DELETE FROM smart_fts WHERE id=old.id;END;`);this.db.prepare("UPDATE asset_analysis SET summary=json_set(summary,'$.visualRetry',MIN(json_extract(summary,'$.visualRetry'),?), '$.visualAttempts',1) WHERE json_extract(summary,'$.visualRetry') IS NOT NULL AND json_extract(summary,'$.visualAttempts') IS NULL").run(Date.now()+visualRetryDelays[0]);library.onAssetChanged=id=>this.changed(id);this.timer=setTimeout(()=>this.pump(),1500);this.timer.unref();}
@@ -75,6 +108,14 @@ class SmartIndex{
        }
      }
      if(this.closed||signal?.aborted)return;
+     // A file called image.jpeg gets a real name, chosen from what is in it.
+     let renamed='';
+     if(meaninglessName(a.name)){
+      const proposed=proposedName(a,extracted,labels);
+      if(proposed&&proposed!==a.name&&proposed.length<=120){
+       try{this.library.update(id,{name:proposed});renamed=proposed;}catch{}
+      }
+     }
      const old=this.info(id)||{};
      this.put(id,{text:error&&!extracted?undefined:extracted,summary:{
        palette:swatches.length?swatches:old.palette||[],
@@ -82,6 +123,8 @@ class SmartIndex{
        tags:[...(old.tags||[]),...labels.map(label=>label.label),...swatches.map(color=>color.name)],
        state:error?'unavailable':'indexed',error,analyzedAt:Date.now()
      },version:1});
+     // Tell the window about the new name so the card shows it at once.
+     if(renamed)this.onUpdate({id,smart:this.indexText(id),name:renamed});
    }catch(error){
      if(!this.closed&&!signal?.aborted){
        try{this.put(id,{summary:{state:'unavailable',error:error.message},version:1});}catch{}

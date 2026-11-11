@@ -171,7 +171,11 @@
   display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 8px; max-height: min(42vh, 320px); overflow: auto; padding: 4px;
 }
-.note-image-results button { display: grid; gap: 5px; min-width: 0; text-align: left; padding: 5px; }
+.note-image-results button { display: grid; gap: 5px; min-width: 0; text-align: left; padding: 5px; border: 1px solid transparent; border-radius: 8px; }
+/* The ring around the chosen picture is the app's own, not the system's
+   blue accent. */
+.note-image-results button:focus { outline: none; }
+.note-image-results button:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
 .note-image-results img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; background: var(--panel); }
 .note-image-results span { overflow: hidden; text-overflow: ellipsis; }
 .note-inline-image { max-width: 100%; max-height: 65vh; object-fit: contain; border-radius: 6px; }
@@ -218,7 +222,7 @@
   width: min(460px, calc(100vw - 48px));
   max-height: calc(100vh - 80px);
   padding: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-window);
   overflow: hidden;
 }
 .note-dialog-heading {
@@ -273,7 +277,9 @@
   padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: var(--surface-field);
+  /* The colour only: the shorthand would wipe the chevron image and leave
+     it tiled across the whole field. */
+  background-color: var(--surface-field);
   color: var(--text);
   font: 12px var(--app-font);
 }
@@ -290,6 +296,27 @@
   padding: 14px 20px 16px;
   margin-top: 16px;
   border-top: 1px solid var(--line);
+}
+/* The note title inside a sheet: a title, not a page heading. */
+.note-dialog-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+}
+/* Light mode: the sheet is white, its heading and button strips are
+   #F4F4F4, and nothing else. */
+body.light-mode .note-tracker-dialog,
+body.light-mode #note-template-dialog,
+body.light-mode #note-image-dialog {
+  background: var(--bg-primary);
+}
+body.light-mode .note-dialog-heading,
+body.light-mode .note-dialog-actions {
+  background: var(--bg-secondary);
+}
+body.light-mode .note-dialog-actions {
+  border-top-color: #e2e2e4;
 }
 .note-dialog-actions .dialog-error {
   margin-right: auto;
@@ -417,12 +444,30 @@ body.light-mode .note-dialog-search input:focus-visible {
   color: var(--muted);
   font-size: 12px;
 }
+/* The block menu follows Apple's menus: a white sheet, every row a soft grey
+   block with an even gap, and the search field in the same grey. */
+body.light-mode .note-block-menu {
+  padding: 6px;
+  background: var(--bg-primary);
+  border-color: #00000014;
+}
 body.light-mode .note-block-menu-search {
-  background: #00000008;
+  height: 26px;
+  background: var(--bg-secondary);
+  border: 1px solid #00000014;
+}
+body.light-mode .note-block-menu-search:focus {
+  box-shadow: 0 0 0 3px #0000001a;
+}
+body.light-mode .note-block-menu-list {
+  gap: 2px;
+}
+body.light-mode .note-block-menu-list button {
+  background: var(--bg-secondary);
 }
 body.light-mode .note-block-menu-list button:hover,
 body.light-mode .note-block-menu-list button[aria-selected="true"] {
-  background: #0000000a;
+  background: #ebebeb;
 }
 body.light-mode .note-dialog-close {
   background: transparent;

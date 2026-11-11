@@ -8,11 +8,10 @@ const WorkbenchUI=(()=>{
  function reset(){similarIds=null;similarScores=null;color='';}
  // Colour matching uses CIE Lab distance, not raw RGB. The old rule allowed a
  // distance of 85 per channel, so any file with a dark grey matched a dark
- // swatch and the result looked random. Delta E of 14 is roughly the limit of
- // a visible difference between two colours. The palette is quantised to 5 bits per
- // channel, so the same colour can be stored a little apart; 22 keeps those
- // together while still rejecting a genuinely different colour.
- const COLOUR_TOLERANCE=22;
+ // swatch and the result looked random. A swatch should mean the same colour,
+ // not a colour in the same family: Delta E of 8 covers the palette's own
+ // quantisation (5 bits per channel) and nothing more.
+ const COLOUR_TOLERANCE=8;
  function hexToRgb(hex){
   const value=String(hex||'').trim().replace(/^#/,'');
   if(!/^[0-9a-f]{3}$|^[0-9a-f]{6}$/i.test(value))return null;
@@ -88,18 +87,22 @@ const WorkbenchUI=(()=>{
   }
   showSimilarInLibrary(source,result);
  }
+ // A colour is a filter, not a report: clicking a swatch takes you to every
+ // file that uses that colour, the same way Find similar takes you to the
+ // files that look like this one.
  async function findColor(hex){
   if(!hexToRgb(hex))return;
-  let pool=assets;
-  try{const data=await api.list();if(Array.isArray(data.assets)&&data.assets.length)pool=data.assets;}catch(error){}
-  const matches=pool.filter(a=>!a.trash).map(a=>({asset:a,distance:colourDistance(a,hex)})).filter(m=>m.distance<=COLOUR_TOLERANCE).sort((x,y)=>x.distance-y.distance);
-  color=hex;title='Similar colours · '+hex;
-  setView('smart');$('#type').value='all';render();
-  if(!matches.length){notify('No indexed file uses that colour yet. Colours are known once the local index has looked at a file.');return;}
-  openMatchPanel('Files with '+hex,
-   matches.length+' indexed '+(matches.length===1?'file uses':'files use')+' this colour, closest first.',
-   matches.slice(0,60).map(m=>({id:m.asset.id,badge:m.distance<3?'exact':'close'})),
-   panel=>[action('Show in library',()=>panel.close())]);
+  // The colour is set after the view changes: switching views clears the
+  // filter, and a filter that is cleared shows nothing at all.
+  setView('smart');$('#type').value='all';
+  color=hex;title='Files with '+hex;
+  render();
+  // Every file has to be here, not only the page the library was showing.
+  await hydrateCatalog();
+  const matches=assets.filter(a=>!a.trash&&colorMatch(a,hex));
+  title='Files with '+hex+(matches.length?' · '+matches.length:'');
+  render();
+  if(!matches.length)notify('No indexed file uses that colour yet. Colours are known once the local index has looked at a file.');
  }
  async function history(redo=false){const result=await api.workbench('history',{redo});if(result.changed){await refreshCurrent();notify((redo?'Redid: ':'Undid: ')+result.label);}else notify('No file changes to '+(redo?'redo':'undo')+'.');}
  function shortcuts(){const d=dialog('Keyboard shortcuts'),input=field('','Find a shortcut',()=>{}),list=el('div');const values=[['Undo file / canvas change','⌘ Z'],['Redo','⇧ ⌘ Z'],['Sidebar','⌘ B / ⌘ S'],['Search','⌘ F / ⌘ K'],['Settings','⌘ ,'],['Import files','⌘ O'],['File details','⌘ I'],['Select all','⌘ A'],['Extend selection','⇧ + arrow'],['Toggle individual selection','⌘ + click'],['Copy / paste','⌘ C / ⌘ V'],['Trash selection','⌘ Delete'],['Preview / close','Space / Escape'],['Navigate','Arrow keys'],['Canvas select / hand / text','V / H / T'],['Canvas rectangle / ellipse','R / O'],['Canvas fit','⌘ 0'],['Pan canvas','Space + drag'],['This shortcut reference','⌘ /']];const paint=()=>{list.replaceChildren();for(const [name,key]of values.filter(r=>r.join(' ').toLowerCase().includes(input.value.toLowerCase()))){const row=el('div','shortcut-row');row.append(el('span','',name),el('kbd','',key));list.append(row);}};input.oninput=paint;d.append(input,list);paint();input.focus();}

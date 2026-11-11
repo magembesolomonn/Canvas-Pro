@@ -1,0 +1,24 @@
+/* The collector is the extension's browser side panel. Chrome and Helium dock
+   it on the right; this inset shell gives the content the same 8px radius as
+   the rest of the extension instead of sitting flush against the browser edge. */
+body.collector {
+  max-width: none;
+  margin: 0;
+  padding: 8px;
+  background: #181818;
+}
+
+.collector-shell {
+  min-height: calc(100vh - 16px);
+  padding: clamp(14px, 3vw, 30px);
+  border: 1px solid #ffffff0d;
+  border-radius: 8px;
+  background: #222;
+  overflow-wrap: anywhere;
+}
+
+/* Keep the sticky controls inside the rounded shell while the panel scrolls. */
+body.collector .collect-toolbar,
+body.collector .download-activity {
+  top: 8px;
+}

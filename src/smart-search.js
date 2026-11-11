@@ -115,24 +115,46 @@ const SmartSearch=(()=>{
    visualMatches=null;
    visualQuery='';
  }
+ // The model on this Mac reads the words as well as the files: the same
+ // search also returns the pictures that show what you asked for.
+ async function semanticSearch(query,version){
+  const current=()=>version===queryVersion&&query===$('#search').value.trim();
+  visualMode=true;visualQuery='Looking for images that match…';
+  updateVisualButton();updateActivityLabel();
+  try{
+   const vector=await call('text',{text:query});
+   if(!current())return;
+   const ids=await api.smartSearch(query,vector);
+   if(!current())return;
+   visualMatches={query:query.toLowerCase(),ids:new Set(ids)};
+   visualQuery=query.toLowerCase();
+   render();
+  }catch(error){
+   if(current()){visualMode=false;visualMatches=null;updateStatus(error.message);render();}
+  }finally{
+   if(current()){updateVisualButton();updateActivityLabel();}
+  }
+ }
  function schedule(){
-   clearTimeout(queryTimer);
-   resetVisualSearch();
-   const query=$('#search').value.trim();
-   const version=++queryVersion;
-   matches=null;matchedQuery='';
-   updateVisualButton();updateActivityLabel();
-   if(!query)return;
-   queryTimer=setTimeout(async()=>{
-     try{
-       const lexical=await api.smartSearch(query);
-       if(version!==queryVersion||query!==$('#search').value.trim())return;
-       matches=new Set(lexical);matchedQuery=query;
-       if(matches.size)render();
-     }catch(error){
-       if(version===queryVersion)updateStatus(error.message);
-     }
-   },90);
+  clearTimeout(queryTimer);
+  resetVisualSearch();
+  const query=$('#search').value.trim();
+  const version=++queryVersion;
+  matches=null;matchedQuery='';
+  updateVisualButton();updateActivityLabel();
+  if(!query)return;
+  queryTimer=setTimeout(async()=>{
+   try{
+    const lexical=await api.smartSearch(query);
+    if(version!==queryVersion||query!==$('#search').value.trim())return;
+    matches=new Set(lexical);matchedQuery=query;
+    if(matches.size)render();
+    // The local model waits a moment, so typing stays quick.
+    if(enabled&&modelReady)setTimeout(()=>{if(version===queryVersion)semanticSearch(query,version);},180);
+   }catch(error){
+    if(version===queryVersion)updateStatus(error.message);
+   }
+  },90);
  }
  async function toggleVisualSearch(){
    const query=$('#search').value.trim();
@@ -190,7 +212,7 @@ const SmartSearch=(()=>{
  box.append(row('On-device analysis','Text recognition, automatic tags and colour palettes. Visual search uses an optional 156 MB CLIP model; your files and queries stay on this Mac.'),statusRow,progress,modelStatus,actions,idleLabel);$('#settings-local-intelligence').append(box);
  api.onSmartWork(wakeIndex);
  api.onModelProgress(model=>{download.disabled=model.state==='downloading';cancel.hidden=model.state!=='downloading';download.textContent=model.ready?'Verify / repair local model':'Download local visual model';updateStatus(model.state==='downloading'?'Downloading model · '+Math.round(model.bytes/model.total*100)+'%':model.error||status);});
- api.onSmartChanged(({id,smart})=>{const a=assetById.get(id);if(!a)return;a.smart=smart;a.searchText=SmartCards.enrichSearch(a);if(SmartCards.isNote(a)){const card=mounted.get(id),surface=card?.querySelector('.card-surface');if(surface&&!surface.querySelector('.smart-note-card')){surface.querySelector('img,.file-placeholder')?.remove();surface.prepend(SmartCards.fileVisual(a));layoutDirty=true;scheduleGallery();}}if(selected===id&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]'))scheduleInspector();});
+ api.onSmartChanged(({id,smart,name})=>{const a=assetById.get(id);if(!a)return;a.smart=smart;if(name&&name!==a.name){a.name=name;const card=mounted.get(id);const label=card?.querySelector('.card-name');if(label)label.textContent=name;card?.setAttribute('aria-label',name);}a.searchText=SmartCards.enrichSearch(a);if(SmartCards.isNote(a)){const card=mounted.get(id),surface=card?.querySelector('.card-surface');if(surface&&!surface.querySelector('.smart-note-card')){surface.querySelector('img,.file-placeholder')?.remove();surface.prepend(SmartCards.fileVisual(a));layoutDirty=true;scheduleGallery();}}if(selected===id&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]'))scheduleInspector();});
  const activity=action('',()=>SettingsUI.open('experimental'));
  activity.id='ai-activity';activity.append(glyph('sparkles'),el('span','ai-activity-label','AI activity'));
  // The footer carries one message. The index status belongs in the sidebar.
@@ -243,5 +265,33 @@ const SmartSearch=(()=>{
   if(next&&next.ready){enabled=true;localStorage.setItem('local-ai-enabled','true');start();updateActivityLabel();}
   return !!(next&&next.ready);
  }
- return{init,schedule,includes,call,start,resultIds,setEnabled,ensureVisualModel,get enabled(){return enabled;},get visualModelReady(){return modelReady;}};
+ // Words the model can recognise in a picture. Together with the tags you
+ // already use, they are the vocabulary a suggestion is drawn from.
+ const TAG_VOCABULARY=[
+  'landscape','portrait','photo','screenshot','document','receipt','invoice','chart','diagram','illustration','sketch','drawing','logo','product','packaging','food','drink','coffee','dessert','restaurant','street','city','architecture','building','interior','furniture','plant','flower','garden','park','beach','ocean','mountain','forest','desert','sky','sunset','night','snow','winter','autumn','travel','holiday','hotel','airport','train','car','vehicle','bike','boat','road','bridge','people','portrait photo','family','children','wedding','party','concert','music','album cover','movie poster','book cover','book','magazine','newspaper','text','handwriting','form','contract','resume','presentation','slide','meeting','office','desk','computer','laptop','phone','screen','code','settings','file','folder','certificate','award','ticket','map','plan','blueprint','model','3d render','game','sport','football','basketball','swimming','gym','yoga','health','medical','science','education','school','library','museum','theatre','studio','fashion','shoes','jewellery','watch','accessory','animal','dog','cat','bird','horse','cow','sheep','wildlife','insect','fish','farm','market','shop','money','budget','report','finance','sticker','emoji','pattern','texture','background','abstract','minimal','dark','bright','colorful','monochrome','sports','baby','wedding','picnic','camping','hiking','fishing','hair','makeup','cosmetic'];
+ function libraryTags(){
+  const set=new Set();
+  for(const asset of (typeof assets!=='undefined'?assets:[]))for(const tag of (asset.tags||[]))if(tag&&tag.length<=40)set.add(tag);
+  return [...set];
+ }
+ function similarity(a,b){
+  if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length)return 0;
+  let sum=0;
+  for(let index=0;index<a.length;index++)sum+=a[index]*b[index];
+  return sum;
+ }
+ // Tag suggestions come from the model on this Mac: the picture is compared
+ // with the words, and the closest ones are offered. Nothing leaves the Mac.
+ async function suggestTags(assetId,onTags){
+  if(!enabled||!modelReady){onTags([],'Turn on local intelligence in Settings → Experimental to get tag suggestions.');return;}
+  const vector=await call('image',{assetId});
+  const candidates=[...new Set([...libraryTags(),...TAG_VOCABULARY])].filter(tag=>tag&&tag.length<=40).slice(0,180);
+  const vectors=await call('texts',{texts:candidates});
+  const scored=candidates.map((tag,index)=>({tag,score:similarity(vector,vectors?.[index])}))
+   .filter(item=>item.score>=0.2)
+   .sort((a,b)=>b.score-a.score)
+   .slice(0,10);
+  onTags(scored.map(item=>item.tag));
+ }
+ return{init,schedule,includes,call,start,resultIds,setEnabled,ensureVisualModel,suggestTags,get enabled(){return enabled;},get visualModelReady(){return modelReady;}};
 })();

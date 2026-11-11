@@ -182,8 +182,8 @@ function setView(next,folder=null,keepCatalog=false){rememberGalleryPosition();i
 view=next;collection=folder;tagFilter=next==='tags'?lastTagFilter:null;pendingSelection=null;selected=null;selection.clear();$('#search').value='';SmartSearch.schedule();if(next!=='notes')restoreGalleryPosition();
  renderNav();render();}
 function renderNav(){
- if(!navStats){const counts={all:0,favorites:0,untagged:0,uncategorized:0,trash:0,image:0,video:0,audio:0,pdf:0,link:0},tags=new Set(),members=new Map();for(const a of assets){if(a.trash){counts.trash++;continue;}counts.all++;if(a.favorite)counts.favorites++;if(!a.tags.length)counts.untagged++;if(!a.folders.length)counts.uncategorized++;counts[kind(a)]=(counts[kind(a)]||0)+1;for(const t of a.tags)tags.add(t);for(const f of a.folders)members.set(f,(members.get(f)||0)+1);}counts.tags=tags.size;navStats={counts,members};}
- const {counts,members}=navStats,nav=$('#navigation'),folderIds=new Map(CanvasWorkspace.folderRecords.map(folder=>[folder.name,folder.id]));nav.replaceChildren();for(const [key,label,icon]of [['all','Library','archive'],['favorites','Favourites','star'],['untagged','Untagged','tag'],['uncategorized','Uncategorized','folder'],['tags','Tags','tag'],['trash','Trash','trash']])nav.append(navButton(label,icon,counts[key],view===key,()=>setView(key)));
+ if(!navStats){const counts={all:0,favorites:0,trash:0,image:0,video:0,audio:0,pdf:0,link:0},tags=new Set(),members=new Map();for(const a of assets){if(a.trash){counts.trash++;continue;}counts.all++;if(a.favorite)counts.favorites++;counts[kind(a)]=(counts[kind(a)]||0)+1;for(const t of a.tags)tags.add(t);for(const f of a.folders)members.set(f,(members.get(f)||0)+1);}counts.tags=tags.size;navStats={counts,members};}
+ const {counts,members}=navStats,nav=$('#navigation'),folderIds=new Map(CanvasWorkspace.folderRecords.map(folder=>[folder.name,folder.id]));nav.replaceChildren();for(const [key,label,icon]of [['all','Library','archive'],['favorites','Favourites','star'],['tags','Tags','tag'],['trash','Trash','trash']])nav.append(navButton(label,icon,counts[key],view===key,()=>setView(key)));
  const mediaNav=$('#media-navigation');mediaNav.replaceChildren();for(const [key,label,icon]of [['image','Images','image'],['video','Video','video'],['audio','Audio','audio'],['pdf','Documents','file'],['link','Web links','link']])mediaNav.append(navButton(label,icon,counts[key],view===key,()=>setView(key)));
  $('#folders').replaceChildren(...folders.map(f=>{const button=navButton(f,'folder',members.get(f)||0,view==='folder'&&collection===f,()=>setView('folder',f));const folderId=folderIds.get(f);if(folderId)button.firstChild.replaceWith(WorkbenchUI.icon('folder:'+folderId));button.oncontextmenu=e=>{e.preventDefault();safe(()=>api.collectionMenu(f));};button.draggable=true;button.ondragstart=e=>{e.dataTransfer.setData('application/x-canvaspro-collection',f);e.dataTransfer.effectAllowed='copy';};button.ondragend=()=>CanvasWorkspace.clearDrag();return button;}));CanvasWorkspace.renderNav();
 }
@@ -276,10 +276,13 @@ function render(options={}){stopHover();NotesWorkspace.show(view==='notes');
  if(pagedCatalog&&catalogKey!==JSON.stringify(catalogQuery())){safe(loadLibraryPage);return;}
  if(pagedCatalog){visible=assets;selection.sync(visible.map(a=>a.id));selected=selection.focus;}
  else{
- const q=$('#search').value.trim().toLowerCase(),type=$('#type').value;visible=assets.filter(a=>{if(view==='trash'?!a.trash:a.trash)return false;if(!WorkbenchUI.accepts(a))return false;if(view==='folder'&&!a.folders.includes(collection))return false;if(view==='uncategorized'&&a.folders.length)return false;if(view==='untagged'&&a.tags.length||view==='tags'&&!a.tags.length)return false;if(view==='favorites'&&!a.favorite)return false;if(['image','audio','video','pdf','link'].includes(view)&&kind(a)!==view)return false;if(tagFilter&&!a.tags.includes(tagFilter))return false;if(type!=='all'&&kind(a)!==type)return false;return !q||SmartSearch.includes(a,q);});if($('#sort').value==='old')visible.sort((a,b)=>a.imported.localeCompare(b.imported)||(a.importOrder||0)-(b.importOrder||0));if($('#sort').value==='name')visible.sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()));if($('#sort').value==='size')visible.sort((a,b)=>b.size-a.size);if(view==='smart'&&WorkbenchUI.rankOrder())visible.sort((a,b)=>WorkbenchUI.rank(a)-WorkbenchUI.rank(b));selection.sync(visible.map(a=>a.id));selected=selection.focus;
+ const q=$('#search').value.trim().toLowerCase(),type=$('#type').value;visible=assets.filter(a=>{if(view==='trash'?!a.trash:a.trash)return false;if(!WorkbenchUI.accepts(a))return false;if(view==='folder'&&!a.folders.includes(collection))return false;if(view==='tags'&&!a.tags.length)return false;if(view==='favorites'&&!a.favorite)return false;if(['image','audio','video','pdf','link'].includes(view)&&kind(a)!==view)return false;if(tagFilter&&!a.tags.includes(tagFilter))return false;if(type!=='all'&&kind(a)!==type)return false;return !q||SmartSearch.includes(a,q);});
+ // Find similar and colour matching both rank the gallery: closest match
+ // first, instead of the order the files happened to be imported in.
+ if(WorkbenchUI.rankOrder())visible.sort((x,y)=>WorkbenchUI.rank(x)-WorkbenchUI.rank(y));if($('#sort').value==='old')visible.sort((a,b)=>a.imported.localeCompare(b.imported)||(a.importOrder||0)-(b.importOrder||0));if($('#sort').value==='name')visible.sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()));if($('#sort').value==='size')visible.sort((a,b)=>b.size-a.size);if(view==='smart'&&WorkbenchUI.rankOrder())visible.sort((a,b)=>WorkbenchUI.rank(a)-WorkbenchUI.rank(b));selection.sync(visible.map(a=>a.id));selected=selection.focus;
  }
 if(pendingSelection){const id=pendingSelection;pendingSelection=null;if(selection.index.has(id)){selection.select(id);selected=selection.focus;}}
-$('#view-title').textContent=view==='smart'?WorkbenchUI.title:view==='folder'?collection:({all:'Library',uncategorized:'Uncategorized',untagged:'Untagged',favorites:'Favourites',tags:'Tags',trash:'Trash',image:'Images',audio:'Audio',video:'Video',pdf:'Documents',link:'Web links'})[view];const count=pagedCatalog?catalogTotal:visible.length;$('#count').textContent=count.toLocaleString()+(count===1?' item':' items');const bar=$('#tags-bar');bar.hidden=view!=='tags';bar.replaceChildren();if(view==='tags')for(const tag of tags||[]){const b=el('button',tagFilter===tag?'primary':'',tag);b.onclick=()=>{rememberGalleryPosition();tagFilter=lastTagFilter=tagFilter===tag?null:tag;restoreGalleryPosition();render();};bar.append(b);}renderEmptyState();renderWindow(options.anchor);paintSelection();if(!options.preserveInspector)renderInspector();}
+$('#view-title').textContent=view==='smart'?WorkbenchUI.title:view==='folder'?collection:({all:'Library',favorites:'Favourites',tags:'Tags',trash:'Trash',image:'Images',audio:'Audio',video:'Video',pdf:'Documents',link:'Web links'})[view];const count=pagedCatalog?catalogTotal:visible.length;$('#count').textContent=count.toLocaleString()+(count===1?' item':' items');const bar=$('#tags-bar');bar.hidden=view!=='tags';bar.replaceChildren();if(view==='tags')for(const tag of tags||[]){const b=el('button',tagFilter===tag?'primary':'',tag);b.onclick=()=>{rememberGalleryPosition();tagFilter=lastTagFilter=tagFilter===tag?null:tag;restoreGalleryPosition();render();};bar.append(b);}renderEmptyState();renderWindow(options.anchor);paintSelection();if(!options.preserveInspector)renderInspector();}
 function paintSelection(){for(const [id,card]of mounted){card.classList.toggle('selected',selection.ids.has(id));card.classList.toggle('focused',id===selected);card.setAttribute('aria-selected',String(selection.ids.has(id)));}const count=selection.ids.size;$('#selection-count').textContent=count===0?'':count.toLocaleString()+' selected';}
 function select(id,options={}){selection.select(id,options);selected=selection.focus;if(selection.ids.size>1)stopHover();paintSelection();scheduleInspector();}
 function scheduleInspector(){if(inspectorFrame)return;inspectorFrame=requestAnimationFrame(()=>{inspectorFrame=0;renderInspector();});}
@@ -335,7 +338,47 @@ function renderInspector() {
   if(k==='image'){box.append(SmartCards.paletteSection(a));}
   else if(k==='video'||k==='audio'){const mediaDetails=el('p','hint','Reading media information…');box.append(mediaDetails);api.mediaInfo(a.id,true).then(info=>{if(selected!==a.id||!mediaDetails.isConnected)return;mediaDetails.textContent=[info.duration?'Duration '+timecode(info.duration):'',info.width&&info.height?info.width+' × '+info.height:'',info.codec||'',info.artist||'',info.album||''].filter(Boolean).join(' · ')||'Media information unavailable';}).catch(()=>mediaDetails.textContent='Media information unavailable');}
   else if(k==='link'&&a.captureMetadata){const metadata=a.captureMetadata;const source=section('Website');const details=el('dl','properties');for(const [label,value]of [['Original URL',metadata.pageUrl],['Website title',metadata.pageTitle],['Domain',metadata.pageUrl?new URL(metadata.pageUrl).hostname:''],['Capture date',metadata.capturedAt?new Date(metadata.capturedAt).toLocaleString():'']])if(value)details.append(el('dt','',label),el('dd','',String(value)));source.append(details);box.append(source);}
-  const tags=section('Tags');const chips=el('div','chips');for(const t of a.tags){const chip=el('span','chip',t);chip.append(action('×',()=>update({tags:a.tags.filter(x=>x!==t)})));chips.append(chip);}tags.append(chips);const add=field('','Add tags, separated by commas',v=>update({tags:[...a.tags,...v.split(',')]}));add.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add.blur();}};tags.append(add);box.append(tags);
+  // Tags, with the local model offering words for this picture. The model
+  // runs on this Mac; nothing is sent anywhere.
+  const tags=el('section');
+  const tagHead=el('div','inspector-section-head');
+  tagHead.append(el('h3','','Tags'));
+  const suggest=el('button','ai-suggest');
+  suggest.type='button';
+  suggest.setAttribute('aria-label','Suggest tags with the local model');
+  suggest.title='Suggest tags with the local model';
+  suggest.append(glyph('sparkles'));
+  const suggestions=el('div','ai-suggestions');
+  suggest.onclick=()=>safe(async()=>{
+   if(suggest.disabled)return;
+   suggest.disabled=true;
+   suggestions.replaceChildren(el('p','hint','Asking the local model…'));
+   try{
+    await SmartSearch.suggestTags(a.id,(list,message)=>{
+     suggestions.replaceChildren();
+     if(message){suggestions.append(el('p','hint',message));return;}
+     if(!list.length){suggestions.append(el('p','hint','No suggestions for this file.'));return;}
+     for(const tag of list){
+      const chip=el('button','chip chip-suggestion',tag);
+      chip.type='button';
+      chip.title='Add “'+tag+'”';
+      // A suggestion is added by clicking it. Nothing to type, nothing to
+      // confirm with a second key press.
+      chip.onclick=()=>safe(()=>update({tags:[...new Set([...a.tags,tag])]}));
+      suggestions.append(chip);
+     }
+     suggestions.append(el('p','hint','Click a suggestion to add it as a tag.'));
+    });
+   }finally{
+    suggest.disabled=false;
+   }
+  });
+  tagHead.append(suggest);
+  tags.append(tagHead);
+  const chips=el('div','chips');for(const t of a.tags){const chip=el('span','chip',t);chip.append(action('×',()=>update({tags:a.tags.filter(x=>x!==t)})));chips.append(chip);}tags.append(chips);
+  const add=field('','Add tags, separated by commas',v=>update({tags:[...a.tags,...v.split(',')]}));add.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add.blur();}};tags.append(add);
+  tags.append(suggestions);
+  box.append(tags);
   const coll=section('Collections'); const assigned=el('div','chips');for(const f of a.folders){const chip=el('span','chip',f);chip.append(action('×',()=>update({folders:a.folders.filter(x=>x!==f)})));assigned.append(chip);}coll.append(assigned);const choose=el('select');choose.setAttribute('aria-label','Add to collection');const first=el('option','','Add to collection…');first.value='';choose.append(first);for(const f of folders.filter(f=>!a.folders.includes(f))){const o=el('option','',f);o.value=f;choose.append(o);}choose.onchange=()=>safe(()=>update({folders:[...a.folders,choose.value]}));coll.append(choose);box.append(coll);
   if(k==='image'){
    const props=section('Image properties'),dl=el('dl','properties'),sizeLabel=el('dt','','Dimensions'),sizeValue=el('dd','','Reading…');

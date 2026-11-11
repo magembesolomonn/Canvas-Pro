@@ -1,5 +1,14 @@
 :root {
-  --app-font: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  /* Motion: one curve, two lengths. */
+  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  /* Corners: a window, a card, a button, a field. */
+  --radius-window: 10px;
+  --radius-card: 8px;
+  --radius-button: 6px;
+  --radius-input: 6px;
   color-scheme: dark;
   /* Surfaces. The opaque dark mode swaps these for OpenCode's palette. */
   --surface-app: #202020;
@@ -101,8 +110,8 @@ select {
 button {
   background: #ffffff09;
   border: 1px solid #ffffff12;
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: var(--radius-button);
+  padding: 6px 12px;
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
@@ -130,7 +139,7 @@ input,
 textarea {
   background: #ffffff05;
   border: 1px solid #ffffff14;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   padding: 9px;
   min-width: 0;
 }
@@ -394,7 +403,7 @@ kbd {
   left: 0;
   margin: 0;
   cursor: default;
-  border-radius: 7px;
+  border-radius: var(--radius-card);
   user-select: none;
   contain: layout style;
 }
@@ -402,7 +411,7 @@ kbd {
   height: var(--surface-height, 150px);
   background: var(--surface-raised);
   border: 1px solid #ffffff13;
-  border-radius: 7px;
+  border-radius: var(--radius-card);
   position: relative;
   overflow: hidden;
   display: flex;
@@ -593,7 +602,64 @@ body.light-mode .inspector .inspector-notes {
   border-color: #00000014;
 }
 .inspector section {
-  margin-top: 16px;
+  margin-top: 24px;
+}
+/* A section heading with a tool of its own, like Tags and its AI button. */
+.inspector-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.inspector-section-head .ai-suggest {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--muted);
+}
+.inspector-section-head .ai-suggest:hover:not(:disabled) {
+  background: #ffffff12;
+  color: var(--text);
+}
+.inspector-section-head .ai-suggest:disabled {
+  opacity: 0.4;
+}
+.inspector-section-head .ai-suggest .sf-symbol {
+  width: 15px;
+  height: 15px;
+}
+.ai-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.ai-suggestions:empty {
+  display: none;
+}
+.ai-suggestions .hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+}
+.chip-suggestion {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.chip-suggestion:hover {
+  background: #ffffff12;
+}
+body.light-mode .inspector-section-head .ai-suggest:hover:not(:disabled) {
+  background: #0000000a;
+}
+body.light-mode .chip-suggestion {
+  background: var(--bg-secondary);
+}
   padding-top: 17px;
   border-top: 1px solid var(--line);
 }
@@ -980,8 +1046,8 @@ dialog {
   border: 1px solid #ffffff25;
   background: var(--dialog-surface);
   color: var(--text);
-  border-radius: 12px;
-  padding: 24px;
+  border-radius: var(--radius-window);
+  padding: 20px;
   width: 360px;
   box-shadow: 0 20px 60px #0008;
 }
@@ -1905,7 +1971,7 @@ dialog {
   max-height: none;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-window);
   background: var(--panel);
   color: var(--text);
   overflow: hidden;
@@ -2102,7 +2168,7 @@ body.light-mode .settings-search input:focus-visible {
   padding: 0 26px 28px;
 }
 .settings-section-label {
-  margin: 16px 0 8px;
+  margin: 24px 0 8px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -2227,7 +2293,7 @@ body.light-mode .settings-search input:focus-visible {
   border-radius: 13px;
   background: #ffffff21;
   cursor: pointer;
-  transition: background 160ms ease;
+  transition: background var(--duration-fast) var(--ease-out);
 }
 .settings-switch::after {
   content: '';
@@ -4069,7 +4135,7 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: background 160ms ease, color 160ms ease;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 .smart-note-card p {
   flex: 1 1 auto;
@@ -4440,14 +4506,19 @@ body:not(.native-glass):not(.light-mode) {
 /* Light theme is designed, not a recolour: paper-white panels on a soft grey
    window, one neutral ink accent, and hairlines instead of shadows. */
 body.light-mode {
-  /* One palette for the whole light theme. */
-  --surface-app: #f4f4f5;
-  --surface-panel: #ffffff;
-  --surface-raised: #f7f7f8;
-  --surface-card: #ffffff;
-  --surface-field: #ffffff;
-  --surface-menu: #ffffff;
-  --surface-canvas: #f4f4f5;
+  /* One palette for the whole light theme: a white primary surface and one
+     secondary grey. Panels, cards, fields, menus and sheets are white; the
+     window behind them, the selected row and the strips inside a sheet are
+     the secondary grey. */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f7;
+  --surface-app: var(--bg-secondary);
+  --surface-panel: var(--bg-primary);
+  --surface-raised: var(--bg-secondary);
+  --surface-card: var(--bg-primary);
+  --surface-field: var(--bg-primary);
+  --surface-menu: var(--bg-primary);
+  --surface-canvas: var(--bg-secondary);
   --bg: var(--surface-app);
   --panel: var(--surface-panel);
   --text: #1c1c1e;
@@ -4457,8 +4528,8 @@ body.light-mode {
   /* One accent for the whole light theme, including the Settings window. */
   --settings-accent: var(--accent);
   --focus: #7c7c80;
-  --selection: #e8e8ea;
-  --sidebar-surface: #f1f1f3;
+  --selection: var(--bg-secondary);
+  --sidebar-surface: var(--bg-secondary);
   /* Light mode needs far less depth: the same surfaces are told apart by their
      fills, so the shadows get much tighter. */
   --shadow-popover: 0 6px 22px #0000001f, inset 0 1px 0 #ffffffb3;
@@ -4469,7 +4540,7 @@ body.light-mode {
   --shadow-card: 0 1px 4px #00000014;
   --toast-surface: #ffffff;
   --toast-ink: #1c1e23;
-  --dialog-surface: #ffffff;
+  --dialog-surface: var(--bg-primary);
   /* The same eight papers, lit. Pastel tints with dark ink, never neon. */
   --quote-1-paper: #f5eedb;
   --quote-1-ink: #3c3529;
@@ -5240,6 +5311,44 @@ body.light-mode .layout-menu button[aria-checked="true"] {
   background: var(--selection);
   color: var(--text);
 }
+/* A light menu is a plain white sheet, the way Finder draws its own: items
+   with plain text, thin rules between the groups, and a checkmark for the
+   chosen one. No accent colour anywhere. */
+body.light-mode .layout-menu {
+  padding: 5px;
+  background: var(--bg-primary);
+  border-color: #00000014;
+}
+body.light-mode .layout-menu button {
+  margin-bottom: 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+}
+body.light-mode .layout-menu button:hover,
+body.light-mode .layout-menu button:focus-visible {
+  background: #f0f0f2;
+}
+/* The default action is the same item as the rest, only in bold: a filled
+   button inside a menu reads as a different window. */
+body.light-mode .layout-menu button.primary {
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  font-weight: 600;
+}
+body.light-mode .layout-menu button[aria-checked="true"] {
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+/* The white focus ring disappears on a white menu. */
+body.light-mode .layout-menu button:focus-visible {
+  outline: 1px solid #00000040;
+  outline-offset: -1px;
+}
 body.light-mode
   :is(
     nav .sf-symbol,
@@ -5723,9 +5832,9 @@ body.light-mode button:hover {
 body.light-mode button.primary,
 body.light-mode .settings-button-primary,
 body.light-mode .toolbar-button[aria-expanded="true"] {
-  background: var(--accent);
-  color: #fff;
-  border-color: transparent;
+  background: var(--bg-primary);
+  color: var(--text);
+  border-color: #0000002e;
 }
 body.light-mode .layout-menu,
 body.light-mode .canvas-item-menu,
@@ -5752,7 +5861,7 @@ body.light-mode .canvas-dock .canvas-tool-group button[aria-pressed="true"] {
   color: #17171a;
 }
 body.light-mode .toolbar-button {
-  background: rgba(0 0 0 / 4%);
+  background: var(--bg-primary);
   border-color: #0000001a;
   color: #4a4a4e;
 }
@@ -5807,13 +5916,13 @@ body.light-mode .canvas-status {
 .view-menu-group {
   display: flex;
   flex-direction: column;
-  padding: 6px 0;
+  padding: 8px 0;
 }
 .view-menu-group + .view-menu-group {
   border-top: 1px solid var(--line);
 }
 .view-menu-label {
-  padding: 4px 12px 6px;
+  padding: 6px 10px 8px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.07em;
@@ -5825,7 +5934,7 @@ body.light-mode .canvas-status {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 12px;
+  padding: 6px 10px;
   border: 0;
   border-radius: 0;
   background: transparent;

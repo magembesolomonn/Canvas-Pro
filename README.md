@@ -36,6 +36,15 @@ Imports copy originals, never move source files. SHA-256 detects exact duplicate
 
 The library is in Electron's application-data directory (normally `~/Library/Application Support/Asset Library/Library`). Use **Library on this Mac** to find the actual location. It contains `originals/`, `thumbnails/`, and `library.sqlite`. Quit the app before copying the entire Library folder as a backup. Never edit the managed originals or database directly. **Export copy** saves an individual original to a chosen location. Trash is reversible; there is no permanent-delete operation yet.
 
+## Finding files
+
+- **Search:** the search field matches words in names, text and metadata. When the on-device model is installed, the same search also returns the pictures that show what you asked for — everything runs on this Mac.
+- **Find similar:** File Details → Find similar opens the library filtered to the files that look like the one you picked, closest first.
+- **Colours:** clicking a colour in File Details → Colours opens the library filtered to every file that uses that colour, closest first. It is a filter, not a report.
+- **Suggested tags:** the sparkles button next to Tags asks the on-device model for words for that picture. Pick the ones you want and they type themselves into the tag field; press Return to add them. Nothing leaves the Mac.
+- The sidebar lists Library, Favourites, Tags and Trash. There is no Untagged or Uncategorized view: filter the library by tag or collection instead.
+- **Names:** a file whose name says nothing — image.jpeg, Screenshot 2026-11-11 at 10.23.45, IMG_1234 — is renamed once the local analysis has read it. The text recognised in the picture is used first, then what the model sees in it, and only then the kind of file and the day it arrived. The managed original keeps its own name on disk; the library shows the real one.
+
 ## Notes, quotes and appearance
 
 Notes live in their own workspace. A note is a list of blocks: paragraphs, headings, bulleted items, checklist items, toggles, tables, trackers, library images and links to other pages or files. Press **Enter** in an empty bullet, checklist item or toggle to return to a plain paragraph. Type **/** in an empty paragraph for the block menu, or **@** to link to a page or file. There is no row of add buttons; the menu is the way in.
@@ -242,6 +251,8 @@ Reader mode saves extracted article text into the library's thumbnails folder an
 Settings → Local intelligence controls background indexing and the optional approximately 156 MB visual model download. OCR, image classification, palettes and text search run locally; CLIP adds descriptive image search. No files or search queries are uploaded. Recognition is probabilistic and works best with English descriptions. Automatic tags are separate from your manual tags. PDFs index up to their first 15 pages. New files become searchable progressively as background indexing completes; you can pause it. Model files are verified against pinned checksums and are stored in Application Support, separately from the library. They can be downloaded again after resetting a Mac.
 
 Visual model: [Xenova CLIP ViT-B/32](https://huggingface.co/Xenova/clip-vit-base-patch32), MIT license, revision `6b7c523703ae26e39be4b03774966f8571c7f523`. Reader extraction uses Mozilla Readability; inference uses Transformers.js and ONNX Runtime. Bundled notices are in `src/vendor`.
+
+Light mode uses two colours: `#FFFFFF` for panels, cards, fields, menus and sheets, and `#F5F5F7` for the window behind them, selected rows and the strips inside a sheet. Menus follow the Finder: a plain white sheet, plain text, thin rules between the groups, a checkmark for the chosen item, and no accent colour. Type is the system font at 13px, corners are 10px for a window, 8px for a card and 6px for a button or field, and motion uses one curve (`--ease-out`) at 150ms and 250ms.
 
 Canvas Pro follows macOS light/dark appearance. Video previews fit each file's actual aspect ratio; black pixels encoded into a source video remain part of that video.
 

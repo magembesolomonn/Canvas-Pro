@@ -87,10 +87,12 @@ const NotesWorkspace = (() => {
       dialog.close();
       deleteNote(item.id);
     }));
-    form.append(el('h2','',label(item)),noteActions,input,button('Open Emoji Picker',()=>{
+    const body=el('div','note-dialog-body');
+    body.append(el('h2','note-dialog-title',label(item)),noteActions,input,button('Open Emoji Picker',()=>{
       input.focus();
       safe(()=>api.notesShowEmojiPicker());
-    }),error,actions);
+    }),error);
+    form.append(body,actions);
     dialog.append(form);
     dialog.addEventListener('close',()=>dialog.remove(),{once:true});
     document.body.append(dialog);

@@ -11,7 +11,9 @@ let win;
 const run = code => win.webContents.executeJavaScript(code);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
-  for (let i=0; i<160; i++) { if (await check()) return; await pause(20); }
+  // A busy machine needs longer than three seconds to open a note and let
+  // its toolbar settle.
+  for (let i=0; i<400; i++) { if (await check()) return; await pause(20); }
   console.error(await run("JSON.stringify({mode:document.body.className,hover:$('.sidebar-hover-pill').outerHTML,focus:document.activeElement.id})"));
   throw Error('Sidebar check timed out');
 }

@@ -34,9 +34,7 @@ class Library {
     const where=['a.trash=?'],params=[view==='trash'?1:0];
     const clause=(sql,...values)=>{where.push(sql);params.push(...values);};
     if(view==='favorites')clause('a.favorite=1');
-    if(view==='untagged')clause('json_array_length(a.tags)=0');
     if(view==='tags'&&!tag)clause('json_array_length(a.tags)>0');
-    if(view==='uncategorized')clause('json_array_length(a.folders)=0');
     if(view==='folder')clause('EXISTS(SELECT 1 FROM json_each(a.folders) WHERE value=?)',folder);
     if(tag)clause('EXISTS(SELECT 1 FROM json_each(a.tags) WHERE value=?)',tag);
     if(extensions.length)clause('a.ext IN (SELECT value FROM json_each(?))',JSON.stringify(extensions));
@@ -61,8 +59,7 @@ class Library {
   navSummary(){
     const counts=this.db.prepare(`SELECT COUNT(*) FILTER(WHERE trash=0) AS "all", COUNT(*) FILTER(WHERE trash=1) AS trash,
       COUNT(*) FILTER(WHERE trash=0 AND favorite=1) AS favorites,
-      COUNT(*) FILTER(WHERE trash=0 AND json_array_length(tags)=0) AS untagged,
-      COUNT(*) FILTER(WHERE trash=0 AND json_array_length(folders)=0) AS uncategorized FROM assets`).get();
+      COUNT(*) FILTER(WHERE trash=0 AND json_array_length(folders)>0) AS categorised FROM assets`).get();
     const extensions=this.db.prepare('SELECT ext, COUNT(*) AS count FROM assets WHERE trash=0 GROUP BY ext').all();
     const tags=this.db.prepare('SELECT DISTINCT value FROM assets,json_each(assets.tags) WHERE trash=0 ORDER BY value').all().map(row=>row.value);
     const members=this.db.prepare('SELECT value,COUNT(*) AS count FROM assets,json_each(assets.folders) WHERE trash=0 GROUP BY value').all().map(row=>[row.value,row.count]);

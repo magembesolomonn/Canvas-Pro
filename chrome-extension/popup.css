@@ -48,7 +48,7 @@
   --activity-accent: var(--accent);
   --activity-focus: var(--focus);
   --activity-danger: var(--danger);
-  --activity-radius: var(--radius-lg);
+  --activity-radius: 8px;
   --activity-shadow: none;
   --activity-bg: transparent;
   --activity-solid: var(--surface-panel);
