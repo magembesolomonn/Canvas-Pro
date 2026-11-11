@@ -8,7 +8,8 @@ const root = path.resolve(__dirname, '..');
 const moduleCache = '/private/tmp/asset-swift-module-cache';
 const tools = {
   media: ['native/Media.swift', 'bin/media-tool'],
-  analysis: ['native/Analyze.swift', 'bin/analysis-tool']
+  analysis: ['native/Analyze.swift', 'bin/analysis-tool'],
+  text: ['native/Text.swift', 'bin/text-tool']
 };
 const requested = process.argv.slice(2);
 const selected = requested.length ? requested : Object.keys(tools);

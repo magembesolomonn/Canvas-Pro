@@ -42,6 +42,9 @@
   --oc-cyan: #56b6c2;
   --sidebar: 214px;
   --inspector: 274px;
+  /* The colour of a small section heading, shared by the sidebar and the
+     File Details panel. */
+  --section-ink: #9a9a9a;
   /* Shadows mark floating layers only. Anything that lives inside the window
      is separated with a fill and a hairline, never with a drop shadow. */
   --shadow-popover: 0 10px 36px #0006, inset 0 1px 0 #ffffff06;
@@ -211,10 +214,12 @@ svg {
 }
 .section-label {
   margin: 21px 10px 7px;
-  color: var(--muted);
+  /* The same ink, size and weight as File Details, so the two rails read as
+     one app rather than two. */
+  color: var(--section-ink);
   font-size: 10px;
-  letter-spacing: 0.45px;
-  font-weight: 600;
+  letter-spacing: 0.3px;
+  font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -565,7 +570,7 @@ footer kbd {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.3px;
-  color: #9a9a9a;
+  color: var(--section-ink);
   margin-bottom: 22px;
 }
 .inspector > .file-placeholder {
@@ -2248,6 +2253,61 @@ body.light-mode .settings-search input:focus-visible {
 }
 .settings-row-actions {
   gap: 8px;
+}
+/* What the model said about the picture. */
+.inspector-caption {
+  margin: 6px 0 12px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+/* The models the app can use: what each one is for, and its own button. */
+.settings-models {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 18px;
+}
+.settings-model {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 82%, #ffffff 5%);
+}
+.settings-model-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: #ffffff12;
+  color: var(--muted);
+}
+.settings-model-icon .sf-symbol {
+  width: 14px;
+  height: 14px;
+}
+.settings-model .settings-copy {
+  gap: 3px;
+}
+.settings-model-size {
+  color: var(--muted);
+  font-size: 10px;
+}
+.settings-model .settings-button {
+  flex: none;
+  align-self: center;
+  min-width: 108px;
+  text-align: center;
+}
+.settings-model .settings-button.is-quiet {
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
 }
 .settings-row-outside {
   padding: 0;
@@ -4530,6 +4590,7 @@ body.light-mode {
   --focus: #7c7c80;
   --selection: var(--bg-secondary);
   --sidebar-surface: var(--bg-secondary);
+  --section-ink: #8a8a90;
   /* Light mode needs far less depth: the same surfaces are told apart by their
      fills, so the shadows get much tighter. */
   --shadow-popover: 0 6px 22px #0000001f, inset 0 1px 0 #ffffffb3;
@@ -4617,9 +4678,6 @@ body.light-mode .card-details,
 body.light-mode .card-meta,
 body.light-mode .hint,
 body.light-mode .badge,
-body.light-mode .section-label {
-  color: var(--muted);
-}
 body.light-mode .card-surface {
   background: #e8e8ea;
   border-color: #0000000b;
@@ -5881,9 +5939,6 @@ body.light-mode .hint,
 body.light-mode .card-details,
 body.light-mode .card-meta,
 body.light-mode .badge,
-body.light-mode .section-label {
-  color: var(--muted);
-}
 body.light-mode .preview {
   background: #f7f7f7;
 }

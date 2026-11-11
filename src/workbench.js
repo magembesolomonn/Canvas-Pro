@@ -78,7 +78,7 @@ const WorkbenchUI=(()=>{
   let result=[];
   try{result=(await api.workbench('similar',{id})).filter(r=>r.score>=0.2);}catch(error){notify(error.message||String(error));return;}
   if(!result.length){
-   const [index,installed]=await Promise.all([api.smartState().catch(()=>null),api.modelState().catch(()=>null)]);
+   const [index,installed]=await Promise.all([api.smartState().catch(()=>null),api.modelState('clip').catch(()=>null)]);
    const reason=!installed?.ready?'Install the local visual model in Settings → Experimental, then let the index finish.'
     :index?.visualRemaining?'Still indexing: '+index.visualRemaining+' files left to compare.'
     :'No close matches yet. Enable local visual search in Settings → Experimental and let the index finish.';

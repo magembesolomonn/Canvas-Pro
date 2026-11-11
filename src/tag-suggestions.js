@@ -17,7 +17,10 @@ const TagSuggestions=(()=>{
    button.disabled=true;
    results.replaceChildren(el('p','hint','Asking the local model…'));
    try{
-    await SmartSearch.suggestTags(asset.id,(list,message)=>{
+    // A description of the picture is better than a fixed word list, so it is
+    // written first when the file has not been described yet.
+    if(!asset.smart?.caption)await SmartSearch.describe(asset);
+    await SmartSearch.suggestTags(asset,(list,message)=>{
      results.replaceChildren();
      if(message){results.append(el('p','hint',message));return;}
      if(!list.length){results.append(el('p','hint','No suggestions for this file.'));return;}

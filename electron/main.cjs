@@ -303,6 +303,8 @@ app.whenReady().then(async () => {
     sendProgress(active?{name:active.name||'Preparing import…',count:active.processed+1}:null);
   }});
   localModel=new LocalModel({root:process.env.ASSET_TEST_MODE&&process.env.ASSET_MODEL_DIR?path.resolve(process.env.ASSET_MODEL_DIR):path.join(app.getPath('userData'),'Local Models'),fetcher:(url,options)=>net.fetch(url,options),onProgress:value=>{if(win&&!win.isDestroyed())win.webContents.send('model-progress',value);}});
+  // The models the app can use, each with its own download.
+  localModel.define('clip',require('./clip-manifest.json')).define('florence-2',require('./florence-manifest.json'));
   let thermalState=process.env.ASSET_TEST_MODE?'unknown':powerMonitor.getCurrentThermalState();
   const canAccelerateIndex=()=>thermalState==='nominal'&&!powerMonitor.isOnBatteryPower()&&powerMonitor.getSystemIdleTime()>=60;
   smartIndex=new SmartIndex({library,thumbnail:async id=>{const a=library.asset(id);if(['url','webloc'].includes(a.ext)){const file=bookmarks.path(id);return fs.existsSync(file)?file:null;}return thumbnail(id);},nativeImage,delay:()=>canAccelerateIndex()?350:650,testMode:!!process.env.ASSET_TEST_MODE,onWork:()=>{if(win&&!win.isDestroyed())win.webContents.send('smart-work',smartIndex?.paused?'manual':smartIndex?.powerPause);},onUpdate:value=>{if(win&&!win.isDestroyed())win.webContents.send('smart-changed',value);}});
@@ -573,9 +575,9 @@ app.whenReady().then(async () => {
     if(op==='backup'){await flushWorkspaces();const chosen=await dialog.showSaveDialog(win,{title:'Back up library',defaultPath:path.join(app.getPath('documents'),'Canvas Pro Backup '+new Date().toISOString().slice(0,10)+'.canvaslibrary'),buttonLabel:'Back up'});if(chosen.canceled)return {cancelled:true};return workbench.backup(chosen.filePath);}
     throw Error('Unknown library tool.');
   });
-  ipcMain.handle('model-state',event=>{trusted(event);return localModel.state();});
-  ipcMain.handle('model-download',event=>{trusted(event);return localModel.download();});
-  ipcMain.handle('model-cancel',event=>{trusted(event);return localModel.cancel();});
+  ipcMain.handle('model-state',(event,name)=>{trusted(event);return localModel.state(String(name||'clip'));});
+  ipcMain.handle('model-download',(event,name)=>{trusted(event);return localModel.download(String(name||'clip'));});
+  ipcMain.handle('model-cancel',(event,name)=>{trusted(event);return localModel.cancel(String(name||'clip'));});
   ipcMain.handle('copy-color',(event,value)=>{trusted(event);if(!/^#[a-f0-9]{6}$/i.test(value))throw Error('Invalid colour.');return clipboard.writeText(value);});
   ipcMain.handle('smart-state',event=>{trusted(event);return {...smartIndex.state(),idleOnly:workbench.pref('indexIdleOnly')!==false};});
   ipcMain.handle('smart-idle-policy',(event,value)=>{
@@ -586,6 +588,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('smart-pause',(event,value)=>{trusted(event);return (workbench.pref('indexPaused',!!value),smartIndex.pause(value));});
   ipcMain.handle('smart-search',(event,query,vector)=>{trusted(event);return smartIndex.search(String(query).slice(0,500),vector);});
+  ipcMain.handle('smart-caption',(event,id,text)=>{trusted(event);return smartIndex.caption(String(id),String(text||''));});
   ipcMain.handle('smart-next-work',event=>{trusted(event);return {...smartIndex.nextVisualWork(),delay:canAccelerateIndex()?250:650};});
   ipcMain.handle('smart-vector-skip',(event,id)=>{trusted(event);return smartIndex.deferVisual(id);});
   ipcMain.handle('smart-vector',(event,id,vector)=>{trusted(event);return smartIndex.put(id,{vector});});

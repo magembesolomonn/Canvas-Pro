@@ -328,6 +328,7 @@ function renderInspector() {
   const nameInput=field(a.name,'File name',name=>update({name}));
   nameInput.className='inspector-name-input';
   nameRow.append(nameInput);
+  if(a.smart?.caption)box.append(el('p','inspector-caption',a.smart.caption));
   box.append(inspectorPreview(a),similarButton,nameRow);
   // A file note is editable text that exists nowhere else, so it stays here.
   if(a.notes){

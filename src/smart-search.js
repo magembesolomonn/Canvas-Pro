@@ -19,7 +19,7 @@ const SmartSearch=(()=>{
        const item=pending.get(data.id);
        if(!item)return;
        pending.delete(data.id);
-       if(data.error)item.reject(Error(data.error));else item.resolve(data.vector);
+       if(data.error)item.reject(Error(data.error));else item.resolve(data);
        releaseIdleWorker();
      };
      worker.onerror=event=>{
@@ -79,7 +79,7 @@ const SmartSearch=(()=>{
        for(const id of work.ids){
          if(!enabled||workChanged)break;
          let vector;
-         try{vector=await call('image',{assetId:id});}
+         try{({vector}=await call('image',{assetId:id}));}
          catch(error){
            if(!enabled||workChanged)break;
            if(!worker)throw error;
@@ -122,7 +122,7 @@ const SmartSearch=(()=>{
   visualMode=true;visualQuery='Looking for images that match…';
   updateVisualButton();updateActivityLabel();
   try{
-   const vector=await call('text',{text:query});
+   const {vector}=await call('text',{text:query});
    if(!current())return;
    const ids=await api.smartSearch(query,vector);
    if(!current())return;
@@ -167,7 +167,7 @@ const SmartSearch=(()=>{
    visualMode=true;visualQuery='Visual results loading…';
    updateVisualButton();updateActivityLabel();
    try{
-     const vector=await call('text',{text:query});
+     const {vector}=await call('text',{text:query});
      if(!current())return;
      const ids=await api.smartSearch(query,vector);
      if(!current())return;
@@ -200,18 +200,56 @@ const SmartSearch=(()=>{
  }
  function init(){
  const visualButton=$('#visual-search');visualButton.append(glyph('sparkles'));visualButton.onclick=toggleVisualSearch;
- const box=el('section','smart-settings');const description=el('p','hint','On-device text recognition, automatic tags and colour palettes. Visual search uses an optional 156 MB CLIP model download; your files and queries stay on this Mac.');const progress=el('p','hint');progress.id='smart-index-progress';const modelStatus=el('p','hint');modelStatus.id='smart-search-status';modelStatus.textContent=status;const download=action('Download local visual model',async()=>{download.disabled=true;try{const model=await api.modelDownload();if(model.ready){enabled=true;localStorage.setItem('local-ai-enabled','true');start();}}finally{download.disabled=false;}});const cancel=action('Cancel download',()=>api.modelCancel());cancel.hidden=true;const pause=action('Pause background indexing',async()=>{const state=await api.smartState(),next=await api.smartPause(!state.paused);pause.textContent=next.paused?'Resume background indexing':'Pause background indexing';});const idle=el('input');idle.type='checkbox';
+ const box=el('section','smart-settings');
+ const progress=el('p','hint');progress.id='smart-index-progress';
+ const modelStatus=el('p','hint');modelStatus.id='smart-search-status';
+ const pause=action('Pause background indexing',async()=>{const state=await api.smartState(),next=await api.smartPause(!state.paused);pause.textContent=next.paused?'Resume background indexing':'Pause background indexing';});
+ const idle=el('input');idle.type='checkbox';
  const idleLabel=el('label','ai-idle-policy');idleLabel.append(idle,el('span','','Only while idle and plugged in'));
  idle.onchange=()=>safe(async()=>{lastIndexState=await api.smartIdlePolicy(idle.checked);updateActivityLabel();});
  const retry=action('Retry failed indexing',async()=>{await api.workbench('retry-index');});
- // Rows, not a wall of prose: a title, a value, and the actions in one line.
- const row=(title,value)=>{const r=el('div','settings-row settings-row-plain');const copy=el('span','settings-copy');copy.append(el('strong','',title),el('small','settings-subtle',value));r.append(copy);return r;};
  const statusRow=el('div','settings-row settings-row-plain');const statusCopy=el('span','settings-copy');statusCopy.append(el('strong','','Status'));statusRow.append(statusCopy);
  const actions=el('div','settings-row settings-row-actions settings-ai-actions');
- actions.append(download,cancel,pause,retry);
- box.append(row('On-device analysis','Text recognition, automatic tags and colour palettes. Visual search uses an optional 156 MB CLIP model; your files and queries stay on this Mac.'),statusRow,progress,modelStatus,actions,idleLabel);$('#settings-local-intelligence').append(box);
+ actions.append(pause,retry);
+ // The models the app can use. Each one says what it is for, and each is
+ // downloaded on its own.
+ const MODELS=[
+  {name:'clip',title:'Visual similarity',size:'156 MB',icon:'sparkles',
+   detail:'Finds images that look like the one you picked, and answers a picture search.'},
+  {name:'florence-2',title:'Description',size:'266 MB',icon:'text',
+   detail:'Writes one sentence about each picture: names your files, suggests tags, and makes pictures findable by what they show.'},
+  {name:'text',title:'Text understanding',size:'built into macOS',icon:'book',builtin:true,
+   detail:'Understands a whole sentence in your documents and notes, so you can search in your own words.'}];
+ const modelRows=new Map();
+ const modelsBox=el('div','settings-models');
+ const modelsLabel=el('div','settings-section-label','Models');
+ for(const model of MODELS){
+  const entry=el('div','settings-model');
+  const icon=el('span','settings-model-icon');
+  icon.append(glyph(model.icon));
+  const copy=el('span','settings-copy');
+  copy.append(el('strong','',model.title),el('small','settings-subtle',model.detail),el('small','settings-model-size',model.size));
+  const button=el('button','settings-button');
+  button.type='button';
+  button.onclick=()=>safe(async()=>{await api.modelDownload(model.name);});
+  if(model.builtin){button.textContent='Always available';button.disabled=true;button.classList.add('is-quiet');}
+  entry.append(icon,copy,button);
+  modelsBox.append(entry);
+  modelRows.set(model.name,{button,model});
+ }
+ const paintModel=state=>{
+  const entry=modelRows.get(state.name);
+  if(!entry)return;
+  const {button,model}=entry;
+  if(model.builtin){button.textContent='Always available';button.disabled=true;button.classList.add('is-quiet');return;}
+  if(state.state==='downloading'){button.textContent=Math.min(100,Math.round(state.bytes/Math.max(1,state.total)*100))+'%';button.disabled=true;return;}
+  button.disabled=!!state.ready;
+  button.textContent=state.ready?'Installed':state.state==='failed'?'Retry download':'Download';
+ };
+ Promise.all(MODELS.map(model=>api.modelState(model.name))).then(states=>states.forEach(paintModel));
+ box.append(modelsLabel,modelsBox,statusRow,progress,modelStatus,actions,idleLabel);$('#settings-local-intelligence').append(box);
  api.onSmartWork(wakeIndex);
- api.onModelProgress(model=>{download.disabled=model.state==='downloading';cancel.hidden=model.state!=='downloading';download.textContent=model.ready?'Verify / repair local model':'Download local visual model';updateStatus(model.state==='downloading'?'Downloading model · '+Math.round(model.bytes/model.total*100)+'%':model.error||status);});
+ api.onModelProgress(model=>{paintModel(model);updateStatus(model.state==='downloading'?('Downloading '+(model.model||model.name)+' · '+Math.round(model.bytes/Math.max(1,model.total)*100)+'%'):model.error||status);});
  api.onSmartChanged(({id,smart,name})=>{const a=assetById.get(id);if(!a)return;a.smart=smart;if(name&&name!==a.name){a.name=name;const card=mounted.get(id);const label=card?.querySelector('.card-name');if(label)label.textContent=name;card?.setAttribute('aria-label',name);}a.searchText=SmartCards.enrichSearch(a);if(SmartCards.isNote(a)){const card=mounted.get(id),surface=card?.querySelector('.card-surface');if(surface&&!surface.querySelector('.smart-note-card')){surface.querySelector('img,.file-placeholder')?.remove();surface.prepend(SmartCards.fileVisual(a));layoutDirty=true;scheduleGallery();}}if(selected===id&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]'))scheduleInspector();});
  const activity=action('',()=>SettingsUI.open('experimental'));
  activity.id='ai-activity';activity.append(glyph('sparkles'),el('span','ai-activity-label','AI activity'));
@@ -245,23 +283,22 @@ const SmartSearch=(()=>{
    return state&&(state.running||indexing)?4000:15000;
  }
  schedulePoll(750);
- setTimeout(()=>api.modelState().then(model=>{
-   download.textContent=model.ready?'Enable / verify local visual search':'Download local visual model';
+ setTimeout(()=>api.modelState('clip').then(model=>{
    if(enabled){if(model.ready)setTimeout(start,1500);else updateStatus('Local model download needed');}
  }).catch(()=>{}),500);
  }
  async function setEnabled(value){
   if(value===enabled)return enabled;
   if(!value){stop();return false;}
-  const model=await api.modelState();
+  const model=await api.modelState('clip');
   if(!model.ready){notify('Download the local model first.');return enabled;}
   enabled=true;localStorage.setItem('local-ai-enabled','true');start();updateActivityLabel();return enabled;
  }
  async function ensureVisualModel(){
-  const model=await api.modelState();
+  const model=await api.modelState('clip');
   if(model.ready)return true;
   notify('Downloading the local visual model…');
-  const next=await api.modelDownload();
+  const next=await api.modelDownload('clip');
   if(next&&next.ready){enabled=true;localStorage.setItem('local-ai-enabled','true');start();updateActivityLabel();}
   return !!(next&&next.ready);
  }
@@ -276,12 +313,33 @@ const SmartSearch=(()=>{
   for(let index=0;index<a.length;index++)sum+=a[index]*b[index];
   return sum;
  }
+ // A caption is one sentence about a picture, written by the description
+ // model. It is kept beside the file so its words can be found by a search,
+ // and it is what names the file and suggests its tags.
+ async function describe(asset){
+  if(!enabled){notify('Turn on local intelligence in Settings → Experimental first.');return '';}
+  const model=await api.modelState('florence-2');
+  if(!model.ready){notify('Download the description model in Settings → Experimental first.');return '';}
+  const {caption}=await call('caption',{assetId:asset.id});
+  const text=String(caption||'').trim();
+  if(!text)return '';
+  await api.smartCaption(asset.id,text);
+  const entry=assetById.get(asset.id);
+  if(entry){
+   entry.smart={...(entry.smart||{}),caption:text};
+   entry.searchText=SmartCards.enrichSearch(entry);
+  }
+  return text;
+ }
  // Tag suggestions come from the model on this Mac: the picture is compared
  // with the words, and the closest ones are offered. Nothing leaves the Mac.
- async function suggestTags(assetId,onTags){
+ async function suggestTags(asset,onTags){
   if(!enabled||!modelReady){onTags([],'Turn on local intelligence in Settings → Experimental to get tag suggestions.');return;}
-  const vector=await call('image',{assetId});
-  const candidates=[...new Set([...libraryTags(),...TAG_VOCABULARY])].filter(tag=>tag&&tag.length<=40).slice(0,180);
+  const {vector}=await call('image',{assetId:asset.id});
+  // The words the caption used are the best guesses the model has made about
+  // this picture, so they are the first candidates.
+  const described=String(asset.smart?.caption||'').toLowerCase().match(/[a-z]{3,}/g)?.slice(0,14)||[];
+  const candidates=[...new Set([...described,...libraryTags(),...TAG_VOCABULARY])].filter(tag=>tag&&tag.length<=40).slice(0,180);
   const vectors=await call('texts',{texts:candidates});
   const scored=candidates.map((tag,index)=>({tag,score:similarity(vector,vectors?.[index])}))
    .filter(item=>item.score>=0.2)
@@ -289,5 +347,5 @@ const SmartSearch=(()=>{
    .slice(0,10);
   onTags(scored.map(item=>item.tag));
  }
- return{init,schedule,includes,call,start,resultIds,setEnabled,ensureVisualModel,suggestTags,get enabled(){return enabled;},get visualModelReady(){return modelReady;}};
+ return{init,schedule,includes,call,start,resultIds,setEnabled,ensureVisualModel,suggestTags,describe,get enabled(){return enabled;},get visualModelReady(){return modelReady;}};
 })();

@@ -1,0 +1,84 @@
+{
+  "repository": "onnx-community/Florence-2-base-ft",
+  "revision": "main",
+  "files": [
+    {
+      "path": "config.json",
+      "size": 5432,
+      "hash": "f73f68ab97b370d4e70759c1be2967d891726ad8",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "generation_config.json",
+      "size": 292,
+      "hash": "44ad5ddf0872b609295be720feab64296f6bb238",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "preprocessor_config.json",
+      "size": 2673,
+      "hash": "f0262fff97911d278f7ae3b3447f04c74a3c032c",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "tokenizer.json",
+      "size": 2297961,
+      "hash": "c6919f318f277e660b557212ed1edaf28b037fc8",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "size": 197658,
+      "hash": "c6d6ca1e273fdccf972eeca8f0b75672f8ee575f",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "vocab.json",
+      "size": 1099884,
+      "hash": "94a2f4fd50e976bda926c700291522ea1a79323f",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "merges.txt",
+      "size": 456318,
+      "hash": "226b0752cac7789c48f0cb3ec53eda48b7be36cc",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "size": 146627,
+      "hash": "d748fe272a81974cb735e2d1d6821bb294566849",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "added_tokens.json",
+      "size": 22410,
+      "hash": "bb62c40f2753d671d3433f3fb6cee6634a76cbfc",
+      "algorithm": "git-sha1"
+    },
+    {
+      "path": "onnx/encoder_model_quantized.onnx",
+      "size": 43651493,
+      "hash": "f4ad7a68f1fb875d3bcf735ea14a7021b7ba7e83baf7cf10289881b4ed6d9b85",
+      "algorithm": "sha256"
+    },
+    {
+      "path": "onnx/decoder_model_merged_quantized.onnx",
+      "size": 98177697,
+      "hash": "f22f52f980c33df0efa15932c2f3db6d9d3595ce6387eca938b8cfe23dc4c641",
+      "algorithm": "sha256"
+    },
+    {
+      "path": "onnx/embed_tokens_quantized.onnx",
+      "size": 39390433,
+      "hash": "6b2258db1c8ee9b160576ccde3cd3814d83a2edaed0dd1c6ca9ff3c38fa62214",
+      "algorithm": "sha256"
+    },
+    {
+      "path": "onnx/vision_encoder_quantized.onnx",
+      "size": 93746540,
+      "hash": "3b79d54f23f666f731549db23cb070c35a979ce19cbd9720e90e67a78dc9768c",
+      "algorithm": "sha256"
+    }
+  ]
+}
