@@ -457,6 +457,17 @@ kbd {
   user-select: none;
   contain: layout style;
 }
+/* Pressing an item answers on the way down: the card settles under the
+   pointer at once, and springs back when the press ends. */
+@media (prefers-reduced-motion: no-preference) {
+  .card {
+    transition: scale 160ms var(--ease-out);
+  }
+  .card:active {
+    scale: 0.988;
+    transition-duration: 0s;
+  }
+}
 .card-surface {
   height: var(--surface-height, 150px);
   background: var(--surface-raised);
@@ -834,6 +845,36 @@ body.light-mode .inspector-empty-icon:before {
   gap: 10px;
   padding: 20px 14px 0;
   align-items: center;
+}
+/* The preview arrives as a material: it grows a little into place instead
+   of appearing flat. Reduced motion keeps a plain cross-fade. */
+@media (prefers-reduced-motion: no-preference) {
+  #preview:not([hidden]) .preview-body {
+    animation: preview-arrive 200ms var(--ease-out) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #preview:not([hidden]) .preview-body {
+    animation: preview-fade 160ms linear both;
+  }
+}
+@keyframes preview-arrive {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes preview-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .preview-arrow {
   border: 0;
@@ -4312,6 +4353,8 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 .recipe-title {
   margin: 0 0 10px;
   font: 500 clamp(24px, 3vw, 38px)/1.12 var(--app-font);
+  /* Tracking belongs to the size: a large title reads tighter. */
+  letter-spacing: -0.02em;
   text-wrap: balance;
 }
 .recipe-description {
@@ -4753,6 +4796,7 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 }
 .smart-preview-title {
   font: 500 clamp(21px, 2.2vw, 34px)/1.25 var(--app-font);
+  letter-spacing: -0.015em;
   text-align: center;
   margin: 0;
 }
@@ -4842,6 +4886,7 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 }
 .smart-reader-title {
   font: 500 clamp(24px, 2.6vw, 34px)/1.18 var(--app-font);
+  letter-spacing: -0.015em;
   margin: 0 0 16px;
   text-wrap: balance;
 }
@@ -4937,6 +4982,7 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 }
 .smart-note-paper > p {
   font: clamp(20px, 2.5vw, 34px)/1.6 var(--app-font);
+  letter-spacing: -0.015em;
   white-space: pre-wrap;
   margin: 20px 0;
 }

@@ -23,7 +23,7 @@
     "test:preferences": "electron tests/preferences-electron.cjs",
     "test:capture": "electron tests/capture-network-electron.cjs",
     "test:bookmarks": "electron tests/bookmark-workflows-electron.cjs",
-    "test:canvas": "electron tests/canvas-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/canvas-inspector-electron.cjs",
+    "test:canvas": "electron tests/canvas-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/canvas-inspector-electron.cjs && electron tests/canvas-momentum-electron.cjs",
     "test:libraries": "electron tests/library-switch-electron.cjs",
     "test:audit": "node --test tests/audit-regressions.test.cjs && electron tests/audit-missing-file-electron.cjs",
     "test:stress": "node --test tests/crash-stress.test.cjs && electron tests/stress-electron.cjs",
