@@ -166,7 +166,7 @@ const SmartCards=(()=>{
   hero.append(el('span','recipe-card-kind','Recipe'));
   const body=el('div','recipe-card-body');
   body.append(el('h3','recipe-card-title',i.title||a.name));
-  const meta=[runtime(d.prepTime),d.servings?'Serves '+d.servings:'',d.ingredients?.length?d.ingredients.length+' ingredients':''].filter(Boolean).join(' · ');
+  const meta=[runtime(d.prepTime),d.servings?(/serv/i.test(d.servings)?d.servings:'Serves '+d.servings):'',d.ingredients?.length?d.ingredients.length+' ingredients':''].filter(Boolean).join(' · ');
   if(meta)body.append(el('p','recipe-card-meta',meta));
   if(d.ingredients?.length){
    const list=el('ul','recipe-card-ingredients');
