@@ -50,6 +50,7 @@ function paintBookmarkVisual(node,a,info=a.captureMetadata?.linkPreview){
  if(node.dataset.version===version)return;
  node.dataset.version=version;node.dataset.url=a.url;node.replaceChildren();
  if(info?.type&&typeof SmartCards!=='undefined'){SmartCards.paint(node,a,info);return;}
+ if(typeof SmartCards!=='undefined'&&SmartCards.paintPending){SmartCards.paintPending(node,a);return;}
  let domain='Web link';try{domain=new URL(a.url).hostname.replace(/^www\./,'');}catch{}
  node.append(el('div','link-monogram',domain[0].toUpperCase()));
  if(info?.cover){const image=el('img','link-cover');image.alt=info.title||a.name;image.decoding='async';image.src='asset://link-cover/'+a.id+'?v='+info.updatedAt;image.onerror=()=>image.remove();node.append(image);}

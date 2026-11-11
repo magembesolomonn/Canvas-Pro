@@ -103,6 +103,27 @@ body.hide-inspector {
 body.hide-inspector .inspector {
   display: none;
 }
+/* Under this width the details panel would take a third of the window and
+   leave the gallery one narrow column, so it steps aside: the gallery takes
+   the room, and the panel comes back as a sheet over it. */
+@media (max-width: 880px) {
+  body.narrow-inspector {
+    grid-template-columns: var(--sidebar) minmax(0, 1fr) 0px;
+  }
+  body.narrow-inspector > #inspector {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(320px, 86vw);
+    z-index: 34;
+    display: none;
+    border-left: 1px solid var(--line);
+    background: var(--surface-panel);
+    box-shadow: -20px 0 48px #00000045;
+  }
+  body.narrow-inspector.narrow-panel-open > #inspector {
+    display: block;
+  }
+}
 button,
 input,
 textarea,
@@ -389,6 +410,17 @@ h1 {
   padding: 0;
   font-size: 11px;
   line-height: 16px;
+}
+/* On a touch screen the field needs a finger-sized target, not a hairline. */
+@media (pointer: coarse) {
+  .search {
+    min-height: 30px;
+  }
+  .search input {
+    height: 28px;
+    line-height: 28px;
+    font-size: 13px;
+  }
 }
 .search kbd {
   font-size: 9px;
@@ -1390,11 +1422,23 @@ header > div:has(h1) {
   }
   .filter-bar .search {
     flex: 0 1 230px;
-    min-width: 100px;
+    /* A search box that shrinks to a few characters is not a search box.
+       The field keeps a usable width; the title gives up the room first. */
+    min-width: 132px;
   }
   .search input {
     width: 100%;
-    min-width: 0;
+    min-width: 64px;
+  }
+}
+@media (max-width: 700px) {
+  /* The item count is the first thing to go: the name of the view and the
+     search field matter more. */
+  .toolbar-count {
+    display: none;
+  }
+  .filter-bar h1 {
+    min-width: 48px;
   }
 }
 
@@ -1989,6 +2033,9 @@ dialog {
 /* Settings — a two-pane preferences window: searchable rail on the left,
    one focused pane on the right. */
 .settings-dialog {
+  /* The rail keeps its own width so the app's narrow-window rules cannot
+     squeeze it away. */
+  --settings-sidebar: 200px;
   width: min(920px, 94vw);
   height: min(664px, 88vh);
   max-width: none;
@@ -2015,7 +2062,11 @@ dialog {
 /* The Settings rail is the app sidebar: same width, same material, same
    icon column, same rhythm. */
 .settings-sidebar {
-  width: var(--sidebar);
+  /* The Settings rail has its own width. The app's --sidebar collapses to
+     nothing on a narrow window, and that must not reach into the dialog:
+     a one-pixel rail let the search field and the icons overlap the pane
+     title. */
+  width: var(--settings-sidebar, 200px);
   flex: none;
   display: flex;
   flex-direction: column;

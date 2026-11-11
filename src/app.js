@@ -496,7 +496,30 @@ if(importMenu){importMenu.addEventListener('click',event=>{if(event.target.close
 $('#gallery').addEventListener('scroll',()=>{stopHover();scheduleGallery();},{passive:true});new ResizeObserver(scheduleGallery).observe($('#gallery'));
 $('#zoom').oninput=()=>{stopHover();renderWindow();localStorage.setItem('tile-size',$('#zoom').value);};const savedSize=Number(localStorage.getItem('tile-size'));if(savedSize>=140&&savedSize<=360)$('#zoom').value=savedSize;
 $('#show-extension').onclick=()=>safe(()=>api.showExtension());
-$('#show-library').onclick=()=>safe(()=>api.showLibrary());$('#toggle-inspector').onclick=()=>{document.body.classList.toggle('hide-inspector');localStorage.setItem('hide-inspector',String(document.body.classList.contains('hide-inspector')));};if(localStorage.getItem('hide-inspector')==='true')document.body.classList.add('hide-inspector');
+$('#show-library').onclick=()=>safe(()=>api.showLibrary());
+// The details panel needs room. Under 880px it would take a third of the
+// window and leave the gallery one narrow column, so it steps aside and
+// returns as a sheet over the gallery instead of a column beside it.
+const narrowInspectorWidth=880;
+let narrowPanelOpen=false;
+function applyNarrowLayout(){
+ const narrow=innerWidth<=narrowInspectorWidth;
+ document.body.classList.toggle('narrow-inspector',narrow);
+ if(!narrow)narrowPanelOpen=false;
+ document.body.classList.toggle('narrow-panel-open',narrow&&narrowPanelOpen);
+}
+applyNarrowLayout();
+addEventListener('resize',applyNarrowLayout);
+$('#toggle-inspector').onclick=()=>{
+ if(document.body.classList.contains('narrow-inspector')){
+  narrowPanelOpen=!narrowPanelOpen;
+  document.body.classList.toggle('narrow-panel-open',narrowPanelOpen);
+  return;
+ }
+ document.body.classList.toggle('hide-inspector');
+ localStorage.setItem('hide-inspector',String(document.body.classList.contains('hide-inspector')));
+};
+if(localStorage.getItem('hide-inspector')==='true')document.body.classList.add('hide-inspector');
 $('#add-folder').onclick=()=>{$('#folder-dialog').returnValue='';$('#folder-name').value='';$('#folder-dialog').showModal();$('#folder-name').focus();};$('#folder-dialog').addEventListener('close',()=>{if($('#folder-dialog').returnValue==='create')safe(async()=>{await api.addFolder($('#folder-name').value);await refreshCurrent();const f=CanvasWorkspace.folderRecords.find(f=>f.name===$('#folder-name').value.trim());if(f)await WorkbenchUI.created('folder:'+f.id,'collection');});});
 $('#previous').replaceChildren(glyph('chevronLeft'));$('#next').replaceChildren(glyph('chevronRight'));$('#close-preview').onclick=closePreview;$('#previous').onclick=()=>move(-1);$('#next').onclick=()=>move(1);
 let trashingPreview=false;

@@ -145,7 +145,26 @@ const SmartCards=(()=>{
   if(photo)media.append(photo);
   else media.append(webFallback(a,i));
   const footer=el('div','smart-web-footer');
-  footer.append(el('strong','smart-web-title',i.title||a.name.replace(/\.(url|webloc)$/i,'')));
+  const domain=siteHost(a);
+  const title=i.title||a.name.replace(/\.(url|webloc)$/i,'');
+  // A link that never got a page title is named after its own address, so
+  // the title would only repeat the line underneath it.
+  if(title!==domain)footer.append(el('strong','smart-web-title',title));
+  const meta=el('div','smart-web-meta');
+  meta.append(faviconNode(a,i,'smart-web-favicon'),el('span','smart-web-domain',domain));
+  footer.append(meta);
+  node.append(media,footer);
+ }
+ // A link whose page has not answered yet keeps the card's shape: the site's
+ // own mark stands in for the picture and the address sits underneath, so a
+ // slow connection shows a calm card instead of a placeholder letter.
+ function paintPending(node,a){
+  node.className='link-visual smart-link smart-type-webpage smart-web-card';
+  node.replaceChildren();
+  const i={};
+  const media=el('div','smart-web-media');
+  media.append(webFallback(a,i));
+  const footer=el('div','smart-web-footer');
   const meta=el('div','smart-web-meta');
   meta.append(faviconNode(a,i,'smart-web-favicon'),el('span','smart-web-domain',siteHost(a)));
   footer.append(meta);
@@ -370,6 +389,6 @@ const SmartCards=(()=>{
  function isSelfContained(a){const t=type(a);return isSocialCard(a)||t==='webpage'||t==='article'||t==='recipe';}
  function enrichSearch(a){return [a.name,a.notes,a.url,...a.tags,...a.folders,...(a.smart?.tags||[]),a.smart?.excerpt,a.captureMetadata?.textExcerpt,a.captureMetadata?.pageTitle,a.captureMetadata?.author,JSON.stringify(info(a))].filter(Boolean).join(' ').toLowerCase();}
  function paletteSection(a){const sectionNode=section('Colours'),swatches=el('div','color-palette');const values=a.smart?.palette||[];if(!values.length){sectionNode.append(el('p','hint','Colours appear after local indexing finds a preview.'));const link=el('button','hint-link','Turn on local indexing');link.onclick=()=>safe(()=>SettingsUI.open('experimental'));sectionNode.append(link);return sectionNode;}for(const item of values){const button=el('button','color-swatch');button.style.backgroundColor=item.hex;button.title=item.hex+' · '+item.name;button.setAttribute('aria-label','Find files with '+item.hex);button.title+=' · Click to find matching colours · Option-click to copy';button.onclick=e=>e.altKey?safe(async()=>{await api.copyColor(item.hex);notify(item.hex+' copied');}):safe(()=>WorkbenchUI.findColor(item.hex));swatches.append(button);}sectionNode.append(swatches);return sectionNode;}
- return{type,ratio,isSocialCard,isSelfContained,paint,art,fileVisual,isNote,mount,mountNote,enrichSearch,paletteSection};
+ return{type,ratio,isSocialCard,isSelfContained,paint,paintPending,art,fileVisual,isNote,mount,mountNote,enrichSearch,paletteSection};
 })();
 function mountBookmark(a){return SmartCards.mount(a);}
