@@ -6,6 +6,6 @@ function contextTemplate({assets,folders=[],canvases=[],currentCollection=null,p
  menu.push({type:'separator'},{id:'copy',label:many?'Copy Files':'Copy File',click:send('copy')},{id:'export',label:many?'Export Copies…':'Export Copy…',click:send('export')});
  if(platform==='darwin'&&paths.length===assets.length)menu.push({id:'share',label:'Share',role:'shareMenu',sharingItem:{filePaths:paths}});
  if(!many){menu.push({id:'reveal',label:'Show in Finder',click:send('reveal')},{id:'copy-path',label:'Copy Path',click:send('copy-path')});if(/^https?:\/\//i.test(assets[0].url||''))menu.push({id:'source',label:'Open Source in Browser',click:send('source')},{id:'copy-source',label:'Copy Source URL',click:send('copy-source')});}
- menu.push({type:'separator'});if(trashed)menu.push({id:'restore',label:many?'Restore Files':'Restore File',click:send('restore')},{id:'delete-permanently',label:'Delete Permanently…',click:send('delete-permanently')});else menu.push({id:'trash',label:'Move to Trash',click:send('trash')});return menu;
+ menu.push({type:'separator'});if(trashed)menu.push(...(assets.every(a=>a.missing)?[{label:'Original Missing in Finder',enabled:false}]:[{id:'restore',label:many?'Restore Files':'Restore File',click:send('restore')}]),{id:'delete-permanently',label:'Delete Permanently…',click:send('delete-permanently')});else menu.push({id:'trash',label:'Move to Trash',click:send('trash')});return menu;
 }
 module.exports={contextTemplate};

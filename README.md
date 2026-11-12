@@ -22,6 +22,7 @@ npm start
 - **Folder ↓:** recursively import a folder. Hidden entries and symbolic links inside folders are skipped.
 - **Drag and drop:** drop files or folders onto the library.
 - **⌘C / Copy file:** copy the selected managed original as a real macOS file, ready to paste into Finder or another app.
+- **Drag a card out:** Finder and other apps receive the managed original file, never the thumbnail.
 - **⌘V:** paste files copied in Finder or an image copied to the clipboard. Text inputs retain normal paste behavior.
 - **Space:** open or close a preview of the selected file.
 - **Arrow keys:** move through the current filtered and sorted list, including while the preview is open. Up/down step one item, rather than one visual masonry row.
@@ -32,9 +33,9 @@ npm start
 
 All file types can be imported. Built-in previews cover browser-supported images, audio, videos, and PDFs. Actual playback depends on codec support. macOS Quick Look provides thumbnails for additional formats when a suitable system provider is installed. Proprietary design files may have no preview; the app displays their extension and keeps their original bytes. It does not edit design documents.
 
-Imports copy originals, never move source files. SHA-256 detects exact duplicates. Importing a duplicate into another collection adds the existing item to that collection. Tags, collection memberships, names, notes, source URL, ratings and Trash state are stored in SQLite. Favourites means a rating of four or five stars. Renaming changes the display name; the managed original retains its storage identifier.
+Imports copy originals, never move source files. SHA-256 detects exact duplicates. Importing a duplicate into another collection adds the existing item to that collection. Tags, collection memberships, names, notes, source URL, ratings and Trash state are stored in SQLite. Favourites means a rating of four or five stars. Renaming changes the display name; the managed original retains its storage identifier. If a managed original is deleted in Finder, its item moves to Trash automatically; putting the file back in `originals/` restores it.
 
-The library is in Electron's application-data directory (normally `~/Library/Application Support/Asset Library/Library`). Use **Library on this Mac** to find the actual location. It contains `originals/`, `thumbnails/`, and `library.sqlite`. Quit the app before copying the entire Library folder as a backup. Never edit the managed originals or database directly. **Export copy** saves an individual original to a chosen location. Trash is reversible; there is no permanent-delete operation yet.
+The library is in Electron's application-data directory (normally `~/Library/Application Support/Asset Library/Library`). Use **Library on this Mac** to find the actual location. It contains `originals/`, `thumbnails/`, and `library.sqlite`. Quit the app before copying the entire Library folder as a backup. Never edit the managed originals or database directly. **Export copy** saves an individual original to a chosen location. Trash is reversible; **Delete Permanently** removes the item and its managed files.
 
 ## Finding files
 

@@ -19,6 +19,10 @@ class Library {
       CREATE TABLE IF NOT EXISTS asset_analysis(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,summary TEXT NOT NULL DEFAULT '{}',text TEXT NOT NULL DEFAULT '',vector BLOB,model TEXT,version INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS aspect_ratios (id TEXT PRIMARY KEY REFERENCES assets(id), ratio REAL NOT NULL);`);
     const columns=this.db.prepare('PRAGMA table_info(assets)').all();if(!columns.some(c=>c.name==='favorite')){this.db.exec('ALTER TABLE assets ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0; UPDATE assets SET favorite=1 WHERE rating>=4');}
+    // A managed original can disappear when someone deletes it in Finder. The
+    // record moves to Trash and remembers why, so it can return if the file is
+    // put back. This is separate from a file the person moved to Trash here.
+    if(!this.db.prepare('PRAGMA table_info(assets)').all().some(c=>c.name==='missing'))this.db.exec('ALTER TABLE assets ADD COLUMN missing INTEGER NOT NULL DEFAULT 0');
     if(!this.db.prepare('PRAGMA table_info(folders)').all().some(c=>c.name==='id'))this.db.exec('ALTER TABLE folders ADD COLUMN id TEXT');for(const folder of this.db.prepare('SELECT name FROM folders WHERE id IS NULL').all())this.db.prepare('UPDATE folders SET id=? WHERE name=?').run(crypto.randomUUID(),folder.name);this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS folders_id ON folders(id)');
     // The Movies tracker and the RSS reader were removed. Their tables are
     // dropped so existing libraries do not keep orphaned data around.
@@ -101,7 +105,35 @@ class Library {
     }
   }
   asset(id) { const a = this.assetStatement.get(id); if (!a) throw new Error('Asset not found'); return a; }
-  file(id) { const stored=this.asset(id).stored,base=path.resolve(this.root,'originals'),file=path.resolve(this.root,stored);if(!file.startsWith(base+path.sep))throw new Error('The original has an unsafe file location.');const real=fs.realpathSync(file),realBase=fs.realpathSync(base);if(!real.startsWith(realBase+path.sep))throw new Error('The original points outside this library.');return real; }
+  file(id) {
+    const stored=this.asset(id).stored,base=path.resolve(this.root,'originals'),file=path.resolve(this.root,stored);
+    if(!file.startsWith(base+path.sep))throw new Error('The original has an unsafe file location.');
+    let real;
+    try{real=fs.realpathSync(file);}
+    catch(error){
+      if(error.code==='ENOENT')throw new Error('The original file is missing from this library. It may have been deleted in Finder.');
+      throw error;
+    }
+    const realBase=fs.realpathSync(base);if(!real.startsWith(realBase+path.sep))throw new Error('The original points outside this library.');return real;
+  }
+  // Called by the originals watcher. A file deleted in Finder leaves the
+  // library: the item goes to Trash, but remembers that it was the file that
+  // vanished rather than a choice made here. A file that comes back is
+  // restored automatically, so restoring from the macOS Trash is enough.
+  markMissing(id) {
+    const a=this.asset(id);
+    if(a.trash||a.missing||this.deleting.has(id))return false;
+    this.db.prepare('UPDATE assets SET trash=1,missing=1 WHERE id=?').run(id);
+    this.onAssetChanged?.(id);
+    return true;
+  }
+  markPresent(id) {
+    const a=this.asset(id);
+    if(!a.missing)return false;
+    this.db.prepare('UPDATE assets SET trash=0,missing=0 WHERE id=?').run(id);
+    this.onAssetChanged?.(id);
+    return true;
+  }
   async importFile(source, folder, {signal} = {}) {
     signal?.throwIfAborted();
     const destination=folder?this.db.prepare('SELECT id FROM folders WHERE name=?').get(folder):null;
@@ -123,11 +155,20 @@ class Library {
       signal?.throwIfAborted();
       const digest = hash.digest('hex');
       if(destination)folder=this.db.prepare('SELECT name FROM folders WHERE id=?').get(destination.id)?.name||null;
-      const exists = this.db.prepare('SELECT id, folders, trash FROM assets WHERE hash=?').get(digest);
+      const exists = this.db.prepare('SELECT id, stored, folders, trash, missing FROM assets WHERE hash=?').get(digest);
       if (exists) {
         if (this.deleting.has(exists.id)) throw new Error('This file is being deleted. Try importing it again afterwards.');
+        // Importing the same file again is a way to put a managed original back
+        // after it was deleted in Finder. The bytes are already verified here,
+        // so link them into place before restoring the record.
+        if (exists.missing) {
+          const target=path.join(this.root, exists.stored);
+          try { await fs.promises.link(dest, target); }
+          catch (error) { if (error.code !== 'EEXIST') throw error; }
+          this.markPresent(exists.id);
+        }
         const changes = {};
-        if (exists.trash) changes.trash = false;
+        if (exists.trash && !exists.missing) changes.trash = false;
         if (folder) changes.folders = [...JSON.parse(exists.folders), folder];
         this.update(exists.id, changes);
         return { duplicate: exists.id };
@@ -148,8 +189,9 @@ class Library {
   }
 
   update(id, changes) {
-    this.asset(id);
+    const current=this.asset(id);
     if(this.deleting.has(id))throw new Error('This file is being permanently deleted.');
+    if('trash' in changes&&!changes.trash&&current.missing)throw new Error('The original file is missing from this library. Put it back in Finder before restoring this item.');
     const fields = []; const values = [];
     for (const key of ['name', 'notes', 'url', 'rating', 'favorite', 'trash', 'tags', 'folders']) {
       if (!(key in changes)) continue;

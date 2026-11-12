@@ -26,8 +26,11 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   // Capture the native drag instead of opening a real one. The app must hand
   // over the original file, never a thumbnail or the card's preview image.
+  // The icon lookup is deliberately left unresolved: the drag must start
+  // immediately rather than waiting for an asynchronous icon.
   let captured = null;
   win.webContents.startDrag = options => { captured = options; };
+  app.getFileIcon = () => new Promise(() => {});
   const point = await run(`(() => {
     const rect = document.querySelector('.card[data-id="${id}"]').getBoundingClientRect();
     return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
@@ -42,8 +45,9 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   await sleep(700);
 
   assert.ok(captured, 'dragging a card out did not start a native drag');
-  assert.deepEqual(captured.items.map(item => item.filePath), [original]);
-  assert.ok(captured.items[0].icon, 'the native drag has no file icon');
+  assert.equal(captured.file, original);
+  assert.deepEqual(captured.files, [original]);
+  assert.ok(captured.icon && !captured.icon.isEmpty(), 'the native drag has no file icon');
   console.log('DRAG_OUT_ORIGINAL_OK');
 
   // Option-drag is the in-app gesture: it carries the library ids and does not

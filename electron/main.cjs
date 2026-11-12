@@ -22,6 +22,7 @@ const {contextTemplate}=require('./file-menu.cjs');
 const {ImportQueue}=require('./import-queue.cjs');
 const {Workbench}=require('./workbench.cjs');
 const {HealthService}=require('./health-service.cjs');
+const {createOriginalsWatch}=require('./originals-watch.cjs');
 app.setName(process.env.CANVAS_PROTOTYPE?'Canvas Pro Prototype':'Canvas Pro');
 const legacyData=path.join(app.getPath('appData'),'Asset Library');
 if(fs.existsSync(path.join(legacyData,'Library/library.sqlite')))app.setPath('userData',legacyData);
@@ -31,7 +32,7 @@ if (process.env.AGAGWU_DATA_DIR) {
   app.setPath('userData', process.env.AGAGWU_DATA_DIR);
 }
 if(!process.env.ASSET_TEST_MODE&&!app.requestSingleInstanceLock()){app.quit();return;}
-let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench;
+let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,originalsWatch;
 let notesStore;
 const getNotesStore=()=>notesStore??=new (require('./notes-store.cjs').NotesStore)(library.db);
 let pendingLibrarySwitch=null;
@@ -290,6 +291,8 @@ app.whenReady().then(async () => {
   if(!process.env.ASSET_TEST_MODE&&(savedLibrary?.root!==libraryRoot||savedLibrary.recent[0]!==libraryRoot))locations.remember(libraryRoot);
   library = new Library(libraryRoot);
   workbench=new Workbench(library);
+  originalsWatch=createOriginalsWatch({library,onChange:ids=>{if(win&&!win.isDestroyed())win.webContents.send('library-changed',ids);}});
+  if(process.env.ASSET_TEST_MODE)global.originalsWatch=originalsWatch;
   let switchingLibrary=false;
   async function changeLibrary(mode){if(switchingLibrary)return;switchingLibrary=true;try{await flushWorkspaces();const target=await chooseLibrary(mode);if(!target||target===library.root)return;pendingLibrarySwitch=()=>{locations.remember(target);app.relaunch();};app.quit();}catch(error){dialog.showErrorBox('Could not switch library',error.message);}finally{switchingLibrary=false;}}
   ipcMain.handle('library-location',event=>{trusted(event);return ({root:library.root,name:path.basename(library.root).replace(/\.canvaslibrary$/i,''),recent:locations.read().recent||[]});});
@@ -704,14 +707,51 @@ app.whenReady().then(async () => {
     const {width,height}=image.getSize();
     return width&&height?{width,height}:null;
   });
-  ipcMain.on('visible-assets', (_,ids) => { if(Array.isArray(ids)&&ids.length<=300){setVisibleThumbnails(ids);mediaCache.setVisible(ids);bookmarks.setVisible(ids);} });
-  ipcMain.on('drag-file', async(event,value)=>{
+  ipcMain.on('visible-assets', (_,ids) => { if(Array.isArray(ids)&&ids.length<=300){setVisibleThumbnails(ids);mediaCache.setVisible(ids);bookmarks.setVisible(ids);prepareDragIcons(ids);} });
+  // The icon must already exist when the drag starts: macOS ends the drag
+  // session as soon as the dragstart event returns, so an await here would
+  // leave nothing to drag. The renderer asks for an icon on pointer-down and
+  // the visible cards are prepared as they appear; the app icon is the
+  // immediate fallback if neither has finished yet.
+  let dragFallbackIcon=null;
+  function fallbackDragIcon(){
+    if(dragFallbackIcon)return dragFallbackIcon;
+    for(const file of [path.join(process.resourcesPath,'AssetLibrary.icns'),path.join(app.getAppPath(),'build/AssetLibrary.icns')]){
+      const image=nativeImage.createFromPath(file);
+      if(!image.isEmpty()){dragFallbackIcon=image;return image;}
+    }
+    // macOS requires a non-empty image. A transparent pixel is still a valid
+    // drag image, though the app icon is normally found first.
+    dragFallbackIcon=nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==','base64'));
+    return dragFallbackIcon;
+  }
+  const dragIcons=new Map(),dragIconPending=new Set();
+  function dragIcon(file,ext){
+    if(dragIcons.has(ext))return dragIcons.get(ext);
+    const icon=fallbackDragIcon();
+    dragIcons.set(ext,icon);
+    app.getFileIcon(file,{size:'normal'}).then(found=>{if(!found.isEmpty())dragIcons.set(ext,found);}).catch(()=>{});
+    return icon;
+  }
+  function prepareDragIcons(ids){
+    for(const id of ids){
+      if(typeof id!=='string')continue;
+      let asset,file;
+      try{asset=library.asset(id);if(asset.trash||dragIcons.has(asset.ext)||dragIconPending.has(asset.ext))continue;file=library.file(id);}catch{continue;}
+      dragIconPending.add(asset.ext);
+      app.getFileIcon(file,{size:'normal'}).then(icon=>{if(!icon.isEmpty())dragIcons.set(asset.ext,icon);}).catch(()=>{}).finally(()=>dragIconPending.delete(asset.ext));
+    }
+  }
+  ipcMain.on('prepare-drag',(_,ids)=>{if(Array.isArray(ids)&&ids.length<=100)prepareDragIcons(ids);});
+  ipcMain.on('drag-file', (event,value)=>{
     try {
       const ids=Array.isArray(value)?value:[value];
-      // Always hand over the original file, never the thumbnail.
-      const files=checkedAssets(ids).map(a=>library.file(a.id));
-      const icon=await app.getFileIcon(files[0],{size:'normal'});
-      event.sender.startDrag({items:files.map(filePath=>({filePath,icon}))});
+      // Always hand over the original files, never the thumbnails.
+      const records=checkedAssets(ids);
+      const files=records.map(a=>library.file(a.id));
+      if(!files.length)return;
+      const icon=dragIcons.get(records[0].ext)||dragIcon(files[0],records[0].ext);
+      event.sender.startDrag({file:files[0],files,icon});
     }catch(error){console.error('Drag failed:',error.message);}
   });
   ipcMain.handle('open-link', (_,id) => {const url=new URL(library.asset(id).url);if(['http:','https:'].includes(url.protocol))return shell.openExternal(url.href);});
@@ -759,6 +799,15 @@ app.whenReady().then(async () => {
     {label:'Edit',submenu:[{label:'Undo',accelerator:'CmdOrCtrl+Z',click:()=>win?.webContents.send('history-command',false)},{label:'Redo',accelerator:'CmdOrCtrl+Shift+Z',click:()=>win?.webContents.send('history-command',true)},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]}, { role: 'viewMenu' }, { role: 'windowMenu' }
   ]));
   createWindow();
+  setImmediate(()=>originalsWatch.scan());
+  let lastFocusScan=0;
+  app.on('browser-window-focus',()=>{
+    const now=Date.now();
+    if(now-lastFocusScan<4000)return;
+    lastFocusScan=now;
+    originalsWatch.scan();
+  });
+  powerMonitor.on('resume',()=>originalsWatch.scan());
   const bridgeDirectory=(process.env.ASSET_TEST_MODE||process.env.CANVAS_PROTOTYPE)?path.join(app.getPath('userData'),'Bridge'):path.join(app.getPath('appData'),'Canvas Pro/Bridge');
   captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>{if(win&&!win.isDestroyed())win.webContents.send('library-changed',ids);},onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);}});
   try{await captureBridge.start();}catch(e){console.error('Browser capture bridge:',e.message);}
@@ -775,7 +824,7 @@ let shutdownStarted=false,shutdownComplete=false;
 app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;
-  flushWorkspaces().then(()=>Promise.allSettled([bookmarks?.close(),webPreview?.close(),importQueue?.close(),captureBridge?.close(),smartIndex?.close(),localModel?.close(),workbench?.close(),healthService?.cancel(),mediaCache?.cancelAndDrain([...mediaCache.pending.keys()])])).then(()=>{pendingLibrarySwitch?.();pendingLibrarySwitch=null;shutdownComplete=true;app.quit();}).catch(error=>{shutdownStarted=false;dialog.showErrorBox('Workspace could not be saved',error.message);});
+  flushWorkspaces().then(()=>Promise.allSettled([originalsWatch?.close(),bookmarks?.close(),webPreview?.close(),importQueue?.close(),captureBridge?.close(),smartIndex?.close(),localModel?.close(),workbench?.close(),healthService?.cancel(),mediaCache?.cancelAndDrain([...mediaCache.pending.keys()])])).then(()=>{pendingLibrarySwitch?.();pendingLibrarySwitch=null;shutdownComplete=true;app.quit();}).catch(error=>{shutdownStarted=false;dialog.showErrorBox('Workspace could not be saved',error.message);});
 });
 app.on('will-quit', () => {library?.close();});
 module.exports = { importBuffer, importURL };

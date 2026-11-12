@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld('library', {
   imageSize: id => ipcRenderer.invoke('image-size', id),
   visibleAssets: ids => ipcRenderer.send('visible-assets',ids),
   startDrag: id => ipcRenderer.send('drag-file',id),
+  prepareDrag: ids => ipcRenderer.send('prepare-drag',ids),
   openLink: id => ipcRenderer.invoke('open-link',id),
   list: () => ipcRenderer.invoke('list'),
   update: (id, changes) => ipcRenderer.invoke('update', id, changes),
