@@ -256,10 +256,11 @@ const SmartSearch=(()=>{
  api.onSmartWork(wakeIndex);
  api.onModelProgress(model=>{paintModel(model);updateStatus(model.state==='downloading'?('Downloading '+(model.model||model.name)+' · '+Math.round(model.bytes/Math.max(1,model.total)*100)+'%'):model.error||status);});
  api.onSmartChanged(({id,smart,name})=>{const a=assetById.get(id);if(!a)return;a.smart=smart;if(name&&name!==a.name){a.name=name;const card=mounted.get(id);const label=card?.querySelector('.card-name');if(label)label.textContent=name;card?.setAttribute('aria-label',name);}a.searchText=SmartCards.enrichSearch(a);if(SmartCards.isNote(a)){const card=mounted.get(id),surface=card?.querySelector('.card-surface');if(surface&&!surface.querySelector('.smart-note-card')){surface.querySelector('img,.file-placeholder')?.remove();surface.prepend(SmartCards.fileVisual(a));layoutDirty=true;scheduleGallery();}}if(selected===id&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]'))scheduleInspector();});
- const activity=action('',()=>SettingsUI.open('experimental'));
+ // The index status lives with the rest of the local intelligence settings,
+ // not in the sidebar.
+ const activity=el('div','settings-row ai-activity-row');
  activity.id='ai-activity';activity.append(glyph('sparkles'),el('span','ai-activity-label','AI activity'));
- // The footer carries one message. The index status belongs in the sidebar.
- $('.sidebar-bottom').prepend(activity);
+ box.append(activity);
  let polling=false,lastPoll=0;
  async function poll(){
    if(polling||document.hidden||(!$('#settings-dialog').open&&Date.now()-lastPoll<10000))return;

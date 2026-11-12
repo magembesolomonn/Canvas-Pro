@@ -282,7 +282,8 @@ function appearanceState(){
 function applyAppearanceWindow(){
  if(!win||win.isDestroyed())return;
  const state=appearanceState();
- win.setBackgroundColor(state.dark?'#1a1a1a':'#f4f4f6');
+ // The window is see-through: the app paints its own rounded shape inside it.
+ win.setBackgroundColor('#00000000');
  win.webContents.send('appearance-changed',state);
 }
 loadAppearancePrefs();
@@ -314,7 +315,7 @@ function flushLibraryChanges(){
 }
 function createWindow() {
   const appearance=appearanceState();
-  win = new BrowserWindow({ width: 1480, height: 940, minWidth: 960, minHeight: 640, title: 'Canvas Pro', backgroundColor: appearance.dark?'#1a1a1a':'#f4f4f6', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  win = new BrowserWindow({ width: 1480, height: 940, minWidth: 960, minHeight: 640, title: 'Canvas Pro', backgroundColor: '#00000000', transparent: true, titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
   previewZoomActive=false;
   win.webContents.on('before-input-event',(_event,input)=>{
     win.webContents.setIgnoreMenuShortcuts(previewZoomActive&&(input.meta||input.control)&&['+','=','-','0'].includes(input.key));

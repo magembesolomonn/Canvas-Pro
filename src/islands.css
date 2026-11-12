@@ -34,15 +34,17 @@ body.light-mode {
 }
 
 body {
-  background: var(--surface-app);
-  padding: var(--island-gap);
-  /* The space between the pieces is carried by the islands themselves, so a
-     hidden panel gives its space back instead of leaving a gap behind. */
+  /* One dark surface across the whole window, with rounded corners. The
+     panels sit on top of it rather than dividing it up. */
+  background: var(--surface-canvas);
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 0;
   gap: 0;
   grid-template-columns: var(--sidebar) minmax(360px, 1fr) var(--inspector);
 }
 
-/* The two islands ------------------------------------------------------ */
+/* The two panels sit on the background ---------------------------------- */
 
 .sidebar,
 .inspector {
@@ -50,26 +52,22 @@ body {
   border: 1px solid var(--island-line);
   border-radius: var(--island-radius);
   box-shadow: inset 0 1px 0 #ffffff08;
+  margin: var(--island-gap);
 }
 
 .sidebar {
-  border-right: 1px solid var(--island-line);
-  margin-right: var(--island-gap);
   padding: 0 12px 12px;
   /* The island is solid: the window no longer has a translucent sidebar. */
   --sidebar-surface: var(--island-surface);
 }
 
 .inspector {
-  border-left: 1px solid var(--island-line);
-  margin-left: var(--island-gap);
   padding: 24px 18px;
 }
 
-/* The work area carries the canvas colour, so the board and the library
-   read as the same surface. */
+/* The work area is the background itself. */
 main {
-  background: var(--surface-canvas);
+  background: transparent;
 }
 
 /* Sidebar -------------------------------------------------------------- */
@@ -200,10 +198,15 @@ body.light-mode {
   --island-line: #00000012;
 }
 
-/* The app paints the light window paper white; the work area keeps the
-   canvas colour so it reads as the recessed surface it is. */
-body.light-mode main {
+/* Light: the window is the recessed grey and the panels are raised white. */
+body.light-mode {
+  --surface-canvas: #f5f5f7;
   background: var(--surface-canvas);
+}
+
+/* The work area shows the background instead of painting over it. */
+body.light-mode main {
+  background: transparent;
 }
 
 /* Both islands are raised white in light appearance. */

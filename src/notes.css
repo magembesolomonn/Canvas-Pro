@@ -764,3 +764,104 @@ body.light-mode .calendar-clear:hover,
 body.light-mode .calendar-now:hover {
   background: #0000000a;
 }
+
+/* --------------------------------------------------------------------------
+   Notion's language for the notes.
+   Bigger, calmer type; small corners on controls; square tables; one rhythm
+   between the blocks. Nothing here changes what a note can do.
+   -------------------------------------------------------------------------- */
+
+.notes-document {
+  --note-leading: 1.6;
+  --note-radius-control: 4px;
+  --note-radius-card: 8px;
+  --note-radius-panel: 8px;
+  --note-gap: 4px;
+}
+
+/* The page title keeps the app's own scale, with a firmer weight. */
+#note-title {
+  font: 700 clamp(22px, 2.4vw, 30px)/1.2 var(--app-font);
+  letter-spacing: -0.02em;
+}
+
+/* Body text keeps the app's own size; the reading rhythm is looser. */
+.note-block :is(textarea, input:not([type="checkbox"]):not([type="color"]):not([type="number"])) {
+  line-height: var(--note-leading);
+  letter-spacing: -0.003em;
+}
+
+.note-block {
+  margin: var(--note-gap) 0;
+}
+
+/* Paragraphs breathe; lists chunk together the way Notion's do. */
+.note-block-paragraph {
+  margin: 6px 0;
+}
+.note-block-bullet,
+.note-block-checklist,
+.note-block-toggle,
+.note-block-list {
+  margin: 1px 0;
+}
+.note-block-paragraph + .note-block-paragraph {
+  margin-top: 2px;
+}
+
+/* Controls are small-cornered and quiet. */
+.notes-document button,
+.notes-toolbar button,
+.notes-document input,
+.notes-document select {
+  border-radius: var(--note-radius-control);
+}
+.notes-document button {
+  font-weight: 500;
+  transition: background 110ms ease, color 110ms ease;
+}
+
+/* The slash menu is a plain panel with small items. */
+.note-block-menu {
+  border-radius: var(--note-radius-panel);
+  box-shadow: 0 8px 24px #00000038, 0 0 0 1px #ffffff0f;
+}
+.note-block-menu-list button {
+  border-radius: 5px;
+}
+
+/* Tables are square: Notion draws them with hairlines, not cards. */
+.notes-table-wrap table,
+.tracker-results table {
+  border-radius: 0;
+}
+.notes-table-wrap :is(th, td),
+.tracker-results :is(th, td) {
+  border-color: var(--line);
+}
+.notes-table-wrap th,
+.tracker-results th {
+  background: color-mix(in srgb, var(--panel) 92%, var(--text) 8%);
+  font-weight: 600;
+  font-size: 13px;
+}
+.notes-table-wrap :is(th, td),
+.tracker-results :is(th, td) {
+  padding: 7px 9px;
+}
+
+/* The record sheet and its lanes are forms, so they follow the control radius. */
+.note-tracker {
+  border-radius: var(--note-radius-card);
+}
+.tracker-lane {
+  border-radius: var(--note-radius-control);
+}
+
+/* Focus reads the way Notion's does: a blue ring, not a grey one. */
+.notes-document :is(textarea, input, select):focus-visible,
+.note-block-menu-search input:focus-visible {
+  outline: 2px solid #2383e2;
+  outline-offset: 1px;
+  border-color: transparent;
+}

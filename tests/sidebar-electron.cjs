@@ -41,9 +41,9 @@ function key(keyCode,modifiers=[]) {
   key('B',['meta']);
   await until(()=>run("document.body.classList.contains('hide-sidebar')"));
   await pause(240);
-  // The gallery keeps the window's own inset, and takes back the space the
-  // hidden sidebar was using.
-  assert.equal(await run("$('main').getBoundingClientRect().left"),10);
+  // The gallery takes back the space the hidden sidebar was using and runs to
+  // the edge of the window.
+  assert.equal(await run("$('main').getBoundingClientRect().left"),0);
   assert.equal(await run("$('.sidebar').inert"),true);
   assert.equal(await run("getComputedStyle($('.sidebar')).visibility"),'hidden');
   assert.equal(await run("document.activeElement.id"),'show-sidebar');

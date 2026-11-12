@@ -1,5 +1,5 @@
 :root {
-  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  --app-font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
   /* Motion: one curve, two lengths. */
   --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --duration-fast: 150ms;
@@ -87,6 +87,35 @@
 }
 * {
   box-sizing: border-box;
+}
+/* Inter, bundled so the app looks the same on every Mac. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/inter-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/inter-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/inter-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/inter-700.woff2") format("woff2");
 }
 body {
   margin: 0;
@@ -6180,8 +6209,8 @@ body.light-mode .raster-preview-zoom {
 #ai-activity {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
+  gap: 9px;
+  padding: 9px 0 2px;
   margin-bottom: 2px;
   border-radius: 6px;
   background: transparent;

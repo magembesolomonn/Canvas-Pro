@@ -79,10 +79,23 @@ async function openBlockMenu() {
     }))()`)));
     throw error;
   }
-  // The block menu opens when "/" is typed in an empty paragraph, so the
-  // caret goes into a paragraph first, the way a person would.
-  await run(`(()=>{const paragraphs=[...document.querySelectorAll('#note-blocks .note-block-paragraph textarea')];const empty=paragraphs.find(field=>!field.value)||paragraphs[0];if(!empty)throw Error('The note has no paragraph to type in.');empty.focus();empty.setSelectionRange(empty.value.length,empty.value.length);})()`);
-  await run("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'/',bubbles:true}))");
+  // The block menu opens when "/" is typed in an empty paragraph. If every
+  // paragraph has text, a new empty one is made first, the way a person would.
+  const emptyParagraph="!![...document.querySelectorAll('#note-blocks .note-block-paragraph textarea')].find(one=>!one.value)";
+  if(!(await run(emptyParagraph))){
+    await run(`(()=>{const paragraphs=[...document.querySelectorAll('#note-blocks .note-block-paragraph textarea')];const last=paragraphs[paragraphs.length-1];if(!last)return;last.focus();last.setSelectionRange(last.value.length,last.value.length);last.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));})()`);
+    await until(() => run(emptyParagraph));
+  }
+  // The editor redraws a block after it is saved, which can detach the
+  // element between finding it and typing in it, so the menu is opened with
+  // a couple of attempts.
+  let opened=false;
+  for(let attempt=0;attempt<4&&!opened;attempt++){
+    await run(`(()=>{const field=[...document.querySelectorAll('#note-blocks .note-block-paragraph textarea')].find(one=>!one.value&&one.isConnected);if(!field)return;field.focus();field.setSelectionRange(0,0);field.dispatchEvent(new KeyboardEvent('keydown',{key:'/',bubbles:true}));})()`);
+    opened=await run("!!$('.note-block-menu')");
+    if(!opened)await new Promise(r=>setTimeout(r,150));
+  }
+  assert.ok(opened,'The block menu did not open.');
   await until(() => run("!!$('.note-block-menu')"));
 }
 async function insertBlock(type) {
