@@ -35,6 +35,9 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     const rect = document.querySelector('.card[data-id="${id}"]').getBoundingClientRect();
     return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
   })()`);
+  app.focus({ steal: true });
+  win.focus();
+  await sleep(150);
   const send = (type, x, y) => win.webContents.sendInputEvent({ type, x, y, button: 'left', clickCount: 1 });
   send('mouseDown', point.x, point.y);
   for (let step = 1; step <= 6; step++) {
