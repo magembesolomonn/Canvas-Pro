@@ -17,8 +17,6 @@
   --island-line: #ffffff12;
   --island-radius: 12px;
   --island-gap: 10px;
-  /* A warm gold for the few places that name what is chosen. */
-  --accent-gold: #e0b97a;
   /* Tiles sit close together, the way a contact sheet does. */
   --gallery-gap: 8px;
   --gallery-pad: 12px;
@@ -68,9 +66,10 @@ body {
   padding: 24px 18px;
 }
 
-/* The middle column is the window itself, so it carries no fill. */
+/* The work area carries the canvas colour, so the board and the library
+   read as the same surface. */
 main {
-  background: transparent;
+  background: var(--surface-canvas);
 }
 
 /* Sidebar -------------------------------------------------------------- */
@@ -80,13 +79,9 @@ main {
   letter-spacing: 0.08em;
 }
 
-/* The chosen row is marked with a fill and a gold name. */
+/* The chosen row is marked with a fill, as before. */
 .sidebar nav button.active {
   background: #ffffff12;
-}
-
-.sidebar nav button.active > span:first-of-type {
-  color: var(--accent-gold);
 }
 
 .sidebar nav button .badge {
@@ -99,23 +94,9 @@ main {
   background: transparent;
 }
 
-/* A tile is a white sheet the picture rests on. */
+/* A tile is the picture itself: no frame around it. */
 .card-surface {
-  background: #ffffff;
-  border: 1px solid #ffffff;
   border-radius: var(--radius-card);
-  box-shadow: none;
-}
-
-.card-surface > img,
-.card-surface > video {
-  background: #ffffff;
-}
-
-/* The chosen tile gets the gold ring. */
-.card.selected .card-surface {
-  border-color: var(--accent-gold);
-  box-shadow: 0 0 0 2px var(--accent-gold);
 }
 
 /* The name rides on the picture, so the tiles stay tight. */
@@ -213,21 +194,26 @@ main {
 /* Light appearance ----------------------------------------------------- */
 
 body.light-mode {
-  /* Light keeps the app's own colours: a white window with the panels
-     recessed into it. */
-  --island-surface: #f5f5f7;
+  /* Light mirrors the dark theme: the panels are raised white and the work
+     area is recessed into the window behind them. */
+  --island-surface: #ffffff;
   --island-line: #00000012;
-  --accent-gold: #a97e2f;
+}
+
+/* The app paints the light window paper white; the work area keeps the
+   canvas colour so it reads as the recessed surface it is. */
+body.light-mode main {
+  background: var(--surface-canvas);
+}
+
+/* Both islands are raised white in light appearance. */
+body.light-mode .sidebar,
+body.light-mode .inspector {
+  background: var(--island-surface);
 }
 
 body.light-mode .card-surface {
-  background: #ffffff;
   border-color: #e6e4e2;
-}
-
-body.light-mode .card.selected .card-surface {
-  border-color: var(--accent-gold);
-  box-shadow: 0 0 0 2px var(--accent-gold);
 }
 
 body.light-mode .sidebar nav button.active {

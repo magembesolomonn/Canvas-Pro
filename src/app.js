@@ -478,9 +478,9 @@ function move(delta,extend=false,direction=''){
  revealGallerySelection();
  if(isPreview)renderPreview();
 }
-async function importing(operation){const canvasId=view==='canvas'?CanvasWorkspace.doc?.board.id:null;busy++;try{const r=await operation();if(r){if(r.ids?.length)await refreshCaptured(r.ids);else if(!Array.isArray(r.ids))await refreshCurrent();if(canvasId&&r.ids?.length)await CanvasWorkspace.imported(canvasId,r.ids);notify(`${r.imported} imported · ${r.duplicates} duplicates${r.skipped?' · '+r.skipped+' skipped':''}${r.errors.length?'\n'+r.errors.slice(0,3).join('\n'):''}`);}}finally{busy--;if(!busy)$('#status').textContent='All changes saved';}}
+async function importing(operation){const canvasId=view==='canvas'?CanvasWorkspace.doc?.board.id:null;busy++;try{const r=await operation();if(r){if(r.ids?.length)await refreshCaptured(r.ids);else if(!Array.isArray(r.ids))await refreshCurrent();if(canvasId&&r.ids?.length)await CanvasWorkspace.imported(canvasId,r.ids);notify(`${r.imported} imported · ${r.duplicates} duplicates${r.skipped?' · '+r.skipped+' skipped':''}${r.errors.length?'\n'+r.errors.slice(0,3).join('\n'):''}`);}}finally{busy--;}}
 function importDialog(directory=false){return safe(()=>importing(()=>api.importDialog(collection,directory)));}
-$('#import').onclick=()=>importDialog();$('#import-folder').onclick=()=>importDialog(true);api.onImport(()=>importDialog());api.onProgress(p=>$('#status').textContent=p?'Importing '+p.count+': '+p.name:busy?'Finishing import…':'All changes saved');
+$('#import').onclick=()=>importDialog();$('#import-folder').onclick=()=>importDialog(true);api.onImport(()=>importDialog());api.onProgress(p=>{if(p)notify('Importing '+p.count+': '+p.name);});
 $('.search').addEventListener('click',event=>{if(!event.target.closest('button,input'))$('#search').focus();});
 $('#search').oninput=()=>{ const gallery=$('#gallery'); const pos=gallery.scrollTop; pendingGalleryPosition={key:viewIdentity(),top:pos,count:visible.length,anchor:AssetLayout.anchorAt(layout,gallery.scrollTop,gallery.clientHeight)};$('#gallery').scrollTop=0;SmartSearch.schedule();render();};$('#type').onchange=()=>{ pendingGalleryPosition=null;$('#gallery').scrollTop=0;pagedCatalog?safe(()=>refreshCurrent()):render();};$('#sort').onchange=()=>{localStorage.setItem('sort-order',$('#sort').value);pendingGalleryPosition=null;$('#gallery').scrollTop=0;pagedCatalog?safe(()=>refreshCurrent()):render();};
 function syncMenu(menu,attr,value){if(!menu)return;for(const option of menu.querySelectorAll('['+attr+']'))option.setAttribute('aria-checked',String(option.getAttribute(attr)===String(value)));}
@@ -638,7 +638,7 @@ api.onLibraryChanged(ids=>{
    pendingCaptures.clear();needsFullRefresh=false;
    safe(pagedCatalog?refreshCurrent:full?refresh:()=>refreshCaptured(changed));
  },100);
-});api.onCaptureStatus(job=>{$('#status').textContent=job.state==='running'?'Browser capture '+job.done+'/'+job.total+(job.bytes?' · '+bytes(job.bytes):''):job.errors.length?'Capture finished with '+job.errors.length+' issue'+(job.errors.length===1?'':'s'):'Saved '+job.imported+' browser captures';});initContextUI();initReliabilityUI();initViewPreferences();initBookmarks();CanvasWorkspace.init();SmartSearch.init();WorkbenchUI.init();NotesWorkspace.init();SidebarUI.init();safe(loadLibraryPage);
+});api.onCaptureStatus(job=>{if(job.state==='running')return;notify(job.errors.length?'Capture finished with '+job.errors.length+' issue'+(job.errors.length===1?'':'s'):'Saved '+job.imported+' browser captures');});initContextUI();initReliabilityUI();initViewPreferences();initBookmarks();CanvasWorkspace.init();SmartSearch.init();WorkbenchUI.init();NotesWorkspace.init();SidebarUI.init();safe(loadLibraryPage);
 // A capture that arrived while this view was loading, or while the window was
 // in the background, is picked up here so the library is never out of date.
 let lastCaptureSeen=0;

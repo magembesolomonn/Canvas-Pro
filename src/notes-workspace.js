@@ -936,9 +936,8 @@ const NotesWorkspace = (() => {
       $('#note-template-dialog').showModal();
     };
     $('#note-template-cancel').onclick = () => $('#note-template-dialog').close();
-    $('#note-template-close').onclick = () => $('#note-template-dialog').close();
     $('#note-image-close').onclick = () => $('#note-image-dialog').close();
-    for(const id of ['note-template-close','note-image-close'])$('#'+id).replaceChildren(glyph('close'));
+    for(const id of ['note-image-close'])$('#'+id).replaceChildren(glyph('close'));
     $('#note-title').oninput = event => {
       note.title = event.target.value;
       list.find(item => item.id === note.id).title = note.title;

@@ -597,21 +597,6 @@ body.hide-file-names .card-meta {
 .empty button {
   padding: 8px 15px;
 }
-footer {
-  height: 31px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 9px;
-  gap: 12px;
-  flex-shrink: 0;
-}
-footer kbd {
-  font-size: 8px;
-}
 .inspector {
   background: var(--surface-panel);
   border-left: 1px solid #0004;
