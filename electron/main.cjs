@@ -258,15 +258,13 @@ async function importPaths(paths, folder) {
 
 // Appearance preferences are the user's own: the system look is the default and
 // any override is stored beside the library, never in the app bundle.
-const appearancePrefs={theme:'system',glass:'system',transparency:'system'};
+const appearancePrefs={theme:'system'};
 function appearancePrefsPath(){return path.join(app.getPath('userData'),'appearance.json');}
 function loadAppearancePrefs(){
  try{
   const saved=JSON.parse(fs.readFileSync(appearancePrefsPath(),'utf8'));
   if(saved&&typeof saved==='object'){
    if(['system','light','dark'].includes(saved.theme))appearancePrefs.theme=saved.theme;
-   if(['system','on','off'].includes(saved.glass))appearancePrefs.glass=saved.glass;
-   if(['system','on','off'].includes(saved.transparency))appearancePrefs.transparency=saved.transparency;
   }
  }catch(error){}
  return appearancePrefs;
@@ -278,20 +276,13 @@ function appearanceState(){
  const prefs=loadAppearancePrefs();
  const systemDark=!!nativeTheme.shouldUseDarkColors;
  const dark=prefs.theme==='dark'?true:prefs.theme==='light'?false:systemDark;
- const systemReduced=!!nativeTheme.prefersReducedTransparency;
- const reducedTransparency=prefs.transparency==='on'?true:prefs.transparency==='off'?false:systemReduced;
  const highContrast=!!nativeTheme.shouldUseHighContrastColors;
- const systemGlass=process.platform==='darwin'&&!systemReduced&&!highContrast;
- // Native glass is a dark-appearance material only; the renderer drops it in
- // light mode, so the state it reports must agree or the switch lies.
- const nativeGlass=dark&&(prefs.glass==='on'?true:prefs.glass==='off'?false:systemGlass);
- return {dark,nativeGlass,reducedTransparency,highContrast,theme:prefs.theme,glass:prefs.glass,transparency:prefs.transparency};
+ return {dark,highContrast,theme:prefs.theme};
 }
 function applyAppearanceWindow(){
  if(!win||win.isDestroyed())return;
  const state=appearanceState();
- if(process.platform==='darwin')win.setVibrancy(state.nativeGlass?'sidebar':null);
- win.setBackgroundColor(state.nativeGlass?'#00000000':state.dark?'#202020':'#f4f4f6');
+ win.setBackgroundColor(state.dark?'#1a1a1a':'#f4f4f6');
  win.webContents.send('appearance-changed',state);
 }
 loadAppearancePrefs();
@@ -323,7 +314,7 @@ function flushLibraryChanges(){
 }
 function createWindow() {
   const appearance=appearanceState();
-  win = new BrowserWindow({ width: 1480, height: 940, minWidth: 960, minHeight: 640, title: 'Canvas Pro', backgroundColor: appearance.nativeGlass?'#00000000':appearance.dark?'#202020':'#f4f4f6', ...(appearance.nativeGlass?{vibrancy:'sidebar',visualEffectState:'followWindow'}:{}), titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  win = new BrowserWindow({ width: 1480, height: 940, minWidth: 960, minHeight: 640, title: 'Canvas Pro', backgroundColor: appearance.dark?'#1a1a1a':'#f4f4f6', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
   previewZoomActive=false;
   win.webContents.on('before-input-event',(_event,input)=>{
     win.webContents.setIgnoreMenuShortcuts(previewZoomActive&&(input.meta||input.control)&&['+','=','-','0'].includes(input.key));
@@ -421,8 +412,6 @@ app.whenReady().then(async () => {
     trusted(event);
     if(!patch||typeof patch!=='object')throw new Error('Invalid appearance settings.');
     if(['system','light','dark'].includes(patch.theme))appearancePrefs.theme=patch.theme;
-    if(['system','on','off'].includes(patch.glass))appearancePrefs.glass=patch.glass;
-    if(['system','on','off'].includes(patch.transparency))appearancePrefs.transparency=patch.transparency;
     saveAppearancePrefs();
     nativeTheme.themeSource=appearancePrefs.theme;
     applyAppearanceWindow();

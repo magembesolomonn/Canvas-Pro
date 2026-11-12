@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' asset: data: blob:; media-src asset:; frame-src asset:; object-src 'none'; style-src 'self' 'sha256-IKhjRCvJlgA3VsuELN7fPr+PkBbifRzWqOb1Vk87ctU=' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' asset: data: blob:; worker-src 'self' blob:;"><title>Canvas Pro</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="notes.css"><link rel="stylesheet" href="sidebar.css"></head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' asset: data: blob:; media-src asset:; frame-src asset:; object-src 'none'; style-src 'self' 'sha256-IKhjRCvJlgA3VsuELN7fPr+PkBbifRzWqOb1Vk87ctU=' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' asset: data: blob:; worker-src 'self' blob:;"><title>Canvas Pro</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="notes.css"><link rel="stylesheet" href="sidebar.css"><link rel="stylesheet" href="islands.css"></head>
 <body>
 <aside class="sidebar">
  <div class="window-space"><button id="toggle-sidebar" class="icon-button sidebar-toggle" title="Toggle sidebar · ⌘B" aria-label="Toggle sidebar" aria-pressed="true"></button></div><div class="brand"><span class="brand-icon">▦</span><strong>Canvas Pro</strong></div>
@@ -172,14 +172,6 @@
         <button type="button" role="radio" aria-checked="false" data-theme="dark">Dark</button>
        </div>
       </div>
-      <label class="settings-row settings-row-switch">
-       <span class="settings-copy"><strong>Native glass</strong><small>Let the sidebar and window blur with the desktop.</small></span>
-       <input type="checkbox" class="settings-switch" id="settings-glass">
-      </label>
-      <label class="settings-row settings-row-switch">
-       <span class="settings-copy"><strong>Reduced transparency</strong><small>Replace translucent surfaces with solid colours.</small></span>
-       <input type="checkbox" class="settings-switch" id="settings-transparency">
-      </label>
      </div>
      <p class="settings-note">High contrast is set in macOS Display settings and is always respected.</p>
     </section>

@@ -225,7 +225,7 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='notes')re
   const anchor=anchorOverride||(layout?.items===visible?AssetLayout.anchorAt(layout,gallery.scrollTop,gallery.clientHeight):null);
   // Cards with no tags render only a title, so their footer is shorter.
   // Using one fixed footer height for every card leaves uneven blank rows.
-  const footerHeight=a=>document.body.classList.contains('hide-file-names')?0:SmartCards.isSelfContained(a)?0:(a.tags?.length?36:22);
+  const footerHeight=()=>0;
   layout=AssetLayout.createLayout(galleryLayout,visible,gallery.clientWidth,size,assetRatio,footerHeight);layoutDirty=false;layer.style.height=layout.height+'px';
   const position=anchor&&layout.byId.get(anchor.id);if(position)gallery.scrollTop=position.y+anchor.offset*(position.width/anchor.width);
  }

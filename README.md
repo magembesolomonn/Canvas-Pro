@@ -94,7 +94,7 @@ The existing app can be updated in place with `npm run update:mac`. Quit and reo
 - Audio/video cards play on hover. Video hover playback is muted; audio hover playback is audible. Leaving the card, scrolling, opening a full preview or switching app stops hover playback. Only one hover player is active.
 - Space opens an autoplaying custom player. Audio uses embedded cover artwork when present plus a real decoded waveform; without artwork, the waveform is the primary visual. Click/drag the waveform or timeline to seek. Video has a custom timeline, mute, volume and fullscreen controls. Escape or Space closes the preview, including after scrubbing. Left/right navigates files; arrow keys inside sliders adjust their values.
 - The gallery mounts only the viewport plus nearby rows. Selection uses keyed cards rather than rebuilding the library. Thumbnail work runs with at most two tasks; native audio/video analysis runs in a separate process with one active task and a bounded background queue. Thumbnails, waveforms and artwork are cached under the library. Initial analysis takes longer than cached browsing, especially with long media. Metadata for thousands of assets is still loaded into memory; this is not a promise of unlimited scale.
-- Drag a card to Finder or another app to copy its managed original. The details pane can be hidden with its toolbar button or Command-I. Reduced-motion, reduced-transparency and increased-contrast settings are respected.
+- Drag a card to Finder or another app to copy its managed original. The details pane can be hidden with its toolbar button or Command-I. Reduced-motion and increased-contrast settings are respected.
 
 Run `npm run test:integration` on this Mac for isolated Electron checks using sample files from the existing library. It creates disposable test libraries in `/private/tmp`, never modifies the real library or clipboard, and does not replace manual testing of native Finder drag/drop.
 
@@ -191,7 +191,7 @@ The sidebar now has one Settings entry with a gear icon. Import activity, Librar
 - Command–S toggles the sidebar; Command–B remains an alias. Command–F searches (Command–K also works), and Command–Comma opens Settings. Existing import, copy, paste, select-all and preview shortcuts remain available. Settings contains a keyboard shortcut reference.
 - The four-square toolbar button opens a keyboard-accessible layout picker: Masonry balances column heights, Waterfall fills columns in sequence, and Justified fits media into rows. All preserve media proportions and virtualize large libraries. View choice and sort order persist across restarts.
 - Oldest first sorts by original import time, with insertion order breaking same-timestamp ties; Newest first uses the reverse chronology.
-- The Mac sidebar now uses native vibrancy with a restrained translucent tint. The content area remains opaque for readability. Reduce Transparency and high-contrast settings disable the native effect.
+- The Mac sidebar now uses native vibrancy with a restrained translucent tint. The content area remains opaque for readability. Reduce Transparency and high-contrast settings disable the native effect. (The vibrancy sidebar was removed later; see the island layout below.)
 
 Validated with 10,000-item geometry/virtualization tests, real Electron Mac-key events, reversible bulk Trash operations, text-field protection, layout-menu keyboard controls, stable import sorting, persisted preferences and reduced-transparency rendering. Run `npm run test:preferences` for the isolated application checks.
 
@@ -274,6 +274,16 @@ Light mode uses two colours: `#FFFFFF` for panels, cards, fields, menus and shee
 Canvas Pro follows macOS light/dark appearance. Video previews fit each file's actual aspect ratio; black pixels encoded into a source video remain part of that video.
 
 Build additions: `npm run build:smart`, `npm run build:analysis`. Integration verification: `npm run test:smart` (expects the verified test model in `/private/tmp/canvas-smart-model`) and `electron tests/video-aspect-electron.cjs`.
+
+### Island layout (0.13)
+
+The window is one very dark surface (`#1A1A1A`). The library sidebar and the details panel are separate rounded pieces that sit on it as islands, and the gallery between them is a tight field of tiles with an even gutter. A tile is a white sheet the picture rests on, and the file name rides on the picture so the tiles stay close together. The chosen row and the chosen tile are marked with a warm gold accent.
+
+The native glass sidebar and the reduced-transparency setting are gone: the sidebar is a solid island, the window is opaque, and the appearance settings now carry only the light or dark choice. The space between the pieces is carried by the islands themselves, so hiding the sidebar or the details panel gives that space back to the gallery instead of leaving a gap.
+
+Light appearance keeps the app's own colours: a white window with the islands recessed into it. `src/islands.css` holds the whole theme, so it can be removed in one step.
+
+Run `npm run test:ui` for every interface check at once, and `npm run shot` to capture the library view as a picture.
 
 ### Current source prototype (not packaged)
 

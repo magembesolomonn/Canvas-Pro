@@ -48,9 +48,6 @@ body.light-mode .sidebar nav button.active {
 body.light-mode .sidebar .window-space {
   background: linear-gradient(to bottom, rgb(241 241 243 / 90%) 0 64%, rgb(241 241 243 / 66%) 82%, transparent 100%);
 }
-body.native-glass .sidebar .window-space {
-  background: linear-gradient(to bottom, rgb(35 36 42 / 66%) 0 64%, rgb(35 36 42 / 42%) 82%, transparent 100%);
-}
 .sidebar #navigation,.sidebar [data-section="media"] { position: relative; padding-bottom: 12px; margin-bottom: 10px; }
 .sidebar #navigation::after,.sidebar [data-section="media"]::after {
   content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 1px;
@@ -91,7 +88,6 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
     pointer-events: none;
     opacity: 1;
   }
-  body.native-glass > .sidebar,
   body.light-mode .sidebar { background: var(--sidebar-surface); }
   body.sidebar-drawer-open .sidebar {
     transform: translateX(0);

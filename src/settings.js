@@ -184,8 +184,6 @@
         if (!button) return;
         this.applyAppearance({ theme: button.dataset.theme });
       });
-      $('#settings-glass').onchange = event => this.applyAppearance({ glass: event.target.checked ? 'on' : 'off' });
-      $('#settings-transparency').onchange = event => this.applyAppearance({ transparency: event.target.checked ? 'on' : 'off' });
     },
 
     async applyAppearance(patch) {
@@ -197,16 +195,6 @@
       const current = state || await api.appearanceState();
       for (const button of document.querySelectorAll('#settings-theme [data-theme]'))
         button.setAttribute('aria-checked', String(button.dataset.theme === (current.theme || 'system')));
-      const glass = $('#settings-glass');
-      glass.checked = !!current.nativeGlass;
-      // Native glass is a dark-appearance material; in light mode the switch
-      // would otherwise look off and snap back after every click.
-      glass.disabled = !current.dark;
-      const glassCopy = glass.closest('.settings-row')?.querySelector('small');
-      if (glassCopy) glassCopy.textContent = current.dark
-        ? 'Let the sidebar and window blur with the desktop.'
-        : 'Native glass is available in dark appearance.';
-      $('#settings-transparency').checked = !!current.reducedTransparency;
     },
 
     wireLayouts() {

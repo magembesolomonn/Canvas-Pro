@@ -34,8 +34,6 @@ function setGalleryLayout(mode){
 }
 function applyAppearance(state){
  document.body.classList.toggle('light-mode',state.dark===false);document.documentElement.style.colorScheme=state.dark===false?'light':'dark';
- document.body.classList.toggle('native-glass',state.dark!==false&&!!state.nativeGlass);
- document.body.classList.toggle('reduced-transparency',state.reducedTransparency);
 }
 function initViewPreferences(){
  const saved=localStorage.getItem('gallery-layout');galleryLayout=['masonry','waterfall','justified'].includes(saved)?saved:'masonry';document.body.dataset.layout=galleryLayout;
