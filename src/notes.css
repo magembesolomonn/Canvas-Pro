@@ -486,55 +486,91 @@ body.light-mode .note-dialog-search:focus-within {
 }
 .note-tracker-dialog { width: min(550px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; }
 .note-tracker-dialog > :is(input,select), .note-tracker-dialog form > input { width: 100%; margin-bottom: 10px; }
-.tracker-record-panel { margin: auto 20px auto auto; }
-/* The record form is one table of labels and fields. The labels share a
-   narrow column, so every field starts at the same x and a label sits right
-   next to the field it names instead of at the far edge of the sheet. */
+.tracker-record-panel {
+  width: min(440px, calc(100vw - 40px));
+  margin: auto 20px auto auto;
+}
+/* The record sheet is a form, not a table of boxes. Every field carries its
+   own caption, the fields keep a comfortable width instead of stretching to
+   the frame, and the sheet's edges are respected: nothing runs into them. */
 .tracker-record-panel form {
   display: grid;
-  grid-template-columns: minmax(76px, max-content) minmax(0, 1fr);
-  align-items: center;
-  column-gap: 14px;
-  row-gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 15px;
+  /* The same insets as the heading above, so the fields line up with the
+     close button and nothing touches the sheet's edges. */
+  padding: 2px 16px 0 20px;
 }
-.tracker-record-panel .tracker-property { display: contents; }
-.tracker-record-panel .tracker-property > span {
+.tracker-property {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.tracker-property > span {
   font-size: 13px;
+  font-weight: 500;
   color: var(--muted);
-  text-align: right;
-  line-height: 1.25;
 }
-/* A tall row — a note, a checklist — keeps its label at the top. */
-.tracker-record-panel .tracker-property:has(> textarea) > span,
-.tracker-record-panel .tracker-property:has(> .tracker-checklist) > span {
-  align-self: start;
-  padding-top: 7px;
+.tracker-property > textarea {
+  min-height: 116px;
+  resize: vertical;
+  padding: 9px 11px;
 }
-/* Fields are the same height, so the rows read as rows. The sheet's own
-   margins are dropped here: they pushed each field below its label. */
+/* Fields are the same height, so the sheet reads as a form and not as a list
+   of differently sized boxes. They also carry a little more light than the
+   sheet, so a field is a field and not a hole in the panel. */
 .tracker-record-panel :is(input, select) {
   width: 100%;
-  height: 32px;
+  height: 34px;
   margin: 0;
   padding-block: 0;
-  padding-inline: 10px;
+  padding-inline: 11px;
   font-size: 13px;
+  background: #ffffff12;
+  border-color: #ffffff26;
 }
-.tracker-record-panel select { padding-inline-end: 24px; }
-.tracker-record-panel textarea {
-  padding: 8px 10px;
-  font-size: 13px;
+body.light-mode .tracker-record-panel :is(input, select, textarea) {
+  background: var(--bg-primary);
+  border-color: var(--line);
 }
-.tracker-property > textarea { min-height: 110px; resize: vertical; }
-.tracker-record-panel .tracker-tools { margin-bottom: 0; }
-.tracker-record-panel .tracker-tools button { height: 32px; padding: 0 12px; }
+.tracker-record-panel select { padding-inline-end: 26px; }
+.tracker-record-panel textarea { font-size: 13px; }
+.tracker-record-panel .tracker-tools { margin-bottom: 0; gap: 8px; }
+.tracker-record-panel .tracker-tools button { height: 34px; padding: 0 14px; }
 .tracker-record-panel .tracker-tools .tracker-thumbnail-choice {
   height: auto;
-  min-height: 32px;
-  padding: 4px 10px;
+  min-height: 34px;
+  padding: 4px 11px;
 }
-.tracker-record-panel .dialog-error,
-.tracker-record-panel .dialog-actions { grid-column: 1 / -1; }
+.tracker-record-panel .tracker-checklist input { width: auto; flex: 1 1 140px; }
+.tracker-record-panel .tracker-source-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 2px;
+}
+.tracker-record-panel .tracker-source-tools button { height: 34px; padding: 0 14px; }
+.tracker-record-panel .tracker-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* The action row sits on the sheet's own edge, the way every other sheet in
+   the app does, with the buttons clear of the frame. It stays with the
+   buttons when the form is taller than the sheet. */
+.tracker-record-panel .dialog-actions {
+  grid-column: 1 / -1;
+  position: sticky;
+  bottom: 0;
+  margin: 4px -16px 0 -20px;
+  padding: 14px 16px 16px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--dialog-surface);
+}
+body.light-mode .tracker-record-panel .dialog-actions { background: var(--bg-primary); }
+.tracker-record-panel .dialog-error { grid-column: 1 / -1; margin: 0; }
 .tracker-property .tracker-tools button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .tracker-reference-results { display: grid; gap: 5px; max-height: 42vh; overflow: auto; margin-bottom: 10px; }
 .tracker-reference-results button { overflow: hidden; text-overflow: ellipsis; text-align: left; }

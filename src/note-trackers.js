@@ -109,11 +109,12 @@ const NoteTrackers = (() => {
       const line = el('div','tracker-property');
       line.append(el('span','',label),control);
       form.append(line);
+      return line;
     }
     labeled('Title',title);
     if (block.statuses.length) labeled('Status',status);
     const inputs = new Map();
-    let updatePoster;
+    let updatePoster, sourceGroup;
     for (const property of block.fields) {
       const {key,label,type} = property;
       if (type === 'file' || type === 'canvas') {
@@ -146,7 +147,8 @@ const NoteTrackers = (() => {
         input.maxLength = 2000;
         input.removeAttribute('placeholder');
         inputs.set(key,input);
-        labeled(label,input);
+        const group = labeled(label,input);
+        if (block.preset==='movies' && key==='f6') sourceGroup=group;
       }
     }
     const source = block.preset==='movies' ? inputs.get('f6') : null;
@@ -186,9 +188,11 @@ const NoteTrackers = (() => {
         if (url && /^https?:$/.test(url.protocol) && /(^|\.)(imdb\.com|letterboxd\.com|rottentomatoes\.com|themoviedb\.org)$/i.test(url.hostname))
           setTimeout(()=>{if(dialog.open)fetchPoster.click();},0);
       };
-      const tools = el('div');
-      tools.append(fetchPoster,sourceStatus);
-      labeled('',tools);
+      const tools = el('div','tracker-source-tools');
+      tools.append(el('p','tracker-hint','Paste a link to IMDb, Letterboxd, Rotten Tomatoes or The Movie Database.'),fetchPoster,sourceStatus);
+      // The fetch button belongs to the link it reads, so it sits under the
+      // field rather than in a row of its own.
+      (sourceGroup||labeled('Source',source)).append(tools);
     }
     const body = el('textarea');
     body.setAttribute('aria-label','Record notes');

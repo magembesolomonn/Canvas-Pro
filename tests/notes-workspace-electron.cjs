@@ -399,29 +399,36 @@ async function insertBlock(type) {
   await until(() => run("!!$('.tracker-gallery')"));
   await run("[...$('.note-tracker').querySelectorAll('button')].find(b=>b.textContent==='New record').click()");
   await until(() => run("!!$('.tracker-record-panel[open]')"));
-  // The record form reads as one table: the labels share a column, the fields
-  // share a column, and every field is the same height.
+  // The record sheet is a form: every field carries its own caption above it,
+  // the fields are the same height, and nothing runs into the sheet's edges.
   const formLayout = await run(`(() => {
-    const rows = [...$('.tracker-record-panel form').querySelectorAll('.tracker-property')];
+    const sheet = $('.tracker-record-panel');
+    const rows = [...sheet.querySelectorAll('form .tracker-property')];
+    const sheetRect = sheet.getBoundingClientRect();
     const measured = rows.map(row => {
-      const label = row.querySelector('span'), control = row.children[1];
-      const lr = label.getBoundingClientRect(), cr = control.getBoundingClientRect();
-      return {label: label.textContent.trim(), labelRight: Math.round(lr.right), labelTop: Math.round(lr.top),
-        labelHeight: Math.round(lr.height), controlLeft: Math.round(cr.left), controlHeight: Math.round(cr.height),
-        placeholder: control.getAttribute('placeholder') || ''};
+      const caption = row.querySelector('span'), control = row.children[1];
+      const cr = caption.getBoundingClientRect(), fr = control.getBoundingClientRect();
+      return {caption: caption.textContent.trim(), captionBottom: Math.round(cr.bottom), captionTop: Math.round(cr.top),
+        controlTop: Math.round(fr.top), controlHeight: Math.round(fr.height), controlLeft: Math.round(fr.left),
+        controlRight: Math.round(fr.right), placeholder: control.getAttribute('placeholder') || ''};
     });
-    return {measured, labelColor: getComputedStyle(rows[0].querySelector('span')).color};
+    return {measured, sheetLeft: Math.round(sheetRect.left), sheetRight: Math.round(sheetRect.right),
+      sheetWidth: Math.round(sheetRect.width), overflow: sheet.scrollWidth - sheet.clientWidth,
+      captionColor: getComputedStyle(rows[0].querySelector('span')).color};
   })()`);
-  const labelRows = formLayout.measured.filter(row => row.label);
-  for (const row of labelRows) {
-    assert.ok(Math.abs(row.labelRight - labelRows[0].labelRight) <= 1, `label "${row.label}" is not aligned`);
-    assert.ok(Math.abs(row.controlLeft - labelRows[0].controlLeft) <= 1, `field for "${row.label}" is not aligned`);
-    assert.ok(row.labelRight <= row.controlLeft, `label "${row.label}" overlaps its field`);
-    assert.ok(row.placeholder.toLowerCase() !== row.label.toLowerCase(), `field "${row.label}" repeats its label inside the box`);
+  const captioned = formLayout.measured.filter(row => row.caption);
+  for (const row of captioned) {
+    assert.ok(row.captionBottom <= row.controlTop, `caption "${row.caption}" is not above its field`);
+    assert.ok(row.controlTop - row.captionBottom <= 12, `caption "${row.caption}" sits too far from its field`);
+    assert.ok(row.controlLeft >= formLayout.sheetLeft + 16, `field "${row.caption}" runs into the sheet's edge`);
+    assert.ok(row.controlRight <= formLayout.sheetRight - 16, `field "${row.caption}" runs into the sheet's edge`);
+    assert.ok(row.placeholder.toLowerCase() !== row.caption.toLowerCase(), `field "${row.caption}" repeats its label inside the box`);
   }
-  const fieldHeights = [...new Set(labelRows.filter(row => row.controlHeight < 60).map(row => row.controlHeight))];
+  assert.equal(formLayout.overflow, 0, 'the record sheet spills past its frame');
+  assert.ok(formLayout.sheetWidth <= 460, `the record sheet is too wide: ${formLayout.sheetWidth}`);
+  const fieldHeights = [...new Set(captioned.filter(row => row.controlHeight < 60).map(row => row.controlHeight))];
   assert.equal(fieldHeights.length, 1, `fields have different heights: ${fieldHeights.join(', ')}`);
-  console.log('TRACKER_RECORD_FORM_LAYOUT_OK', JSON.stringify({fieldHeights, labels: labelRows.map(row => row.label)}));
+  console.log('TRACKER_RECORD_FORM_LAYOUT_OK', JSON.stringify({fieldHeights, captions: captioned.map(row => row.caption)}));
   await run(`(() => {
     const form = $('.tracker-record-panel form');
     const source = form.querySelector('[aria-label=Source]');
