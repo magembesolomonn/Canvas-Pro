@@ -42,7 +42,7 @@ Direct HTTP/HTTPS image, audio, PDF and video files are supported. The picker ca
 
 ## Privacy and connection
 
-No account, analytics, cloud service or paid API. Page inspection uses `activeTab`: there is no content script on ordinary websites or required blanket host permission. Small content scripts on X/Twitter, Instagram, Reddit and Pinterest add the post-save button. Deep scanning requests optional site access only when enabled; request observation is restricted in code to the selected tab. A requested capture goes over Chrome native messaging to a user-only Unix socket on the Mac. Downloads retrieve only the requested media. Imported originals are kept in the local library. The host permits only this extension ID and does not expose an HTTP server to webpages.
+No account, analytics, cloud service or paid API. A small content script is present on ordinary web pages so that Alt+Right-click and drag-and-drop can save a picture without asking for permission first; it listens for those two gestures, draws the capture card, and sends the chosen address to Canvas Pro. It reads nothing else from the page. Page inspection for the other capture actions uses `activeTab`. Small content scripts on X/Twitter, Instagram, Reddit and Pinterest add the post-save button. Deep scanning requests optional site access only when enabled; request observation is restricted in code to the selected tab. A requested capture goes over Chrome native messaging to a user-only Unix socket on the Mac. Downloads retrieve only the requested media. Imported originals are kept in the local library. The host permits only this extension ID and does not expose an HTTP server to webpages.
 
 ## Checks
 

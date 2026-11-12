@@ -79,6 +79,9 @@ async function openBlockMenu() {
     }))()`)));
     throw error;
   }
+  // The block menu opens when "/" is typed in an empty paragraph, so the
+  // caret goes into a paragraph first, the way a person would.
+  await run(`(()=>{const paragraphs=[...document.querySelectorAll('#note-blocks .note-block-paragraph textarea')];const empty=paragraphs.find(field=>!field.value)||paragraphs[0];if(!empty)throw Error('The note has no paragraph to type in.');empty.focus();empty.setSelectionRange(empty.value.length,empty.value.length);})()`);
   await run("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'/',bubbles:true}))");
   await until(() => run("!!$('.note-block-menu')"));
 }

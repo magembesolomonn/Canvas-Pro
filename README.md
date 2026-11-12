@@ -223,7 +223,7 @@ The sidebar control sits at the top of the sidebar. A reopen control stays avail
 - Save a copy in the web preview stores a self-contained MHTML archive in the same collections, readable through the existing offline reader. It captures the loaded page; it is not an offline video download.
 - Performance: no web-view creation at launch; two metadata jobs at a time, capped queue, offscreen cancellation, week-long successful preview cache and failure cooldown. Navigation counts use one pass, and existing gallery cards/images survive metadata edits. A local fixture with 10,000 assets and 200 collections measured ~102 ms refresh and ~5 ms mean collection switching, with 12 mounted cards and one web contents before preview. These are fixture timings, not a guarantee for all libraries/sites.
 
-Validation details: [workflow audit](audits/2026-11-03-workflows.md). Quit/reopen the app and reload the extension to use this release.
+Validation details: the workflow audit is kept with the development notes. Quit/reopen the app and reload the extension to use this release.
 
 ## 0.10.0 — Open canvases
 
@@ -251,11 +251,11 @@ Validation includes 59 unit tests, native first-launch/create/cancel/switch/rela
 
 ## 0.11.1 — Audit fixes
 
-Fixed bookmark-import cleanup deleting a committed original after optional metadata failed, damaged-preference recovery, missing-original context menus, and collection renames during queued imports/browser downloads. Run `npm run test:audit` for the targeted regressions. The broader audit and concrete public-launch blockers are in [ship readiness](audits/2026-11-03-ship-readiness.md). This development-signed, Apple Silicon build is not yet a general-public distribution release.
+Fixed bookmark-import cleanup deleting a committed original after optional metadata failed, damaged-preference recovery, missing-original context menus, and collection renames during queued imports/browser downloads. Run `npm run test:audit` for the targeted regressions. This development-signed, Apple Silicon build is not yet a general-public distribution release.
 
 ## 0.11.2 — Crash recovery
 
-Added a recovery prompt after an unexpected app-view crash, regeneration of damaged media metadata caches, and journals to clean incomplete imports after force quit while retaining committed originals. Fixed stale canvas text in the inspector. Run `npm run test:stress` for isolated intentional process-kill, disk-full, rapid-navigation and renderer-crash tests. Details and limits: [crash stress report](audits/2026-11-03-crash-stress.md). Unsaved edits may be lost in a crash; saved data recovery is what these tests verify.
+Added a recovery prompt after an unexpected app-view crash, regeneration of damaged media metadata caches, and journals to clean incomplete imports after force quit while retaining committed originals. Fixed stale canvas text in the inspector. Run `npm run test:stress` for isolated intentional process-kill, disk-full, rapid-navigation and renderer-crash tests. The crash stress report is kept with the development notes. Unsaved edits may be lost in a crash; saved data recovery is what these tests verify.
 
 ### Smart content and local search (0.12)
 
