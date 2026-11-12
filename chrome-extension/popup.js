@@ -4,6 +4,19 @@ let tabId;
 const TOAST_GLYPHS = { success: '✓', error: '!', info: 'i' };
 const TOAST_TITLES = { success: 'Saved', error: 'Something went wrong', info: 'Canvas Pro' };
 const MAX_TOASTS = 3;
+const recentToasts = new Map();
+// The same failure can arrive twice: once from the capture record and once
+// from the request that started it. Only one card is shown.
+function toastKey(options, message) {
+  return `${options.title || TOAST_TITLES[options.type || 'info']}|${String(message ?? '')}`;
+}
+function alreadyShown(key) {
+  const now = Date.now();
+  for (const [seen, at] of recentToasts) if (now - at > 4000) recentToasts.delete(seen);
+  if (recentToasts.has(key)) return true;
+  recentToasts.set(key, now);
+  return false;
+}
 
 // A toast is a small status card with an icon, a title, an optional detail and
 // an optional remaining-time bar. Duration 0 keeps it until dismissed.
@@ -11,6 +24,7 @@ function toast(message, options = {}) {
   const stack = $('#toasts');
   if (!stack) return { dismiss() {} };
   const type = Object.hasOwn(TOAST_GLYPHS, options.type) ? options.type : 'info';
+  if (type === 'error' && alreadyShown(toastKey(options, message))) return { dismiss() {} };
   const duration = options.duration === 0 ? 0 : Math.max(1200, options.duration || (type === 'error' ? 6000 : 3600));
   const item = document.createElement('div');
   item.className = `toast toast--${type}`;
@@ -243,6 +257,10 @@ if (globalThis.chrome?.storage?.onChanged) {
   } catch {}
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
+  // Opening the popup grants access to the page behind it. That is the moment
+  // a tab which was already open when the extension was updated can receive
+  // the current scripts, so Alt+click and drag-and-drop work there again.
+  if (tabId) chrome.runtime.sendMessage({ type: 'reinject-quick-save', tabId }).catch(() => {});
   const { folder } = await chrome.storage.local.get('folder');
   const watch = (await chrome.storage.session.get(`media-watch:${tabId}`))[`media-watch:${tabId}`];
   if (watch?.expires > Date.now()) setDeepScan(true);

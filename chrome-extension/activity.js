@@ -1,4 +1,8 @@
 // Runs in the isolated extension world. Never inserts page-provided HTML.
+// A copy that is placed into a page later than the first one replaces the
+// earlier copy; this counter shows which copies are present.
+globalThis.__canvasActivityGeneration=(globalThis.__canvasActivityGeneration||0)+1;
+try{document.documentElement.setAttribute('data-canvas-activity',String(globalThis.__canvasActivityGeneration));}catch{}
 function canvasCaptureActivity(job,mount){
   let host=(mount||document).querySelector('[data-canvas-capture-activity]');
   if(!host){
@@ -81,7 +85,9 @@ function canvasCaptureActivity(job,mount){
     if(done){
       row._dismiss=setTimeout(()=>{ row.classList.add('leaving'); setTimeout(()=>{ row.remove(); if(!root.querySelector('.toast')) host.remove(); }, 180); }, 2200);
     } else {
-      row._dismiss=setTimeout(()=>{ /* keep visible while active, safety */ }, 12000);
+      // A capture that never finishes must not leave its card on the page for
+      // good. The card goes after a while; a later report re-opens it.
+      row._dismiss=setTimeout(()=>{ row.classList.add('leaving'); setTimeout(()=>{ row.remove(); if(!root.querySelector('.toast')) host.remove(); }, 180); }, 12000);
     }
   }
 }

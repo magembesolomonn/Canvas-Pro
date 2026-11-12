@@ -22,6 +22,8 @@
     "test:reliability": "node --test tests/regressions/regressions.test.cjs && electron tests/reliability-electron.cjs",
     "test:preferences": "electron tests/preferences-electron.cjs",
     "test:capture": "electron tests/capture-network-electron.cjs",
+    "test:capture-ui": "electron tests/capture-refresh-electron.cjs && electron tests/capture-startup-electron.cjs && electron tests/capture-sync-electron.cjs && electron tests/capture-canvas-view-electron.cjs && electron tests/library-startup-failure-electron.cjs",
+    "test:extension": "node --test tests/extension-media.test.cjs",
     "test:bookmarks": "electron tests/bookmark-workflows-electron.cjs",
     "test:canvas": "electron tests/canvas-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/canvas-inspector-electron.cjs && electron tests/canvas-momentum-electron.cjs",
     "test:libraries": "electron tests/library-switch-electron.cjs",

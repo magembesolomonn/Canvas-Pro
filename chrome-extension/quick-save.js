@@ -12,6 +12,7 @@
   // handlers, so an older copy in the same page stops taking action.
   const generation=(globalThis.__canvasQuickSaveGeneration||0)+1;
   globalThis.__canvasQuickSaveGeneration=generation;
+  try{document.documentElement.setAttribute('data-canvas-quick-save',String(generation));}catch{}
   const current=()=>globalThis.__canvasQuickSaveGeneration===generation;
   const abs=v=>{try{return v?new URL(v,location.href).href:''}catch{return ''}};
   const direct=u=>{try{const url=new URL(u,location.href);return /^https?:$/.test(url.protocol)?url.href:''}catch{return ''}};
@@ -21,7 +22,7 @@
     const url=abs(value); if(!url) return '';
     try{
       const parsed=new URL(url);
-      if(/(?:^|\.)pbs\.twimg\.com$/i.test(parsed.hostname)&&parsed.pathname.startsWith('/media/')&&!parsed.searchParams.has('name'))parsed.searchParams.set('name','orig');
+      if(/(?:^|\.)pbs\.twimg\.com$/i.test(parsed.hostname)&&parsed.pathname.startsWith('/media/'))parsed.searchParams.set('name','orig');
       return parsed.href;
     }catch{return url;}
   }
@@ -101,9 +102,9 @@
     for(const s of selectors){ const el=target?.closest?.(s); if(el) return el; }
     return target?.closest?.('[role="article"]');
   }
-  // The element directly under the pointer decides what is saved. A picture
-  // stays a picture even when a video sits elsewhere on the page, and a video
-  // stays a video. The first media element found is the one that was clicked.
+  // The element directly under the pointer decides what is saved. The first
+  // picture or video found in the pointer's own path is the one that was
+  // clicked, even when the other kind sits nearby.
   function pickMedia(target,point,preferVideo=false){
     const path=(typeof target?.composedPath==='function'?target.composedPath():[target]).filter(Boolean);
     const candidates=[...path];
@@ -116,11 +117,6 @@
       if(el.tagName==='VIDEO'){
         const url=videoURL(el);
         if(url){videoURLFound=url; videoEl=el;} else if(!videoEl) videoEl=el;
-        if(!imgInfo){
-          const near=el.closest?.('figure,section,article,div,li');
-          const poster=originalURL(el.poster||'');
-          if(poster) videoEl=videoEl||el;
-        }
         continue;
       }
       if(el.tagName==='IMG'){
@@ -128,7 +124,15 @@
         if(info&&!imgInfo) imgInfo={kind:'image', mediaUrl:info.url, displayURL:info.displayURL, title:info.alt||document.title, alt:info.alt||'', width:info.width, height:info.height, element:info.element, poster:info.url};
       }
     }
-    // A clicked picture wins over a video elsewhere on the page.
+    // The first media element in the pointer's path is the one that was
+    // clicked. A picture under the cursor beats a video that lies behind it.
+    const first=candidates.find(el=>el?.tagName==='IMG'||el?.tagName==='VIDEO');
+    if(first?.tagName==='IMG'&&imgInfo) return imgInfo;
+    if(first?.tagName==='VIDEO'&&videoEl){
+      const url=videoURLFound||videoURL(videoEl);
+      if(url) return {kind:'video', mediaUrl:url, title:document.title, poster:originalURL(videoEl.poster||''), width:videoEl.videoWidth||0, height:videoEl.videoHeight||0, element:videoEl};
+      return {kind:'video', missing:true, element:videoEl};
+    }
     if(imgInfo) return imgInfo;
     if(videoEl){
       const url=videoURLFound||videoURL(videoEl);
@@ -194,16 +198,17 @@
     let data; try{data=core.collect(post);}catch{return false;}
     if(!data || (!data.items?.length && !data.hasVideo)) return false;
     if(!canUseRuntime()){ toast('Reload this page to reconnect', false,'','The extension was reloaded'); return true; }
-    try{
-      const response=await chrome.runtime.sendMessage({type:'social-save', post:data});
-      // The page shows one toast for this capture: the worker's own card.
-      if(!response?.ok) throw new Error(response?.error||'Could not save this post');
-      return true;
-    }catch(e){
+    let response=null;
+    try{ response=await chrome.runtime.sendMessage({type:'social-save', post:data}); }
+    catch(e){
+      // The message never reached the worker, so nothing was reported on the
+      // page. Say so here, once.
       if(contextInvalidated(e)) toast('Reload this page to reconnect', false,'','The extension was reloaded');
       else toast('Could not save this post', false,'',String(e?.message||e||''));
       return true;
     }
+    // A refusal from the worker is already on the page as its own card.
+    return true;
   }
 
   async function saveItem(item,target){

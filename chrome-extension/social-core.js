@@ -29,7 +29,7 @@
  // what is saved is full quality and not the thumbnail.
  function originalImage(value){
   const url=direct(value); if(!url) return null;
-  try{const parsed=new URL(url);if(/(?:^|\.)pbs\.twimg\.com$/i.test(parsed.hostname)&&parsed.pathname.startsWith('/media/')&&!parsed.searchParams.has('name'))parsed.searchParams.set('name','orig');return parsed.href;}catch{return url;}
+  try{const parsed=new URL(url);if(/(?:^|\.)pbs\.twimg\.com$/i.test(parsed.hostname)&&parsed.pathname.startsWith('/media/'))parsed.searchParams.set('name','orig');return parsed.href;}catch{return url;}
  }
  // The largest picture the page offers, not the small one it happens to show.
  function largestImage(element){
@@ -191,5 +191,5 @@
   for(const image of query('img')){const bounds=image.getBoundingClientRect();if(/avatar|profile|emoji|profile_images/i.test((image.alt||'')+' '+image.src)||bounds.width>0&&bounds.width<70||bounds.height>0&&bounds.height<60||image.naturalWidth&&image.naturalWidth<90||image.naturalHeight&&image.naturalHeight<70)continue;if(posters.has(direct(image.currentSrc||image.src)))continue;addImage(image,{alt:image.alt||'',width:image.naturalWidth,height:image.naturalHeight});}
   return {platform,permalink,title,items,hasVideo:hasVideo||items.some(i=>i.kind==='video')};
  }
- const api={platformFor,postPermalink,direct,bestVariant,twitterMedia,collect,focusedMedia,rememberInstagramMedia};if(typeof module!=='undefined')module.exports=api;else root.CanvasSocialCore=api;
+ const api={platformFor,postPermalink,direct,bestVariant,twitterMedia,collect,focusedMedia,rememberInstagramMedia,originalImage,largestImage};if(typeof module!=='undefined')module.exports=api;else root.CanvasSocialCore=api;
 })(globalThis);

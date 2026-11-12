@@ -303,16 +303,23 @@ nativeTheme.on('updated',()=>applyAppearanceWindow());
 const pendingLibraryChanges=new Set();
 let lastCaptureAt=0;
 function notifyLibraryChanged(ids){
-  if(Array.isArray(ids))for(const id of ids)pendingLibraryChanges.add(id);
   lastCaptureAt=Date.now();
-  if(win&&!win.isDestroyed()&&!win.webContents.isLoading())win.webContents.send('library-changed',ids);
+  if(!Array.isArray(ids)){
+    if(win&&!win.isDestroyed()&&!win.webContents.isLoading())win.webContents.send('library-changed');
+    return;
+  }
+  for(const id of ids)pendingLibraryChanges.add(id);
+  // The change is only remembered while the view cannot receive it. Once it
+  // has been handed over, it must not be replayed later.
+  if(win&&!win.isDestroyed()&&!win.webContents.isLoading()){
+    win.webContents.send('library-changed',ids);
+    for(const id of ids)pendingLibraryChanges.delete(id);
+  }
 }
 function flushLibraryChanges(){
-  if(!win||win.isDestroyed())return;
-  if(pendingLibraryChanges.size){
-    const ids=[...pendingLibraryChanges];pendingLibraryChanges.clear();
-    win.webContents.send('library-changed',ids);
-  }else win.webContents.send('library-changed');
+  if(!win||win.isDestroyed()||!pendingLibraryChanges.size)return;
+  const ids=[...pendingLibraryChanges];pendingLibraryChanges.clear();
+  win.webContents.send('library-changed',ids);
 }
 function createWindow() {
   const appearance=appearanceState();
@@ -368,7 +375,7 @@ app.whenReady().then(async () => {
   if(!process.env.ASSET_TEST_MODE&&(savedLibrary?.root!==libraryRoot||savedLibrary.recent[0]!==libraryRoot))locations.remember(libraryRoot);
   library = new Library(libraryRoot);
   workbench=new Workbench(library);
-  originalsWatch=createOriginalsWatch({library,onChange:ids=>{if(win&&!win.isDestroyed())win.webContents.send('library-changed',ids);}});
+  originalsWatch=createOriginalsWatch({library,onChange:ids=>notifyLibraryChanged(ids)});
   if(process.env.ASSET_TEST_MODE)global.originalsWatch=originalsWatch;
   let switchingLibrary=false;
   async function changeLibrary(mode){if(switchingLibrary)return;switchingLibrary=true;try{await flushWorkspaces();const target=await chooseLibrary(mode);if(!target||target===library.root)return;pendingLibrarySwitch=()=>{locations.remember(target);app.relaunch();};app.quit();}catch(error){dialog.showErrorBox('Could not switch library',error.message);}finally{switchingLibrary=false;}}
@@ -527,7 +534,7 @@ app.whenReady().then(async () => {
     if(!/^https?:$/.test(url.protocol)||!/(^|\.)(imdb\.com|letterboxd\.com|rottentomatoes\.com|themoviedb\.org)$/i.test(url.hostname))
       throw Error('Paste an IMDb, Letterboxd, Rotten Tomatoes or TMDB title link.');
     const {ids:[id]}=await bookmarks.save(url.href,null);
-    if(!event.sender.isDestroyed())event.sender.send('library-changed',[id]);
+    notifyLibraryChanged([id]);
     const info=await bookmarks.get(id);
     return {id,url:url.href,title:info?.state==='ready'?info.title:'',year:Number(info?.details?.year)||null,
       genre:info?.details?.genre||'',type:info?.type==='series'?'Series':info?.type==='movie'?'Movie':'',cover:!!info?.cover};
@@ -688,7 +695,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('smart-analyze',(event,id)=>{trusted(event);return smartIndex.analyze(id);});
   ipcMain.handle('link-reader',(event,id)=>{trusted(event);return bookmarks.reader(id);});
   ipcMain.handle('link-info',(event,id,force)=>{trusted(event);return bookmarks.get(id,{force:!!force});});
-  ipcMain.handle('web-preview-open',(event,id,token,rect)=>{trusted(event);if(typeof token!=='string'||token.length>100)throw new Error('Invalid preview.');if(!webPreview)webPreview=new WebPreview({electron:require('electron'),window:win,library,resolveLink:id=>bookmarks.resolveURL(id),onSaved:()=>{if(win&&!win.isDestroyed())win.webContents.send('library-changed');}});if(process.env.ASSET_TEST_MODE)global.canvasWebPreview=webPreview;return webPreview.open(id,token,rect);});
+  ipcMain.handle('web-preview-open',(event,id,token,rect)=>{trusted(event);if(typeof token!=='string'||token.length>100)throw new Error('Invalid preview.');if(!webPreview)webPreview=new WebPreview({electron:require('electron'),window:win,library,resolveLink:id=>bookmarks.resolveURL(id),onSaved:()=>{notifyLibraryChanged();}});if(process.env.ASSET_TEST_MODE)global.canvasWebPreview=webPreview;return webPreview.open(id,token,rect);});
   ipcMain.on('web-preview-bounds',(event,token,rect)=>{trusted(event);if(webPreview?.token===token)webPreview.bounds(rect);});
   ipcMain.on('web-preview-close', (event,token)=>{trusted(event);webPreview?.detach(token);});
   ipcMain.handle('web-preview-command',(event,token,command)=>{trusted(event);return webPreview?.command(token,command);});
@@ -734,7 +741,7 @@ app.whenReady().then(async () => {
     try{const result=await library.permanentDelete(records.map(a=>a.id),{beforeRemove:async deleting=>{
       await Promise.all([mediaCache.cancelAndDrain(deleting),bookmarks.cancelAndDrain(deleting)]);const set=new Set(deleting);for(let i=thumbnailQueue.length-1;i>=0;i--)if(set.has(thumbnailQueue[i].id)){const [job]=thumbnailQueue.splice(i,1);job.resolve(null);}
       await Promise.allSettled(deleting.map(id=>Promise.all([thumbPending.get(id),thumbPending.get(id+':preview'),thumbPending.get(id+':browser'),...[...previewSizes].map(size=>thumbPending.get(id+':detail-'+size))].filter(Boolean))).filter(Boolean));
-    }});for(const id of result.ids){thumbnailMisses.delete(id);thumbnailMisses.delete(id+':preview');for(const size of previewSizes)thumbnailMisses.delete(id+':detail-'+size);}try{await win.webContents.session.clearCache();}catch(e){console.error('Preview cache cleanup:',e.message);}win.webContents.send('library-changed');return result;}finally{mediaCache.unblock(records.map(a=>a.id));if(win&&!win.isDestroyed())win.webContents.send('library-changed');}
+    }});for(const id of result.ids){thumbnailMisses.delete(id);thumbnailMisses.delete(id+':preview');for(const size of previewSizes)thumbnailMisses.delete(id+':detail-'+size);}try{await win.webContents.session.clearCache();}catch(e){console.error('Preview cache cleanup:',e.message);}notifyLibraryChanged();return result;}finally{mediaCache.unblock(records.map(a=>a.id));notifyLibraryChanged();}
   }
   ipcMain.handle('delete-permanently',(_,ids)=>deleteFromTrash(ids));
   ipcMain.handle('empty-trash',()=>{const ids=library.db.prepare('SELECT id FROM assets WHERE trash=1').all().map(a=>a.id);return ids.length?deleteFromTrash(ids,true):{deleted:0};});
@@ -916,6 +923,12 @@ app.whenReady().then(async () => {
     }catch(error){console.error('Browser connection:',error.message);}
   });
   app.on('activate', () => ensureWindow());
+}).catch(error=>{
+  // Starting up must never fail silently. A library that cannot be opened
+  // needs to say so, and the app has to stay alive long enough to show it.
+  console.error('Canvas Pro could not start:',error&&error.stack||error);
+  try{dialog.showErrorBox('Canvas Pro could not open this library',String(error&&error.message||error));}catch{}
+  app.exit(1);
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 let shutdownStarted=false,shutdownComplete=false;

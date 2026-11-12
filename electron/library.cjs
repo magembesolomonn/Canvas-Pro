@@ -228,7 +228,7 @@ class Library {
       if(operation.type==='rating')changes={rating:operation.rating};
       if(operation.type==='trash')changes={trash:!!operation.trash};
       this.update(id,changes);
-    }this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}
+    }this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');if(operation.type==='trash'&&!operation.trash&&/original file is missing/i.test(String(e.message||'')))throw new Error('Nothing was restored: one of these files has no original in the library. Put it back in Finder, then restore it on its own.');throw e;}
   }
   permanentDelete(ids,options){return permanentDelete(this,ids,options);}
   renameCollection(oldName,newName){newName=String(newName).trim();if(!newName||newName.length>120)throw new Error('Use a collection name between 1 and 120 characters.');if(!this.folders().includes(oldName))throw new Error('Collection not found.');if(oldName===newName)return;if(this.folders().includes(newName))throw new Error('A collection with that name already exists.');this.db.exec('BEGIN');try{this.db.prepare('UPDATE folders SET name=? WHERE name=?').run(newName,oldName);for(const a of this.db.prepare('SELECT id,folders FROM assets').all()){const folders=JSON.parse(a.folders);if(folders.includes(oldName))this.update(a.id,{folders:folders.map(f=>f===oldName?newName:f)});}this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}}

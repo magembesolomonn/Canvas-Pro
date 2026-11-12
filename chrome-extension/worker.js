@@ -66,6 +66,7 @@ async function sendCapture(items,folder,tabId,notice='',activityId){
  let latest={id,title,kind:items[0].kind,state:'queued',total:items.length,done:0,notice,items:previews};
  await progress(latest,tabId);await badge('…');
  try{const options=await chrome.storage.local.get('folder');const result=await native({op:'capture',items,folder:folder??options.folder??''});
+ if(!result?.jobId)throw new Error('Canvas Pro did not accept the capture.');
  for(let attempt=0;attempt<1200;attempt++){const {job}=await native({op:'status',jobId:result.jobId});latest={...job,id,title,kind:items[0].kind,notice,items:previews.map((item,index)=>({...item,state:job.results?.[index]?.state||(index===(job.done||0)?job.phase||'saving':'queued'),error:job.results?.[index]?.error||''}))};await progress(latest,tabId);if(['complete','failed'].includes(job.state)){await badge(job.errors.length?'!':String(job.imported+job.duplicates),!!job.errors.length);return job;}await new Promise(resolve=>setTimeout(resolve,500));}
  throw new Error('Capture is taking longer than expected. Check Canvas Pro.');
  }catch(error){await badge('!',true);await progress({...latest,state:'failed',errors:[error.message]},tabId);throw error;}
@@ -122,11 +123,14 @@ chrome.runtime.onInstalled.addListener(()=>{chrome.contextMenus.removeAll(()=>{f
 // drag-and-drop there without asking the reader to refresh every tab.
 // A page that was already open when the extension updated still runs the old
 // content script, whose extension context is dead ("Extension context
-// invalidated"). Re-injecting the current script restores Alt+click and
+// invalidated"). Re-injecting the current scripts restores Alt+click and
 // drag-and-drop there, so the reader does not have to refresh every tab.
+// The capture card lives in activity.js, so it must be injected too: without
+// it the page would save the file and show nothing.
+const PAGE_SCRIPTS=['activity.js','quick-save.js'];
 async function reinjectInto(tabId){
  if(!Number.isInteger(tabId)) return false;
- try{await chrome.scripting.executeScript({target:{tabId},files:['quick-save.js']});return true;}catch{return false;}
+ try{await chrome.scripting.executeScript({target:{tabId},files:PAGE_SCRIPTS});return true;}catch{return false;}
 }
 async function reinjectQuickSave(){
  let tabs=[];try{tabs=await chrome.tabs.query({});}catch{return;}
@@ -134,10 +138,24 @@ async function reinjectQuickSave(){
   const url=String(tab?.url||tab?.pendingUrl||'');
   if(!/^https?:\/\//i.test(url))continue;
   if(/^https?:\/\/(?:[a-z0-9-]+\.)*(?:chrome|edge|devtools|chrome-extension|about|view-source)\b/i.test(url))continue;
-  try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['quick-save.js']});}catch{/* the tab may not allow injection */ }
+  await reinjectInto(tab.id);
  }
 }
 if(chrome.runtime.onStartup)chrome.runtime.onStartup.addListener(()=>{reinjectQuickSave();});
+// The worker starts again after every idle period and after every update.
+// That is the moment to put the current scripts back into the pages that were
+// already open, so their quick save keeps working. The sweep is throttled
+// because the worker wakes often.
+async function refreshStalePages(){
+ try{
+  const now=Date.now();
+  const since=(await chrome.storage.session.get('reinjected-at'))['reinjected-at']||0;
+  if(now-since<300000)return;
+  await chrome.storage.session.set({'reinjected-at':now});
+  await reinjectQuickSave();
+ }catch{}
+}
+refreshStalePages();
 async function captureContext(info,tab){
  if(info.menuItemId==='save-image'||(info.menuItemId==='video'&&info.srcUrl?.startsWith('blob:')&&CanvasSocialCore.platformFor(info.frameUrl||tab.url))){
   const item=await chrome.tabs.sendMessage(tab.id,{type:'focused-media'},{frameId:info.frameId??0}).catch(()=>null);
@@ -158,7 +176,7 @@ if(['viewport','region','fullpage','collect','content','videos'].includes(info.m
 chrome.contextMenus.onClicked.addListener((info,tab)=>{if(['collect','videos'].includes(info.menuItemId)&&tab?.id&&chrome.sidePanel)chrome.sidePanel.open({tabId:tab.id}).catch(()=>{});if(tab?.id)reinjectInto(tab.id);captureContext(info,tab).catch(async error=>{await badge('!',true);await progress({id:crypto.randomUUID(),state:'failed',errors:[error.message]},tab?.id);});});
 chrome.commands.onCommand.addListener(command=>runAction(command==='capture-area'?'region':'viewport').catch(async e=>{await badge('!',true);await progress({state:'failed',errors:[e.message]});}));
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{(async()=>{if(sender.id!==chrome.runtime.id)throw new Error('Invalid capture sender');if(message.type==='social-save'){if(!sender.tab||!CanvasSocialCore.platformFor(sender.url))throw new Error('Post capture is available only on supported platforms.');return captureSocial(message.post,sender.tab);}if(message.type==='social-error'){if(!sender.tab||!CanvasSocialCore.platformFor(sender.url))throw new Error('Invalid social capture');await progress({id:crypto.randomUUID(),state:'failed',title:'Post capture',errors:[String(message.error||'Could not save this post').slice(0,500)]},sender.tab.id);return {};}if(['region-result','cancel-region'].includes(message.type)){const records=(await chrome.storage.session.get('regions')).regions||{},record=records[message.token];if(!record||record.tabId!==sender.tab?.id||record.expires<Date.now())throw new Error('This capture selection expired. Try again.');delete records[message.token];await chrome.storage.session.set({regions:records});if(message.type==='cancel-region')return {cancelled:true};const rect=message.rect;if(!rect||Object.values(rect).some(n=>!Number.isFinite(n))||rect.x<0||rect.y<0||rect.width<1||rect.height<1||rect.x+rect.width>rect.viewportWidth+1||rect.y+rect.height>rect.viewportHeight+1)throw new Error('Invalid screenshot region');return screenshot(await tabFor(record.tabId),rect);}
-if(message.type==='reinject-quick-save'){const tabId=Number(message.tabId);if(Number.isInteger(tabId))await reinjectInto(tabId);else await reinjectQuickSave();return {reinjected:true};}if(message.type==='quick-save'){if(!sender.tab?.id)throw new Error('Open a web page first.');const item=message.item||{},url=String(item.mediaUrl||item.url||'');if(!/^(https?:|data:image\/)/i.test(url))throw new Error('This item cannot be saved directly.');const kind=item.kind==='video'?'video':'image',base={pageUrl:String(item.pageUrl||sender.tab.url||''),pageTitle:String(item.pageTitle||sender.tab.title||''),title:String(item.title||sender.tab.title||'Saved media').slice(0,160)};const payload={...base,kind,alt:String(item.alt||''),width:Number(item.width)||0,height:Number(item.height)||0,poster:String(item.poster||''),thumbnail:String(item.thumbnail||''),...(url.startsWith('data:')?{dataUrl:url}:{mediaUrl:url})};return sendCapture([payload],undefined,sender.tab.id);}if(!sender.url?.startsWith(chrome.runtime.getURL('')))throw new Error('Capture must be initiated from Canvas Pro.');if(message.type==='watch-media'){const tab=await tabFor(message.tabId);if(!await chrome.permissions.contains({origins:['http://*/*','https://*/*']}))throw new Error('Allow media scanning in the browser first.');await chrome.storage.session.set({['media-watch:'+tab.id]:{expires:Date.now()+1800000,items:[]}});return {watching:true};}if(message.type==='ping')return native({op:'ping'});if(message.type==='action')return runAction(message.action,message.tabId);if(message.type==='save-batch'){const record=(await chrome.storage.session.get('collection:'+message.collectionId))['collection:'+message.collectionId];if(!record||!Array.isArray(message.indices)||!message.indices.length||message.indices.length>100)throw new Error('Choose up to 100 images.');const items=[...new Set(message.indices)].map(i=>record.items[i]);if(items.some(item=>!item))throw new Error('Invalid image selection');return sendCapture(items,message.folder,[record.tabId,sender.tab?.id]);}throw new Error('Unknown message');})().then(result=>respond({ok:true,result}),async error=>{await progress({state:'failed',errors:[error.message]});respond({ok:false,error:error.message});});return true;});
+if(message.type==='reinject-quick-save'){const tabId=Number(message.tabId);if(Number.isInteger(tabId))await reinjectInto(tabId);else await reinjectQuickSave();return {reinjected:true};}if(message.type==='quick-save'){if(!sender.tab?.id)throw new Error('Open a web page first.');const item=message.item||{},url=String(item.mediaUrl||item.url||'');if(!/^(https?:|data:image\/)/i.test(url))throw new Error('This item cannot be saved directly.');const kind=item.kind==='video'?'video':'image',base={pageUrl:String(item.pageUrl||sender.tab.url||''),pageTitle:String(item.pageTitle||sender.tab.title||''),title:String(item.title||sender.tab.title||'Saved media').slice(0,160)};const payload={...base,kind,alt:String(item.alt||''),width:Number(item.width)||0,height:Number(item.height)||0,poster:String(item.poster||''),thumbnail:String(item.thumbnail||''),...(url.startsWith('data:')?{dataUrl:url}:{mediaUrl:url})};return sendCapture([payload],undefined,sender.tab.id);}if(!sender.url?.startsWith(chrome.runtime.getURL('')))throw new Error('Capture must be initiated from Canvas Pro.');if(message.type==='watch-media'){const tab=await tabFor(message.tabId);if(!await chrome.permissions.contains({origins:['http://*/*','https://*/*']}))throw new Error('Allow media scanning in the browser first.');await chrome.storage.session.set({['media-watch:'+tab.id]:{expires:Date.now()+1800000,items:[]}});return {watching:true};}if(message.type==='ping')return native({op:'ping'});if(message.type==='action')return runAction(message.action,message.tabId);if(message.type==='save-batch'){const record=(await chrome.storage.session.get('collection:'+message.collectionId))['collection:'+message.collectionId];if(!record||!Array.isArray(message.indices)||!message.indices.length||message.indices.length>100)throw new Error('Choose up to 100 images.');const items=[...new Set(message.indices)].map(i=>record.items[i]);if(items.some(item=>!item))throw new Error('Invalid image selection');return sendCapture(items,message.folder,[record.tabId,sender.tab?.id]);}throw new Error('Unknown message');})().then(result=>respond({ok:true,result}),async error=>{respond({ok:false,error:error.message});});return true;});
 
 // Opt-in, tab-scoped media observation. No request bodies, cookies or authorization headers are read.
 const mediaWrites=new Map();

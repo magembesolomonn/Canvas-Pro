@@ -111,5 +111,20 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
  assert.equal(dropJob.state,'complete',JSON.stringify(dropJob));
  assert.ok((dropJob.imported||0)+(dropJob.duplicates||0)>=1,JSON.stringify(dropJob));
  console.log('EXTENSION_DRAG_DROP',JSON.stringify({imported:dropJob.imported,duplicates:dropJob.duplicates}));
+ // After the extension is reloaded, a page that was already open must get the
+ // current scripts again, including the file that draws the capture card.
+ // Without it the file is saved and the page shows nothing at all.
+ // Putting the current scripts back into a page that was already open must
+ // bring the capture card with them. Without it the file is saved and the
+ // page shows nothing at all.
+ const before=await page.evaluate(`({quick:Number(document.documentElement.getAttribute('data-canvas-quick-save')||0),card:Number(document.documentElement.getAttribute('data-canvas-activity')||0)})`);
+ const reinjected=await c.evaluate(`reinjectInto(${tab.id})`);
+ assert.equal(reinjected,true,'The scripts could not be placed back into the page.');
+ const after=await poll(async()=>page.evaluate(`({quick:Number(document.documentElement.getAttribute('data-canvas-quick-save')||0),card:Number(document.documentElement.getAttribute('data-canvas-activity')||0)})`),15000).catch(()=>null);
+ assert.ok(after&&after.quick>before.quick,'The page did not receive the quick save script again.');
+ assert.ok(after&&after.card>before.card,'The page did not receive the file that draws the capture card.');
+ const hasCard=await page.evaluate(`Number(document.documentElement.getAttribute('data-canvas-activity')||0)>0?1:0`);
+ assert.equal(hasCard,1,'The page is missing the file that draws the capture card.');
+ console.log('EXTENSION_REINJECT_AFTER_RELOAD',JSON.stringify({before,after}));
  console.log('EXTENSION_BROWSER_OK',JSON.stringify({assets:lib.list().length,profile:temporary}));
 })().catch(error=>{console.error('EXTENSION_BROWSER_FAILED',error.message);console.error('Test logs:',temporary);process.exitCode=1;}).finally(async()=>{for(const c of clients)c.socket.close();browser?.kill('SIGTERM');await bridge?.close();if(server)await new Promise(resolve=>server.close(resolve));lib?.close();});
