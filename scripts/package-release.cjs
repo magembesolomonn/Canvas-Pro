@@ -62,7 +62,7 @@ QUICK TEST
 - Quit/reopen, then copy the closed disposable library and open the copy; verify files, tags, collections and canvas layouts.
 
 UPDATES
-Download a future app release, quit Canvas Pro and replace the app in Applications. Keep your library folder. For an extension update, reload the app-managed extension on chrome://extensions, or replace the files in the folder you loaded from the ZIP and then click Reload.
+Canvas Pro updates itself. Open Settings → About → Check for Updates: the app reads the latest public release from GitHub, shows the download progress, verifies the SHA-256 checksum, replaces the app in Applications and reopens the new version. Automatic updates need the app to live in Applications — not on the DMG and not in a development build. Your library is never changed. For an extension update, reload the app-managed extension on chrome://extensions, or replace the files in the folder you loaded from the ZIP and then click Reload.
 `;
 fs.writeFileSync(path.join(release, 'START HERE.txt'), instructions);
 const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'canvas-dmg-stage-'));

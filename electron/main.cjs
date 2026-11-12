@@ -23,6 +23,7 @@ const {ImportQueue}=require('./import-queue.cjs');
 const {Workbench}=require('./workbench.cjs');
 const {HealthService}=require('./health-service.cjs');
 const {createOriginalsWatch}=require('./originals-watch.cjs');
+const {Updater}=require('./updater.cjs');
 app.setName(process.env.CANVAS_PROTOTYPE?'Canvas Pro Prototype':'Canvas Pro');
 const legacyData=path.join(app.getPath('appData'),'Asset Library');
 if(fs.existsSync(path.join(legacyData,'Library/library.sqlite')))app.setPath('userData',legacyData);
@@ -32,7 +33,7 @@ if (process.env.AGAGWU_DATA_DIR) {
   app.setPath('userData', process.env.AGAGWU_DATA_DIR);
 }
 if(!process.env.ASSET_TEST_MODE&&!app.requestSingleInstanceLock()){app.quit();return;}
-let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,originalsWatch;
+let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,originalsWatch,updater;
 let notesStore;
 const getNotesStore=()=>notesStore??=new (require('./notes-store.cjs').NotesStore)(library.db);
 let pendingLibrarySwitch=null;
@@ -390,6 +391,18 @@ app.whenReady().then(async () => {
     } catch { return new Response('', { status: 404 }); }
   });
   const trusted=event=>{if(event.sender!==win?.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Unavailable outside the library.');};
+  const updateProgress=value=>{if(win&&!win.isDestroyed())win.webContents.send('update-progress',value);};
+  const getUpdater=()=>updater??=new Updater({
+    currentVersion:require('../package.json').version,
+    appBundle:path.resolve(app.getPath('exe'),'../../..'),
+    isPackaged:app.isPackaged,
+    fetchImpl:(url,options)=>net.fetch(url,options),
+    onProgress:updateProgress,
+    quit:()=>app.quit()
+  });
+  ipcMain.handle('update-check',event=>{trusted(event);return getUpdater().check();});
+  ipcMain.handle('update-download',event=>{trusted(event);return getUpdater().download();});
+  ipcMain.handle('update-install',event=>{trusted(event);return getUpdater().install();});
   ipcMain.handle('notes-emoji',(event,id,emoji)=>{trusted(event);return getNotesStore().setEmoji(id,emoji);});
   ipcMain.handle('notes-show-emoji-picker',event=>{trusted(event);if(process.platform==='darwin')app.showEmojiPanel();});
   ipcMain.handle('notes-list',event=>{trusted(event);return getNotesStore().list();});
@@ -823,7 +836,7 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 let shutdownStarted=false,shutdownComplete=false;
 app.on('before-quit',event=>{
   if(shutdownComplete)return;
-  event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;
+  event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;updater?.cancel();
   flushWorkspaces().then(()=>Promise.allSettled([originalsWatch?.close(),bookmarks?.close(),webPreview?.close(),importQueue?.close(),captureBridge?.close(),smartIndex?.close(),localModel?.close(),workbench?.close(),healthService?.cancel(),mediaCache?.cancelAndDrain([...mediaCache.pending.keys()])])).then(()=>{pendingLibrarySwitch?.();pendingLibrarySwitch=null;shutdownComplete=true;app.quit();}).catch(error=>{shutdownStarted=false;dialog.showErrorBox('Workspace could not be saved',error.message);});
 });
 app.on('will-quit', () => {library?.close();});

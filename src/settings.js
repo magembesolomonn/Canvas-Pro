@@ -311,11 +311,75 @@
       }
     },
 
+    updateMessage(error) {
+      return String(error?.message || error || 'The update could not be completed.')
+        .replace(/^Error invoking remote method '[^']+':\s*/, '')
+        .replace(/^Error:\s*/, '');
+    },
+
+    updateProgress(value) {
+      const status = $('#settings-update-status'), bar = $('#settings-update-progress');
+      if (!status || !value) return;
+      const version = this.pendingUpdateVersion ? ' ' + this.pendingUpdateVersion : '';
+      if (value.phase === 'download') {
+        const percent = Number.isFinite(value.percent) ? value.percent + '%' : '';
+        const received = value.received ? Math.round(value.received / 1048576) + ' MB' : '';
+        status.textContent = 'Downloading Canvas Pro' + version + (percent ? ' — ' + percent : received ? ' — ' + received : '') + '…';
+        if (bar) {
+          bar.hidden = false;
+          if (Number.isFinite(value.percent)) bar.value = value.percent;
+          else bar.removeAttribute('value');
+        }
+      } else if (value.phase === 'verify') {
+        status.textContent = 'Verifying the update…';
+      } else if (value.phase === 'mount') {
+        status.textContent = 'Preparing Canvas Pro' + version + '…';
+      } else if (value.phase === 'install') {
+        status.textContent = 'Installing Canvas Pro' + version + '… The app will restart.';
+      } else if (value.phase === 'check') {
+        status.textContent = 'Checking GitHub for updates…';
+      }
+    },
+
     async checkUpdates() {
-      const status = $('#settings-update-status');
-      status.textContent = 'Checking…';
-      await this.syncVersion();
-      status.textContent = 'Canvas Pro ' + (this.version || '') + ' is the latest version on this Mac. Updates install by replacing the app in Applications.';
+      if (this.updating) return;
+      const button = $('#settings-check-updates'), status = $('#settings-update-status'), bar = $('#settings-update-progress');
+      const updateApi = this.updateApi || api;
+      this.updating = true;
+      this.pendingUpdateVersion = '';
+      button.disabled = true;
+      if (bar) {
+        bar.hidden = true;
+        bar.value = 0;
+      }
+      const unsubscribe = updateApi.onUpdateProgress?.(value => this.updateProgress(value));
+      try {
+        status.textContent = 'Checking GitHub for updates…';
+        await this.syncVersion();
+        const update = await updateApi.updateCheck();
+        if (!update.available) {
+          status.textContent = 'Canvas Pro ' + update.currentVersion + ' is up to date.';
+          return;
+        }
+        this.pendingUpdateVersion = update.version;
+        if (!update.installable) {
+          status.textContent = 'Canvas Pro ' + update.version + ' is available, but it cannot install automatically. ' + update.reason;
+          return;
+        }
+        status.textContent = 'Downloading Canvas Pro ' + update.version + '…';
+        await updateApi.updateDownload();
+        status.textContent = 'Installing Canvas Pro ' + update.version + '… The app will restart.';
+        await updateApi.updateInstall();
+        status.textContent = 'Canvas Pro is restarting with version ' + update.version + '…';
+      } catch (error) {
+        status.textContent = this.updateMessage(error);
+        if (bar) bar.hidden = true;
+      } finally {
+        this.updating = false;
+        this.pendingUpdateVersion = '';
+        button.disabled = false;
+        unsubscribe?.();
+      }
     }
   };
 
