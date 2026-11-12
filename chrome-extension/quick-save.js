@@ -1,0 +1,176 @@
+(()=>{
+  if(globalThis.__canvasQuickSaveInstalled) return; globalThis.__canvasQuickSaveInstalled=true;
+  const runtime=globalThis.chrome?.runtime; if(!runtime?.sendMessage) return;
+  const abs=v=>{try{return v?new URL(v,location.href).href:''}catch{return ''}};
+  const direct=u=>{try{const url=new URL(u,location.href);return /^https?:$/.test(url.protocol)?url.href:''}catch{return ''}};
+  function appleVideo(el){
+    const v=el?.closest?.('video')||el?.querySelector?.('video')||el;
+    const base=v?.getAttribute?.('data-inline-media-basepath');
+    if(!base) return '';
+    try{
+      const url=new URL(base,location.href);
+      if(url.pathname.includes('/105/media/')) return new URL('large.mp4',url.href.endsWith('/')?url.href:url.href+'/').href;
+    }catch{}
+    return '';
+  }
+  function videoURL(el){
+    const v=el?.closest?.('video')||(el?.tagName==='VIDEO'?el:null);
+    if(!v) return '';
+    const apple=appleVideo(v); if(apple) return apple;
+    const src=direct(v.currentSrc||v.src); if(src && !src.startsWith('blob:')) return src;
+    for(const s of v.querySelectorAll('source')){
+      const u=direct(s.src||s.getAttribute('src')); if(u && !u.startsWith('blob:') && /\.(mp4|m4v|mov|webm)(?:[?#]|$)/i.test(u)) return u;
+    }
+    // search nearby/data attributes and inline JSON-ish values for this media block
+    const root=v.closest('figure,section,article,div')||v.parentElement||document;
+    const attrs=['src','data-src','data-url','data-video-url','data-mp4','data-file','content'];
+    const nodes=[v,...root.querySelectorAll('source,meta,script,*')].slice(0,400);
+    for(const n of nodes){
+      for(const a of attrs){
+        const val=(n.getAttribute?.(a)||'').replaceAll('\\/','/');
+        if(!val) continue;
+        const m=val.match(/https?:\/\/[^\s"'<>]+?\.(?:mp4|m4v|mov|webm)(?:\?[^\s"'<>]*)?/i);
+        if(m && !/\.m3u8|\.mpd/i.test(m[0])) return m[0];
+      }
+      if(n.tagName==='SCRIPT'){
+        const t=(n.textContent||'').slice(0,250000).replaceAll('\\/','/');
+        if(t.includes('/105/media/')||/\.mp4/i.test(t)){
+          const m=t.match(/https?:\/\/[^\s"'<>"]+\/105\/media\/[^\s"'<>"]*?\/(?:large|[^/\s"'<>]+)\.mp4[^\s"'<>"]*/i) || t.match(/https?:\/\/[^\s"'<>"]+\.mp4(?:\?[^\s"'<>"]*)?/i);
+          if(m && !/\.m3u8|\.mpd/i.test(m[0])) return m[0];
+        }
+      }
+    }
+    // performance resources fallback (Apple/mp4 loaded)
+    try{
+      const entries=performance.getEntriesByType('resource').map(e=>e.name).filter(n=>/\.mp4(?:[?#]|$)/i.test(n)&&!/\.(m3u8|mpd)/i.test(n));
+      if(entries.length) return entries[entries.length-1];
+    }catch{}
+    return '';
+  }
+  function imageURL(el){
+    const img=el?.closest?.('img')||(el?.tagName==='IMG'?el:null);
+    if(img){
+      const src=abs(img.currentSrc||img.src||img.getAttribute('data-src')||img.getAttribute('data-original'));
+      if(src) return {url:src, alt:img.alt||'', width:img.naturalWidth||0, height:img.naturalHeight||0};
+    }
+    let node=el;
+    for(let i=0;i<5&&node;i++,node=node.parentElement){
+      try{
+        const bg=getComputedStyle(node).backgroundImage||'';
+        const m=bg.match(/url\(["']?(.+?)["']?\)/);
+        if(m&&m[1]&&m[1]!=='none'&&!m[1].startsWith('data:,')) return {url:abs(m[1]),alt:'',width:0,height:0};
+      }catch{}
+    }
+    return null;
+  }
+  function pickMedia(target,point,preferVideo=false){
+    const path=(typeof target?.composedPath==='function'?target.composedPath():[target]).filter(Boolean);
+    const candidates=[...path];
+    if(point && Number.isFinite(point.x)){
+      try{ for(const el of document.elementsFromPoint(point.x,point.y)||[]) candidates.push(el, el?.shadowRoot?.elementFromPoint?.(point.x,point.y)); }catch{}
+    }
+    let imgInfo=null, sawVideo=false;
+    for(const el of candidates){
+      const vEl=el?.closest?.('video')||(el?.tagName==='VIDEO'?el:null);
+      if(vEl) sawVideo=true;
+      const vurl=videoURL(el);
+      if(vurl) return {kind:'video', mediaUrl:vurl, title:document.title, poster:abs(vEl?.poster||el?.closest?.('video')?.poster||''), width:0,height:0};
+      if(!imgInfo){ const i=imageURL(el); if(i) imgInfo={kind:'image', mediaUrl:i.url, title:i.alt||document.title, alt:i.alt||'', width:i.width, height:i.height}; }
+    }
+    if(preferVideo && sawVideo) return {kind:'video', missing:true};
+    return imgInfo;
+  }
+
+  function toast(text,ok=true){
+    try{
+      let host=document.getElementById('__canvas_qs_toast');
+      if(!host){host=document.createElement('div');host.id='__canvas_qs_toast';host.attachShadow({mode:'open'});(document.documentElement||document.body).appendChild(host);} 
+      const root=host.shadowRoot; root.innerHTML=`<style>:host{all:initial;position:fixed;right:18px;bottom:18px;z-index:2147483647}.t{font:13px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#fff;background:${ok?'rgba(28,28,30,.94)':'rgba(140,48,44,.95)'};backdrop-filter:blur(16px);padding:10px 14px;border-radius:12px;box-shadow:0 10px 30px #0005;max-width:340px;line-height:1.35}</style><div class="t"></div>`;
+      root.querySelector('.t').textContent=text; clearTimeout(host._t); host._t=setTimeout(()=>host.remove(),2600);
+    }catch{}
+  }
+  async function saveItem(item){
+    if(!item?.mediaUrl) return;
+    toast(item.kind==='video'?'Saving video to Canvas Pro…':'Saving image to Canvas Pro…',true);
+    try{
+      const res=await runtime.sendMessage({type:'quick-save', item:{...item, pageUrl:location.href, pageTitle:document.title}});
+      if(!res?.ok) throw new Error(res?.error||'Could not save');
+      toast(item.kind==='video'?'Video saved to Canvas Pro':'Image saved to Canvas Pro',true);
+    }catch(e){ toast(e?.message||'Could not save to Canvas Pro',false); }
+  }
+
+  async function quickSaveFromEvent(e){
+    if(!e.altKey||!e.isTrusted) return false;
+    const point={x:e.clientX??0,y:e.clientY??0};
+    const item=pickMedia(e.target,point,true);
+    if(!item) return false;
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
+    if(item.missing){ toast('No downloadable video URL found. Try Find videos & media or Deep scan.', false); return true; }
+    await saveItem(item);
+    return true;
+  }
+  // Alt + Right-click / Alt+click quick save (bypass browser menu/download)
+  window.addEventListener('contextmenu',e=>{ quickSaveFromEvent(e); },true);
+  window.addEventListener('mousedown',e=>{ if(e.altKey && e.button===2) quickSaveFromEvent(e); },true);
+  window.addEventListener('auxclick',e=>{ if(e.altKey && e.button===2) quickSaveFromEvent(e); },true);
+  window.addEventListener('click',e=>{
+    if(!e.altKey||!e.isTrusted||e.button!==0) return;
+    const item=pickMedia(e.target,{x:e.clientX,y:e.clientY},true);
+    if(!item) return;
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
+    if(item.missing){ toast('No downloadable video URL found. Try Find videos & media or Deep scan.', false); return; }
+    saveItem(item);
+  },true);
+
+  // Drag and drop saver overlay
+  let host=null, inside=0, dragItem=null;
+  function mount(){
+    if(host||!document.documentElement) return host;
+    host=document.createElement('div'); host.id='__canvas_drop_saver';
+    host.style.cssText='position:fixed;left:0;right:0;bottom:0;height:0;z-index:2147483646;pointer-events:none';
+    const shadow=host.attachShadow({mode:'open'});
+    shadow.innerHTML=`<style>:host{all:initial}.wrap{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(14px);opacity:0;transition:opacity .16s ease,transform .16s ease;pointer-events:none}.wrap.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}.target{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:16px;background:rgba(28,28,30,.94);color:#fff;font:600 14px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;box-shadow:0 16px 44px #0007;border:1px solid #ffffff24;backdrop-filter:blur(18px);min-width:280px}.target.hot{background:#2f6fdf;border-color:#8ec0ff;transform:scale(1.02)}.icon{width:30px;height:30px;border-radius:9px;background:#ffffff22;display:grid;place-items:center;flex:none}svg{width:16px;height:16px}.sub{font:12px -apple-system,system-ui;color:#ffffffd8;margin-top:2px;font-weight:500}</style>
+    <div class="wrap"><div class="target"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 19h14"/></svg></span><span><div>Drop to save to Canvas Pro</div><div class="sub">Images and videos</div></span></div></div>`;
+    document.documentElement.appendChild(host);
+    const wrap=shadow.querySelector('.wrap'), target=shadow.querySelector('.target');
+    target.addEventListener('dragenter',e=>{e.preventDefault(); target.classList.add('hot');});
+    target.addEventListener('dragover',e=>{e.preventDefault(); if(e.dataTransfer) e.dataTransfer.dropEffect='copy'; target.classList.add('hot');});
+    target.addEventListener('dragleave',()=>target.classList.remove('hot'));
+    target.addEventListener('drop',async e=>{
+      e.preventDefault(); e.stopPropagation(); target.classList.remove('hot'); hide();
+      let item=dragItem;
+      if(!item){
+        const uri=(e.dataTransfer?.getData('text/uri-list')||e.dataTransfer?.getData('text/plain')||'').split('\n').find(s=>/^https?:/i.test(s.trim()));
+        const html=e.dataTransfer?.getData('text/html')||'';
+        const src=(html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1]) || (uri?uri.trim():'');
+        if(src) item={kind:/\.(mp4|m4v|mov|webm)(?:[?#]|$)/i.test(src)?'video':'image', mediaUrl:abs(src), title:document.title};
+      }
+      if(item?.mediaUrl) await saveItem(item); else toast('Drop an image or video to save it',false);
+    });
+    host._wrap=wrap; host._target=target; return host;
+  }
+  function show(item){ dragItem=item||dragItem; mount(); host?._wrap?.classList.add('show'); }
+  function hide(){ inside=0; dragItem=null; host?._wrap?.classList.remove('show'); host?._target?.classList.remove('hot'); }
+  function hasMediaDrag(e){
+    const t=e?.dataTransfer?.types; if(!t) return false;
+    return [...t].some(x=>/text\/uri-list|text\/plain|text\/html|Files/i.test(x));
+  }
+  document.addEventListener('dragstart',e=>{
+    if(!e.isTrusted) return;
+    const item=pickMedia(e.target,{x:e.clientX,y:e.clientY});
+    if(item){ dragItem=item; show(item); }
+  },true);
+  document.addEventListener('dragenter',e=>{
+    if(!e.isTrusted) return;
+    if(!hasMediaDrag(e) && !dragItem) return;
+    inside++;
+    if(!dragItem){ const item=pickMedia(e.target,{x:e.clientX,y:e.clientY}); if(item) dragItem=item; }
+    show(dragItem);
+  },true);
+  document.addEventListener('dragover',e=>{ if(inside||dragItem){ /* keep alive */ } },true);
+  document.addEventListener('dragleave',e=>{ if(!inside) return; inside=Math.max(0,inside-1); if(inside===0) setTimeout(()=>{ if(inside===0) hide(); },150); },true);
+  document.addEventListener('dragend',hide,true);
+  document.addEventListener('drop',e=>{ if(e.target!==host && !host?.shadowRoot?.contains(e.target)) hide(); },true);
+  window.addEventListener('blur',()=>setTimeout(hide,100));
+
+})();

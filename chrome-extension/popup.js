@@ -159,6 +159,7 @@ document.querySelectorAll('[data-action]').forEach(button => {
       pending.dismiss();
       const summary = captureSummary(result);
       toast(summary.message, { type: summary.type, title: summary.title });
+      if (action === 'fullpage') hint('Full page saved to Canvas Pro.');
     } catch (error) {
       pending?.dismiss();
       hint(error.message, true);
@@ -225,7 +226,7 @@ if (globalThis.chrome?.storage?.onChanged) {
       }
       return;
     }
-    hint('Tip: right-click an image or video to save it directly.');
+    hint('Tip: drag an image to the saver, or Alt+Right-click media to save instantly.');
   });
 }
 
