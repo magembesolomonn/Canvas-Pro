@@ -101,6 +101,8 @@ const NoteTrackers = (() => {
     const title = field('Title','text',record.title);
     title.required = true;
     title.maxLength = 200;
+    // The label already names the field, so the field does not repeat it.
+    title.removeAttribute('placeholder');
     const status = selectField('Status',block.statuses.map(value=>[value,value]),record.status || block.statuses[0]);
     const properties = {...record.properties};
     function labeled(label, control) {
@@ -142,6 +144,7 @@ const NoteTrackers = (() => {
         const input = field(label,type==='money'?'number':type,value);
         if (type === 'money' || type === 'number') input.step = type==='money'?'0.01':'any';
         input.maxLength = 2000;
+        input.removeAttribute('placeholder');
         inputs.set(key,input);
         labeled(label,input);
       }

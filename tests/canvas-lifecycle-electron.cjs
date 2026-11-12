@@ -27,4 +27,16 @@ process.env.ASSET_TEST_MODE='1';process.env.AGAGWU_DATA_DIR='/private/tmp/canvas
  assert.equal(fs.readFileSync(file).subarray(0,5).toString(),'%PDF-');
  console.log('CANVAS_LARGE_PDF_OK');
  const original=global.canvasTestStore.apply.bind(global.canvasTestStore);global.canvasTestStore.apply=()=>{throw Error('Fixture disk write failure');};await run(`(()=>{const item=CanvasWorkspace.doc.items.get('${textId}');item.data.text='Recoverable edit';CanvasWorkspace.stage(CanvasWorkspace.doc,[item]);})()`);await wait(300);await poll(()=>run("$('#canvas-retry').hidden===false"));win.close();await poll(()=>messages.length>0);assert.equal(win.isDestroyed(),false);assert.equal(store.get(board.id).items[0].data.text,'Saved before closing');assert.equal(await run("$('main').inert"),false);global.canvasTestStore.apply=original;await run("$('#canvas-retry').click()");await poll(()=>store.get(board.id).items[0].data.text==='Recoverable edit');console.log('CANVAS_FAILED_SAVE_RETRY_OK');
+  // A canvas deleted behind the app's back must not keep the app from closing.
+  const before=messages.length;
+  const doomed=await run("api.canvasCreate('Doomed')");
+  await run(`(async()=>{await refresh();await CanvasWorkspace.open('${doomed.id}');CanvasWorkspace.add('text',{x:10,y:20});})()`);
+  const doomedItem=await run('CanvasWorkspace.doc.items.values().next().value.id');
+  await run(`(()=>{const item=CanvasWorkspace.doc.items.get('${doomedItem}');item.data.text='Vanishing edit';CanvasWorkspace.stage(CanvasWorkspace.doc,[item]);})()`);
+  store.remove(doomed.id);
+  await run(`CanvasWorkspace.flushAll()`);
+  assert.equal(messages.length,before);
+  assert.equal(await run(`!!CanvasWorkspace.documents.get('${doomed.id}')`),false);
+  await run(`(async()=>{await CanvasWorkspace.open('${board.id}');})()`);
+  console.log('CANVAS_DELETED_CANVAS_DOES_NOT_BLOCK_OK');
  await run(`(()=>{const item=CanvasWorkspace.doc.items.get('${textId}');item.data.text='Saved on quit';CanvasWorkspace.stage(CanvasWorkspace.doc,[item]);})()`);app.once('will-quit',()=>{assert.equal(store.get(board.id).items[0].data.text,'Saved on quit');console.log('CANVAS_QUIT_FLUSH_OK');lib.close();lib=null;});app.quit();})().catch(error=>{console.error('CANVAS_LIFECYCLE_FAILED',error.stack);lib?.close();app.exit(1);});

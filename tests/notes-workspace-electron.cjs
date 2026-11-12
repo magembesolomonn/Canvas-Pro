@@ -399,6 +399,29 @@ async function insertBlock(type) {
   await until(() => run("!!$('.tracker-gallery')"));
   await run("[...$('.note-tracker').querySelectorAll('button')].find(b=>b.textContent==='New record').click()");
   await until(() => run("!!$('.tracker-record-panel[open]')"));
+  // The record form reads as one table: the labels share a column, the fields
+  // share a column, and every field is the same height.
+  const formLayout = await run(`(() => {
+    const rows = [...$('.tracker-record-panel form').querySelectorAll('.tracker-property')];
+    const measured = rows.map(row => {
+      const label = row.querySelector('span'), control = row.children[1];
+      const lr = label.getBoundingClientRect(), cr = control.getBoundingClientRect();
+      return {label: label.textContent.trim(), labelRight: Math.round(lr.right), labelTop: Math.round(lr.top),
+        labelHeight: Math.round(lr.height), controlLeft: Math.round(cr.left), controlHeight: Math.round(cr.height),
+        placeholder: control.getAttribute('placeholder') || ''};
+    });
+    return {measured, labelColor: getComputedStyle(rows[0].querySelector('span')).color};
+  })()`);
+  const labelRows = formLayout.measured.filter(row => row.label);
+  for (const row of labelRows) {
+    assert.ok(Math.abs(row.labelRight - labelRows[0].labelRight) <= 1, `label "${row.label}" is not aligned`);
+    assert.ok(Math.abs(row.controlLeft - labelRows[0].controlLeft) <= 1, `field for "${row.label}" is not aligned`);
+    assert.ok(row.labelRight <= row.controlLeft, `label "${row.label}" overlaps its field`);
+    assert.ok(row.placeholder.toLowerCase() !== row.label.toLowerCase(), `field "${row.label}" repeats its label inside the box`);
+  }
+  const fieldHeights = [...new Set(labelRows.filter(row => row.controlHeight < 60).map(row => row.controlHeight))];
+  assert.equal(fieldHeights.length, 1, `fields have different heights: ${fieldHeights.join(', ')}`);
+  console.log('TRACKER_RECORD_FORM_LAYOUT_OK', JSON.stringify({fieldHeights, labels: labelRows.map(row => row.label)}));
   await run(`(() => {
     const form = $('.tracker-record-panel form');
     const source = form.querySelector('[aria-label=Source]');

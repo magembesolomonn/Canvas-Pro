@@ -487,8 +487,54 @@ body.light-mode .note-dialog-search:focus-within {
 .note-tracker-dialog { width: min(550px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; }
 .note-tracker-dialog > :is(input,select), .note-tracker-dialog form > input { width: 100%; margin-bottom: 10px; }
 .tracker-record-panel { margin: auto 20px auto auto; }
-.tracker-property { display: grid; grid-template-columns: minmax(95px, 1fr) minmax(0, 2fr); gap: 8px; align-items: start; margin-bottom: 10px; }
+/* The record form is one table of labels and fields. The labels share a
+   narrow column, so every field starts at the same x and a label sits right
+   next to the field it names instead of at the far edge of the sheet. */
+.tracker-record-panel form {
+  display: grid;
+  grid-template-columns: minmax(76px, max-content) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 12px;
+}
+.tracker-record-panel .tracker-property { display: contents; }
+.tracker-record-panel .tracker-property > span {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: right;
+  line-height: 1.25;
+}
+/* A tall row — a note, a checklist — keeps its label at the top. */
+.tracker-record-panel .tracker-property:has(> textarea) > span,
+.tracker-record-panel .tracker-property:has(> .tracker-checklist) > span {
+  align-self: start;
+  padding-top: 7px;
+}
+/* Fields are the same height, so the rows read as rows. The sheet's own
+   margins are dropped here: they pushed each field below its label. */
+.tracker-record-panel :is(input, select) {
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  padding-block: 0;
+  padding-inline: 10px;
+  font-size: 13px;
+}
+.tracker-record-panel select { padding-inline-end: 24px; }
+.tracker-record-panel textarea {
+  padding: 8px 10px;
+  font-size: 13px;
+}
 .tracker-property > textarea { min-height: 110px; resize: vertical; }
+.tracker-record-panel .tracker-tools { margin-bottom: 0; }
+.tracker-record-panel .tracker-tools button { height: 32px; padding: 0 12px; }
+.tracker-record-panel .tracker-tools .tracker-thumbnail-choice {
+  height: auto;
+  min-height: 32px;
+  padding: 4px 10px;
+}
+.tracker-record-panel .dialog-error,
+.tracker-record-panel .dialog-actions { grid-column: 1 / -1; }
 .tracker-property .tracker-tools button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .tracker-reference-results { display: grid; gap: 5px; max-height: 42vh; overflow: auto; margin-bottom: 10px; }
 .tracker-reference-results button { overflow: hidden; text-overflow: ellipsis; text-align: left; }
