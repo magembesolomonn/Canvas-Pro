@@ -36,23 +36,6 @@
   --shadow-card: 0 1px 2px #00000008, 0 6px 18px #00000008;
   --shadow-toast: 0 14px 40px #0000001f, 0 2px 8px #00000012;
 
-  /* Inherited by the embedded capture-activity shadow root. */
-  --activity-font: var(--app-font);
-  --activity-text: var(--text);
-  --activity-muted: var(--muted);
-  --activity-line: var(--line);
-  --activity-line-soft: var(--line);
-  --activity-control: var(--selection);
-  --activity-field: var(--surface-raised);
-  --activity-track: var(--selection);
-  --activity-accent: var(--accent);
-  --activity-focus: var(--focus);
-  --activity-danger: var(--danger);
-  --activity-radius: 8px;
-  --activity-shadow: none;
-  --activity-bg: transparent;
-  --activity-solid: var(--surface-panel);
-
   background: var(--surface-app);
   color: var(--text);
   font: 13px/1.45 var(--app-font);
@@ -109,9 +92,9 @@ body.popup {
 .popup-shell {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 4px;
   max-height: 600px;
-  padding: 16px;
+  padding: 12px 10px 10px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -134,20 +117,19 @@ body.popup {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 10px;
-  padding: 0 2px;
+  gap: 9px;
+  padding: 2px 8px 6px;
 }
 
 .popup-header .app-mark {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   flex: none;
-  padding: 3px;
+  padding: 2px;
   object-fit: contain;
   background: var(--surface-panel);
   border: 1px solid var(--line);
-  border-radius: 9px;
-  box-shadow: 0 1px 1px #0000000a;
+  border-radius: 7px;
 }
 
 .identity {
@@ -156,15 +138,15 @@ body.popup {
 }
 .identity h1 {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 .identity p {
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.3;
 }
 
@@ -221,15 +203,17 @@ body.popup {
   justify-content: space-between;
   gap: 12px;
   margin: 0;
-  padding: 8px 11px;
+  padding: 7px 8px;
   color: var(--text);
-  background: var(--surface-panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  background: transparent;
+  border-radius: 7px;
+}
+.destination:hover {
+  background: var(--selection);
 }
 .destination > label {
-  color: var(--muted);
-  font-size: 11px;
+  color: var(--text);
+  font-size: 13px;
   font-weight: 500;
 }
 .destination-select {
@@ -242,18 +226,19 @@ body.popup {
   max-width: 195px;
   margin: 0;
   padding: 3px 20px 3px 6px;
-  color: var(--text);
+  color: var(--muted);
   background: transparent;
   border: 0;
   border-radius: 6px;
-  font: 600 12px/1.3 var(--app-font);
+  font: 500 11px/1.3 var(--app-font);
   text-align: right;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
 }
 .destination select:hover {
-  background: var(--selection);
+  background: var(--surface-raised);
+  color: var(--text);
 }
 .destination .chevron {
   position: absolute;
@@ -269,6 +254,9 @@ body.popup {
 .capture-section {
   display: flex;
   flex-direction: column;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
 }
 .section-label {
   margin: 0 2px 8px;
@@ -283,77 +271,70 @@ body.popup {
 .capture-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
 .capture-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   margin: 0;
-  padding: 10px 12px;
+  padding: 7px 8px;
   color: var(--text);
-  background: var(--surface-card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 1px 1px #00000008;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
   text-align: left;
   cursor: pointer;
-  transition:
-    background 130ms ease,
-    border-color 130ms ease,
-    box-shadow 130ms ease;
+  transition: background 110ms ease;
 }
 .capture-item:hover {
-  background: var(--surface-raised);
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-card);
+  background: var(--selection);
 }
 .capture-item:active {
   background: var(--selection);
 }
 .capture-item:disabled {
   opacity: 0.45;
-  box-shadow: none;
   cursor: default;
 }
 
 .capture-icon {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 18px;
+  height: 18px;
   flex: none;
+  color: var(--muted);
+  transition: color 110ms ease;
+}
+.capture-item:hover .capture-icon {
   color: var(--text);
-  background: var(--selection);
-  border-radius: 10px;
 }
 .capture-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
 }
 
 .capture-copy {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 1px;
   min-width: 0;
 }
 .capture-copy b {
   display: block;
   font-size: 13px;
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
 }
 .capture-copy span {
   display: block;
   margin: 0;
   color: var(--muted);
   font-size: 11px;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
 /* Deep scan --------------------------------------------------------------- */
@@ -361,44 +342,37 @@ body.popup {
 .popup #deep-scan {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  margin: 0;
-  padding: 8px 10px;
-  color: var(--muted);
+  margin: 6px 0 0;
+  padding: 7px 8px;
+  color: var(--text);
   background: transparent;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-lg);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 7px 7px;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition:
-    background 130ms ease,
-    border-color 130ms ease,
-    color 130ms ease;
+  transition: background 110ms ease;
 }
 .popup #deep-scan:hover {
-  color: var(--text);
   background: var(--selection);
-  border-color: var(--focus);
 }
 .popup #deep-scan[data-watching="true"] {
-  color: var(--text);
   background: var(--selection);
-  border-style: solid;
-  border-color: var(--line-strong);
 }
 .deep-scan-icon {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   flex: none;
   color: var(--muted);
 }
 .deep-scan-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
 }
 .popup #deep-scan[data-watching="true"] .deep-scan-icon {
   color: var(--success);
@@ -406,29 +380,28 @@ body.popup {
 .deep-scan-copy {
   display: flex;
   flex-direction: column;
-  gap: 1px;
   min-width: 0;
 }
 .deep-scan-copy strong {
   color: inherit;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.3;
 }
 .deep-scan-copy small {
   color: var(--muted);
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 /* Inline status and activity ---------------------------------------------- */
 
 .status {
   min-height: 0;
-  margin: 0 2px;
+  margin: 6px 8px 2px;
   color: var(--muted);
-  font-size: 10.5px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 .status:empty {
@@ -436,13 +409,6 @@ body.popup {
 }
 .status.error {
   color: var(--danger);
-}
-
-.activity-slot {
-  margin-top: -2px;
-}
-.activity-slot:empty {
-  display: none;
 }
 
 /* Footer ------------------------------------------------------------------ */
@@ -453,10 +419,11 @@ body.popup {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding-top: 10px;
+  margin-top: 6px;
+  padding: 9px 8px 2px;
   color: var(--muted);
   border-top: 1px solid var(--line);
-  font-size: 9.5px;
+  font-size: 10px;
 }
 .popup-footer button {
   margin: 0;
@@ -464,7 +431,7 @@ body.popup {
   color: var(--muted);
   background: none;
   border: 0;
-  font: 500 10px/1.4 var(--app-font);
+  font: 500 11px/1.4 var(--app-font);
   cursor: pointer;
 }
 .popup-footer button:hover {

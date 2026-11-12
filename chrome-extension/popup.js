@@ -211,7 +211,8 @@ if (globalThis.chrome?.storage?.onChanged) {
     if (area !== 'session' || !changes.lastCapture) return;
     const job = changes.lastCapture.newValue;
     if (!job) return;
-    canvasCaptureActivity(job, $('#capture-activity'));
+    // The popup keeps one plain status line. The capture itself reports on
+    // the page, so no card is left behind here.
     if (job.state === 'running') {
       hint(`Saving ${job.done || 0} of ${job.total || 1}…`);
       return;
@@ -226,7 +227,11 @@ if (globalThis.chrome?.storage?.onChanged) {
       }
       return;
     }
-    hint('Tip: drag an image to the saver, or Alt+Right-click media to save instantly.');
+    const saved = job.imported || 0;
+    const duplicates = job.duplicates || 0;
+    hint(saved || duplicates
+      ? `${saved} saved${duplicates ? ` · ${duplicates} already in library` : ''}`
+      : 'Tip: drag an image to the saver, or Alt+Right-click media to save instantly.');
   });
 }
 
@@ -260,12 +265,9 @@ if (globalThis.chrome?.storage?.onChanged) {
   }
 
   const { lastCapture } = await chrome.storage.session.get('lastCapture');
-  if (lastCapture) {
-    canvasCaptureActivity(lastCapture, $('#capture-activity'));
-    if (lastCapture.state === 'failed') {
-      const message = lastCapture.errors?.[0] || 'Last capture failed';
-      hint(message, true);
-      toast(message, { type: 'error', title: 'Last capture failed' });
-    }
+  if (lastCapture && lastCapture.state === 'failed') {
+    const message = lastCapture.errors?.[0] || 'Last capture failed';
+    hint(message, true);
+    toast(message, { type: 'error', title: 'Last capture failed' });
   }
 })();

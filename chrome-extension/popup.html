@@ -30,8 +30,7 @@
     </div>
   </section>
 
-  <section class="capture-section" aria-labelledby="capture-label">
-    <h2 id="capture-label" class="section-label">Capture</h2>
+  <section class="capture-section">
     <div class="capture-list" role="list">
       <button class="capture-item" type="button" data-action="viewport" role="listitem">
         <span class="capture-icon" aria-hidden="true">
@@ -51,7 +50,7 @@
         <span class="capture-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
         </span>
-        <span class="capture-copy"><b>Save Full Page</b><span>Scroll and capture the entire page</span></span>
+        <span class="capture-copy"><b>Save Full Page</b><span>Scroll and capture the whole page</span></span>
       </button>
 
       <button class="capture-item" type="button" data-action="collect" role="listitem">
@@ -95,17 +94,15 @@
   </button>
 
   <p id="status" class="status" role="status" aria-live="polite">Tip: drag an image to the saver, or Alt+Right-click media to save instantly.</p>
-  <div id="capture-activity" class="activity-slot"></div>
 
   <footer class="popup-footer">
     <button id="setup" type="button">Setup &amp; privacy</button>
-    <span>Local capture · no account · <span id="build">v—</span></span>
+    <span>Local capture · <span id="build">v—</span></span>
   </footer>
 </main>
 
 <div id="toasts" class="toast-stack"></div>
 
-<script src="activity.js"></script>
 <script src="popup.js"></script>
 </body>
 </html>
