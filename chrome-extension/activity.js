@@ -39,12 +39,19 @@ function canvasCaptureActivity(job,mount){
   row.classList.toggle('failed', job.state==='failed');
   const icon=row.querySelector('.icon'), thumb=row.querySelector('.thumb'), titleEl=row.querySelector('.title'), detailEl=row.querySelector('.detail'), bar=row.querySelector('.bar');
   const active=(job.items||[])[Math.min(job.done||0, Math.max(0,(job.items||[]).length-1))] || (job.items||[])[0];
-  const src=job.thumbnail || active?.thumbnail || active?.poster || (active?.kind==='image' ? active?.mediaUrl : '');
-  if(src && /^(https?:\/\/|data:image\/)/i.test(src)){
-    if(thumb.dataset.source!==src){thumb.dataset.source=src; thumb.referrerPolicy='no-referrer'; thumb.src=src;}
-    thumb.hidden=false; icon.style.display='none';
-    thumb.onerror=()=>{thumb.hidden=true; icon.style.display='grid';};
-  } else { thumb.hidden=true; icon.style.display='grid'; }
+  // The address is tried first; the inline copy is the fallback for pages whose
+  // own rules block the original image.
+  const address=job.thumbnail || active?.thumbnail || active?.poster || (active?.kind==='image' ? active?.mediaUrl : '');
+  const inline=job.thumbnailData || active?.thumbnailData || '';
+  const showThumb=source=>{
+    if(!source) return false;
+    thumb.dataset.source=source; thumb.referrerPolicy='no-referrer'; thumb.src=source; thumb.hidden=false; icon.style.display='none';
+    thumb.onerror=()=>{ if(inline && inline!==source && thumb.dataset.source===source){ thumb.dataset.source=inline; thumb.src=inline; thumb.onerror=()=>{thumb.hidden=true; icon.style.display='grid';}; } else { thumb.hidden=true; icon.style.display='grid'; } };
+    return true;
+  };
+  // The inline copy is tried first: it is immune to the page's own rules
+  // about which images may be loaded.
+  if(!showThumb(inline)) showThumb(address);
   const kind=(job.kind || active?.kind || (job.title||'').toLowerCase().includes('video') ? (job.kind||active?.kind||'video') : (job.kind||active?.kind||'image'));
   const label = kind==='bookmark'||kind==='link' ? 'Link' : kind==='video' ? 'Video' : kind==='content' ? 'Page content' : kind==='screenshot' ? 'Screenshot' : 'Image';
   let headline;

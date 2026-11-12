@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('library', {
   libraryNavigation:()=>ipcRenderer.invoke('library-navigation'),
   libraryPage:data=>ipcRenderer.invoke('library-page',data),
   captureAssets:ids=>ipcRenderer.invoke('capture-assets',ids),
+  captureSync:seen=>ipcRenderer.invoke('capture-sync',seen),
   onCaptureStatus:fn=>ipcRenderer.on('capture-status',(_,status)=>fn(status)),
   setAspectRatio: (id,ratio) => ipcRenderer.send('asset-ratio',id,ratio),
   mediaInfo: (id, priority=false) => ipcRenderer.invoke('media-info', id, priority),

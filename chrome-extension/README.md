@@ -17,6 +17,11 @@ If the browser connection needs reinstalling, run `npm run install:extension` fr
 
 ## Capture
 
+- **Alt + Right-click:** hold Option (Alt) and right-click an image, video or background picture to save it straight away. The browser’s own menu and “save the page” behaviour are suppressed, so a picture that hides its address can still be saved. On X, Reddit, Instagram and the other supported sites, a video that hides its download link is resolved through the post itself. The picture under the pointer is what gets saved, even when a video sits beside it.
+- **Drag and drop:** drag an image or a video to the saver that appears at the bottom of the page to save it. The original file is saved, not the small copy the page happens to show.
+- **Save Image to Canvas Pro…:** the right-click menu has one entry for saving media, instead of two entries that did the same thing.
+- **Save Full Page:** the page scrolls while it is captured, and one long image of the whole page is saved.
+- Every save reports itself in the top right corner with a thumbnail of what was saved: “Image saved to Canvas Pro”, “Video saved to Canvas Pro”, “Link saved to Canvas Pro”.
 - **Post save buttons:** Canvas Pro’s icon appears beside X’s share/bookmark actions, and in the post controls or a small corner button on Instagram, Reddit and Pinterest. One click saves media from that post, with the same right-side activity panel. Feed changes are observed with a debounced observer so newly loaded posts receive a button without duplicates. Browser site access must be allowed for these platforms after reloading the extension.
 - Post capture prefers media exposed by that post’s DOM. X can resolve public syndication MP4 variants (highest advertised bitrate); Reddit can resolve its public fallback URL; Instagram/Pinterest try public Open Graph video metadata on the post permalink. These endpoints may refuse access or omit media; the extension reports that failure. It does not read session cookies or bypass private content. Reddit fallback video may omit a separate audio track, and the activity panel identifies this limitation.
 

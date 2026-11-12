@@ -639,3 +639,16 @@ api.onLibraryChanged(ids=>{
    safe(pagedCatalog?refreshCurrent:full?refresh:()=>refreshCaptured(changed));
  },100);
 });api.onCaptureStatus(job=>{$('#status').textContent=job.state==='running'?'Browser capture '+job.done+'/'+job.total+(job.bytes?' · '+bytes(job.bytes):''):job.errors.length?'Capture finished with '+job.errors.length+' issue'+(job.errors.length===1?'':'s'):'Saved '+job.imported+' browser captures';});initContextUI();initReliabilityUI();initViewPreferences();initBookmarks();CanvasWorkspace.init();SmartSearch.init();WorkbenchUI.init();NotesWorkspace.init();SidebarUI.init();safe(loadLibraryPage);
+// A capture that arrived while this view was loading, or while the window was
+// in the background, is picked up here so the library is never out of date.
+let lastCaptureSeen=0;
+async function syncCaptures(){
+ try{
+  const result=await api.captureSync(lastCaptureSeen);
+  if(!result?.pending)return;
+  lastCaptureSeen=result.at||Date.now();
+  await refreshCurrent();
+ }catch{}
+}
+window.addEventListener('focus',()=>{safe(syncCaptures);});
+setTimeout(()=>{safe(syncCaptures);},600);

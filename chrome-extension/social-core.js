@@ -25,6 +25,31 @@
  }
  function platformFor(value){try{const host=new URL(value).hostname;return platforms.find(p=>host===p||host.endsWith('.'+p))||null;}catch{return null;}}
  function direct(value){try{const u=new URL(value);return /^https?:$/.test(u.protocol)&&! /\.(m3u8|mpd|m4s|ts)(?:$)/i.test(u.pathname)?u.href:null;}catch{return null;}}
+ // The page shows a resized copy. The original file is asked for instead, so
+ // what is saved is full quality and not the thumbnail.
+ function originalImage(value){
+  const url=direct(value); if(!url) return null;
+  try{const parsed=new URL(url);if(/(?:^|\.)pbs\.twimg\.com$/i.test(parsed.hostname)&&parsed.pathname.startsWith('/media/')&&!parsed.searchParams.has('name'))parsed.searchParams.set('name','orig');return parsed.href;}catch{return url;}
+ }
+ // The largest picture the page offers, not the small one it happens to show.
+ function largestImage(element){
+  if(!element) return null;
+  const candidates=[];
+  const add=(value,weight)=>{const url=direct(value);if(url)candidates.push({url,weight});};
+  const srcset=element.getAttribute?.('srcset')||element.getAttribute?.('data-srcset')||'';
+  for(const part of srcset.split(',')){
+   const bits=part.trim().split(/\s+/); if(!bits[0])continue;
+   const descriptor=bits[1]||'';
+   const width=/^(\d+(?:\.\d+)?)w$/i.test(descriptor)?parseFloat(descriptor):0;
+   const density=/^(\d+(?:\.\d+)?)x$/i.test(descriptor)?parseFloat(descriptor)*1000:0;
+   add(bits[0],Math.max(width,density));
+  }
+  add(element.getAttribute?.('data-original')||element.getAttribute?.('data-full')||element.getAttribute?.('data-zoom-image')||'',2000);
+  add(element.currentSrc||element.src||'',0);
+  if(!candidates.length) return null;
+  candidates.sort((a,b)=>b.weight-a.weight);
+  return originalImage(candidates[0].url);
+ }
  function bestVariant(variants){return (variants||[]).filter(v=>/video\/mp4/i.test(v.content_type||v.type||'')||/\.mp4(?:[?#]|$)/i.test(v.url||v.src||'')).sort((a,b)=>(b.bitrate||b.bit_rate||b.width*b.height||0)-(a.bitrate||a.bit_rate||a.width*a.height||0))[0];}
  function twitterMedia(data,base){const result=[];for(const media of data.mediaDetails||[]){const variant=bestVariant(media.video_info?.variants);if(variant)result.push({...base,kind:'video',mediaUrl:variant.url||variant.src,poster:media.media_url_https||'',duration:(media.video_info?.duration_millis||0)/1000});else if(media.type==='photo'&&media.media_url_https)result.push({...base,kind:'image',mediaUrl:media.media_url_https});}if(!result.length){const variant=bestVariant(data.video?.variants);if(variant)result.push({...base,kind:'video',mediaUrl:variant.url||variant.src});}return result;}
  const instagramVideos=new Map();
@@ -70,7 +95,7 @@
    if(box.width<70||box.height<60||getComputedStyle(element).visibility!=='visible')continue;
    const video=element.localName==='video';
    const source=element.currentSrc||element.src;
-   const mediaUrl=direct(source)|| (video&&[...element.querySelectorAll('source')].map(node=>direct(node.src)).find(Boolean));
+   const mediaUrl=video?(direct(source)|| (video&&[...element.querySelectorAll('source')].map(node=>direct(node.src)).find(Boolean))):(largestImage(element)||direct(source));
    const item={kind:video?'video':'image',title:element.alt||document.title,
     pageUrl:location.href,pageTitle:document.title,poster:video?element.poster:'',
     width:video?element.videoWidth:element.naturalWidth,height:video?element.videoHeight:element.naturalHeight};
@@ -156,13 +181,14 @@
   base.pageUrl=permalink;base.author=post.getAttribute('author')||post.querySelector('[data-testid="User-Name"],a[rel="author"]')?.textContent?.trim().slice(0,300)||'';
   const add=(value,kind,extra={})=>{let url=direct(value);if(!url||seen.has(url)||items.length>=25)return;if(platform==='x.com'||platform==='twitter.com'){const u=new URL(url);if(u.hostname==='pbs.twimg.com'&&u.pathname.startsWith('/media/')){u.searchParams.set('name','orig');url=u.href;}}
    seen.add(url);items.push({...base,kind,...extra,mediaUrl:url});};
+  const addImage=(element,extra={})=>{const url=largestImage(element);if(!url||seen.has(url)||items.length>=25)return;seen.add(url);items.push({...base,kind:'image',...extra,mediaUrl:url});};
   const roots=[post];for(let i=0;i<roots.length&&i<300;i++){for(const e of roots[i].querySelectorAll('*'))if(e.shadowRoot)roots.push(e.shadowRoot);}const query=selector=>roots.flatMap(root=>[...root.querySelectorAll(selector)]);const videos=query('video'),hasVideo=videos.length>0||post.getAttribute('post-type')==='video'||!!post.querySelector('shreddit-player,[data-testid="videoPlayer"],[data-testid="videoComponent"]');for(const video of videos){const extra={width:video.videoWidth,height:video.videoHeight,...(Number.isFinite(video.duration)?{duration:video.duration}:{}),poster:video.poster||''};const resolved=direct(video.currentSrc||video.src)?null:instagramVideoForPoster(video.poster);
    add(direct(video.currentSrc||video.src)||resolved?.mediaUrl,'video',{...extra,...(resolved?.audioUrl?{audioUrl:resolved.audioUrl}:{})});for(const source of video.querySelectorAll('source'))add(source.src,'video',extra);}
   for(const e of query('[data-video-url],[video-url],[content-href]')){const value=e.getAttribute('data-video-url')||e.getAttribute('video-url')||e.getAttribute('content-href');if(/\.(mp4|webm|mov)(?:[?#]|$)/i.test(value||''))add(value,'video');}
   // Structured metadata is used only within this post, never another feed item.
   for(const script of query('script[type="application/ld+json"]'))try{const queue=[JSON.parse(script.textContent)];let count=0;while(queue.length&&count++<5000){const value=queue.shift();if(!value||typeof value!=='object')continue;for(const [key,child]of Object.entries(value)){if(typeof child==='object')queue.push(child);else if(typeof child==='string'&&/^(contentUrl|video_url|url)$/.test(key)&&/\.(mp4|webm|mov)(?:[?#]|$)/i.test(child))add(child,'video');}}}catch{}
   const posters=new Set(videos.map(video=>direct(video.poster)).filter(Boolean));
-  for(const image of query('img')){const bounds=image.getBoundingClientRect();if(/avatar|profile|emoji|profile_images/i.test((image.alt||'')+' '+image.src)||bounds.width>0&&bounds.width<70||bounds.height>0&&bounds.height<60||image.naturalWidth&&image.naturalWidth<90||image.naturalHeight&&image.naturalHeight<70)continue;if(posters.has(direct(image.currentSrc||image.src)))continue;add(image.currentSrc||image.src,'image',{alt:image.alt||'',width:image.naturalWidth,height:image.naturalHeight});}
+  for(const image of query('img')){const bounds=image.getBoundingClientRect();if(/avatar|profile|emoji|profile_images/i.test((image.alt||'')+' '+image.src)||bounds.width>0&&bounds.width<70||bounds.height>0&&bounds.height<60||image.naturalWidth&&image.naturalWidth<90||image.naturalHeight&&image.naturalHeight<70)continue;if(posters.has(direct(image.currentSrc||image.src)))continue;addImage(image,{alt:image.alt||'',width:image.naturalWidth,height:image.naturalHeight});}
   return {platform,permalink,title,items,hasVideo:hasVideo||items.some(i=>i.kind==='video')};
  }
  const api={platformFor,postPermalink,direct,bestVariant,twitterMedia,collect,focusedMedia,rememberInstagramMedia};if(typeof module!=='undefined')module.exports=api;else root.CanvasSocialCore=api;

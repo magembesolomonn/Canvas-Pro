@@ -10,7 +10,10 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
  // Only this isolated test copy receives fixture-host access. The shipped manifest uses activeTab.
  manifest.host_permissions=['<all_urls>'];fs.writeFileSync(path.join(extension,'manifest.json'),JSON.stringify(manifest));const id=fs.readFileSync(path.join(extension,'extension-id.txt'),'utf8').trim();
  lib=new Library(path.join(temporary,'library'));bridge=new CaptureBridge({library:lib,directory:path.join(temporary,'bridge'),fetcher:fetch});await bridge.start();
- const runtime='/Users/solomon/Documents/eagle/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron',launcher=path.join(temporary,'host');const quote=s=>"'"+s.replaceAll("'","'\\''")+"'";fs.writeFileSync(launcher,'#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexport CANVAS_NO_LAUNCH=1\nexport CANVAS_BRIDGE_DIR='+quote(bridge.directory)+'\nexec '+quote(runtime)+' '+quote(path.join(root,'electron/native-host.cjs'))+' "$@"\n',{mode:0o755});const hosts=path.join(profile,'NativeMessagingHosts');fs.mkdirSync(hosts);fs.writeFileSync(path.join(hosts,'com.canvaspro.capture.json'),JSON.stringify({name:'com.canvaspro.capture',description:'Canvas Pro isolated test',path:launcher,type:'stdio',allowed_origins:['chrome-extension://'+id+'/']}));
+ const runtimeCandidates=[path.join(root,'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),'/Users/solomon/Documents/eagle/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'];
+ const runtime=runtimeCandidates.find(candidate=>fs.existsSync(candidate));
+ if(!runtime)throw new Error('No Electron runtime was found for the native host test.');
+ const launcher=path.join(temporary,'host');const quote=s=>"'"+s.replaceAll("'","'\\''")+"'";fs.writeFileSync(launcher,'#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexport CANVAS_NO_LAUNCH=1\nexport CANVAS_BRIDGE_DIR='+quote(bridge.directory)+'\nexec '+quote(runtime)+' '+quote(path.join(root,'electron/native-host.cjs'))+' "$@"\n',{mode:0o755});const hosts=path.join(profile,'NativeMessagingHosts');fs.mkdirSync(hosts);fs.writeFileSync(path.join(hosts,'com.canvaspro.capture.json'),JSON.stringify({name:'com.canvaspro.capture',description:'Canvas Pro isolated test',path:launcher,type:'stdio',allowed_origins:['chrome-extension://'+id+'/']}));
  let videoFile;const source='/Users/solomon/Library/Application Support/Asset Library/Library';if(fs.existsSync(path.join(source,'library.sqlite'))){const db=new DatabaseSync(path.join(source,'library.sqlite'),{readOnly:true});const video=db.prepare("SELECT stored FROM assets WHERE ext='mp4' LIMIT 1").get();if(video)videoFile=path.join(source,video.stored);db.close();}
  const imageFile=path.join(__dirname,'fixtures/Square.png');server=http.createServer((req,res)=>{if(req.url==='/animation.gif'){res.setHeader('Content-Type','image/gif');res.end(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7','base64'));}else if(req.url==='/opaque-media'||req.url?.startsWith('/lazy.mp4')){res.setHeader('Content-Type','video/mp4');res.setHeader('Content-Length','5');res.end(Buffer.from([0,1,2,3,4]));}else if(req.url==='/image.png'){res.setHeader('Content-Type','image/png');fs.createReadStream(imageFile).pipe(res);}else if(req.url==='/video.mp4'&&videoFile){res.setHeader('Content-Type','video/mp4');fs.createReadStream(videoFile).pipe(res);}else{res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>Canvas browser fixture</title><meta name="author" content="Capture test artist"><meta property="og:video" content="/lazy.mp4?source=metadata"><div data-video-src="/lazy.mp4?source=lazy"></div><video id="Apple showcase fixture" data-inline-media-basepath="/105/media/us/product/anim/showcase/" preload="none"></video><h1>Local inspiration</h1><p>Readable page content.</p><img src="/image.png" alt="Square inspiration" width="300"><video src="/video.mp4" controls width="320" preload="metadata"></video>');}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base='http://127.0.0.1:'+server.address().port;
  const log=fs.openSync(path.join(temporary,'browser.log'),'w');browser=spawn('/Applications/Helium.app/Contents/MacOS/Helium',['--headless=new','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-component-update','--disable-sync','--disable-default-apps','--password-store=basic','--user-data-dir='+profile,'--remote-debugging-port=0','--load-extension='+extension,'--disable-extensions-except='+extension,base+'/page'],{stdio:['ignore','ignore',log]});
@@ -25,7 +28,7 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
  const image=await c.evaluate(`captureContext({menuItemId:'image',srcUrl:${JSON.stringify(base+'/image.png')},frameId:0},${JSON.stringify(tab)})`);console.log('EXTENSION_IMAGE',JSON.stringify(image));
  if(videoFile){const video=await c.evaluate(`captureContext({menuItemId:'video',srcUrl:${JSON.stringify(base+'/video.mp4')},frameId:0},${JSON.stringify(tab)})`);console.log('EXTENSION_VIDEO',JSON.stringify(video));const saved=lib.list().find(a=>a.ext==='mp4');if(!saved||saved.captureMetadata.author!=='Capture test artist')throw new Error('Video metadata did not reach the library.');}
  assert.ok(page,'Fixture page is available');
- const activity=await page.evaluate(`(()=>{const root=document.querySelector('[data-canvas-capture-activity]')?.shadowRoot;return {rows:root?.querySelectorAll('.job').length,text:root?.textContent};})()`);assert.ok(activity.rows>=1);assert.match(activity.text,/saved/);console.log('EXTENSION_RIGHT_ACTIVITY',activity.rows);const activityShot=await page.call('Page.captureScreenshot');fs.writeFileSync('/private/tmp/canvas-pro-capture-activity.png',Buffer.from(activityShot.data,'base64'));await poll(()=>page.evaluate(`!document.querySelector('[data-canvas-capture-activity]')`),5000);console.log('EXTENSION_ACTIVITY_AUTO_DISMISS',true);
+ const activity=await page.evaluate(`(()=>{const root=document.querySelector('[data-canvas-capture-activity]')?.shadowRoot;return {rows:root?.querySelectorAll('.toast').length,text:root?.textContent};})()`);assert.ok(activity.rows>=1,'The capture toast did not appear on the page.');assert.match(activity.text,/saved/);console.log('EXTENSION_RIGHT_ACTIVITY',activity.rows);const activityShot=await page.call('Page.captureScreenshot');fs.writeFileSync('/private/tmp/canvas-pro-capture-activity.png',Buffer.from(activityShot.data,'base64'));await poll(()=>page.evaluate(`!document.querySelector('[data-canvas-capture-activity]')`),5000);console.log('EXTENSION_ACTIVITY_AUTO_DISMISS',true);
  // Observe a real MIME-only video request after arming this tab; no filename extension.
  await c.evaluate(`chrome.storage.session.set({['media-watch:'+${tab.id}]:{expires:Date.now()+60000,items:[]}})`);
  await page.evaluate(`fetch('/opaque-media').then(r=>r.arrayBuffer()).then(()=>true)`);
@@ -54,7 +57,56 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
   await social.evaluate(`(()=>{const post=document.querySelector('${tag}');const clone=post.cloneNode(true);clone.querySelectorAll('[data-canvas-post-save]').forEach(n=>n.remove());document.body.append(clone);})()`);
   await poll(()=>social.evaluate(`document.querySelectorAll('[data-canvas-post-save]').length===2`));await wait(400);assert.equal(await social.evaluate(`document.querySelectorAll('[data-canvas-post-save]').length`),2);
   if(host==='x.com'){const shot=await social.call('Page.captureScreenshot');fs.writeFileSync('/private/tmp/canvas-pro-social-save.png',Buffer.from(shot.data,'base64'));}
-  console.log('EXTENSION_SOCIAL_BUTTON_OK',host);await c.evaluate(`chrome.tabs.query({}).then(tabs=>{const tab=tabs.find(t=>t.url===${JSON.stringify(href)});return tab&&chrome.tabs.remove(tab.id);})`);
+  console.log('EXTENSION_SOCIAL_BUTTON_OK',host);
+  if(host==='x.com'){
+   // A post can hold a video and a picture at once. Alt+Right-click on the
+   // picture must save the picture, not the video beside it.
+   const socialJobBefore=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture?.id||'')`);
+   const imagePoint=await social.evaluate(`(()=>{const img=[...document.querySelectorAll('article img')].find(i=>i.src.includes('/image.png'));if(!img)return null;const box=img.getBoundingClientRect();return {x:Math.round(box.left+box.width/2),y:Math.round(box.top+box.height/2)};})()`);
+   assert.ok(imagePoint,'The fixture post has no picture to click.');
+   await social.call('Input.dispatchMouseEvent',{type:'mousePressed',x:imagePoint.x,y:imagePoint.y,button:'right',buttons:2,clickCount:1,modifiers:1});
+   await social.call('Input.dispatchMouseEvent',{type:'mouseReleased',x:imagePoint.x,y:imagePoint.y,button:'right',buttons:0,clickCount:1,modifiers:1});
+   const socialJob=await poll(async()=>{const job=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture)`);return job&&job.id!==socialJobBefore&&['complete','failed'].includes(job.state)?job:null;},20000).catch(error=>{throw new Error('Alt+Right-click on a post picture did not save: '+error.message);});
+   assert.equal(socialJob.state,'complete',JSON.stringify(socialJob));
+   const savedPicture=socialJob.results?.[0]?.id?lib.asset(socialJob.results[0].id):null;
+   assert.ok(savedPicture,'The Alt+Right-click picture was not imported.');
+   assert.equal(savedPicture.ext,'png','Alt+Right-click on a picture saved something else: '+savedPicture.ext);
+   console.log('EXTENSION_SOCIAL_ALT_PICTURE',JSON.stringify({ext:savedPicture.ext,name:savedPicture.name}));
+  }
+  await c.evaluate(`chrome.tabs.query({}).then(tabs=>{const tab=tabs.find(t=>t.url===${JSON.stringify(href)});return tab&&chrome.tabs.remove(tab.id);})`);
  }
+ // Alt + Right-click saves straight away, with no menu and no download.
+ // A real browser input event is used, so the page sees a trusted gesture.
+ const altBefore=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture?.id||'')`);
+ const altPoint=await page.evaluate(`(()=>{const img=document.querySelector('img[alt="Square inspiration"]');const box=img.getBoundingClientRect();return {x:Math.round(box.left+box.width/2),y:Math.round(box.top+box.height/2)};})()`);
+ await page.call('Input.dispatchMouseEvent',{type:'mousePressed',x:altPoint.x,y:altPoint.y,button:'right',buttons:2,clickCount:1,modifiers:1});
+ await page.call('Input.dispatchMouseEvent',{type:'mouseReleased',x:altPoint.x,y:altPoint.y,button:'right',buttons:0,clickCount:1,modifiers:1});
+ const altJob=await poll(async()=>{const job=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture)`);return job&&job.id!==altBefore&&['complete','failed'].includes(job.state)?job:null;},20000).catch(error=>{throw new Error('Alt+Right-click did not save the image: '+error.message);});
+ assert.equal(altJob.state,'complete',JSON.stringify(altJob));
+ assert.ok((altJob.imported||0)+(altJob.duplicates||0)>=1,JSON.stringify(altJob));
+ console.log('EXTENSION_ALT_CLICK',JSON.stringify({imported:altJob.imported,duplicates:altJob.duplicates}));
+ // The toast appears in the top right corner with a thumbnail of what was saved.
+ const altToast=await poll(async()=>page.evaluate(`(()=>{const root=document.querySelector('[data-canvas-capture-activity]')?.shadowRoot;const toast=root?.querySelector('.toast');if(!toast)return null;const thumb=toast.querySelector('.thumb');return {title:toast.querySelector('.title')?.textContent||'',hasThumb:!!thumb&&!thumb.hidden,thumbReady:!!thumb&&thumb.complete&&thumb.naturalWidth>0};})()`),15000).catch(()=>null);
+ assert.ok(altToast,'No toast appeared for the Alt+Right-click save.');
+ assert.match(altToast.title,/saved to Canvas Pro/i);
+ assert.equal(altToast.hasThumb,true,'The toast had no thumbnail.');
+ assert.equal(altToast.thumbReady,true,'The toast thumbnail did not load.');
+ console.log('EXTENSION_ALT_TOAST',JSON.stringify(altToast));
+ // Drag and drop saves the dropped picture through the extension. Real drag
+ // events are used, so the page sees the gesture a person makes.
+ const dropBefore=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture?.id||'')`);
+ await page.call('Input.setInterceptDrags',{enabled:true});
+ const dragItem={mimeType:'text/uri-list',data:base+'/image.png'};
+ const dragPoint=await page.evaluate(`(()=>{const img=document.querySelector('img[alt="Square inspiration"]');const box=img.getBoundingClientRect();return {x:Math.round(box.left+box.width/2),y:Math.round(box.top+box.height/2)};})()`);
+ await page.call('Input.dispatchDragEvent',{type:'dragEnter',x:dragPoint.x,y:dragPoint.y,data:{items:[dragItem],dragOperationsMask:1}});
+ await page.call('Input.dispatchDragEvent',{type:'dragOver',x:dragPoint.x,y:dragPoint.y,data:{items:[dragItem],dragOperationsMask:1}});
+ const overlay=await poll(async()=>page.evaluate(`(()=>{const host=document.querySelector('#__canvas_drop_saver');const wrap=host?.shadowRoot?.querySelector('.wrap');const target=host?.shadowRoot?.querySelector('.target');if(!target)return null;const box=target.getBoundingClientRect();return {shown:!!wrap&&wrap.classList.contains('show'),x:Math.round(box.left+box.width/2),y:Math.round(box.top+box.height/2)};})()`),8000).catch(()=>null);
+ assert.ok(overlay,'The drag and drop target was never shown.');
+ assert.equal(overlay.shown,true,'The drag and drop target did not appear.');
+ await page.call('Input.dispatchDragEvent',{type:'drop',x:overlay.x,y:overlay.y,data:{items:[dragItem],dragOperationsMask:1}});
+ const dropJob=await poll(async()=>{const job=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture)`);return job&&job.id!==dropBefore&&['complete','failed'].includes(job.state)?job:null;},20000).catch(error=>{throw new Error('Drag and drop did not save the image: '+error.message);});
+ assert.equal(dropJob.state,'complete',JSON.stringify(dropJob));
+ assert.ok((dropJob.imported||0)+(dropJob.duplicates||0)>=1,JSON.stringify(dropJob));
+ console.log('EXTENSION_DRAG_DROP',JSON.stringify({imported:dropJob.imported,duplicates:dropJob.duplicates}));
  console.log('EXTENSION_BROWSER_OK',JSON.stringify({assets:lib.list().length,profile:temporary}));
 })().catch(error=>{console.error('EXTENSION_BROWSER_FAILED',error.message);console.error('Test logs:',temporary);process.exitCode=1;}).finally(async()=>{for(const c of clients)c.socket.close();browser?.kill('SIGTERM');await bridge?.close();if(server)await new Promise(resolve=>server.close(resolve));lib?.close();});

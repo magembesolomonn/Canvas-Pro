@@ -1,0 +1,58 @@
+// The view must be able to ask the app whether a capture arrived that it did
+// not see, and pick it up without a restart.
+process.env.ASSET_TEST_MODE='1';
+process.env.AGAGWU_DATA_DIR='/private/tmp/canvas-capture-sync-'+Date.now();
+const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),net=require('node:net');
+const {app}=require('electron');
+const {encodeFrame,frameReader}=require('../electron/framing.cjs');
+let server;
+require('../electron/main.cjs');
+const request=(socketPath,message)=>new Promise((resolve,reject)=>{
+  const socket=net.createConnection(socketPath);
+  socket.on('error',reject);
+  socket.on('connect',()=>{
+    socket.on('data',frameReader(m=>{socket.end();resolve(m);},reject));
+    socket.write(encodeFrame(message));
+  });
+});
+(async()=>{
+  await app.whenReady();
+  const socketPath=path.join(app.getPath('userData'),'Bridge','capture.sock');
+  for(let i=0;i<200&&!fs.existsSync(socketPath);i++)await new Promise(r=>setTimeout(r,50));
+  const png=fs.readFileSync(path.join(__dirname,'fixtures/Square.png'));
+  server=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'image/png','Content-Length':png.length});res.end(png);});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const base='http://127.0.0.1:'+server.address().port;
+  const win=global.assetTestWindow;
+  if(!win)throw new Error('No window.');
+  if(win.webContents.isLoading())await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
+  // Before any capture the app reports nothing pending.
+  const quiet=await win.webContents.executeJavaScript('api.captureSync(0)');
+  assert.equal(quiet.pending,false,'The app reported a capture before one happened.');
+  const {jobId}=await request(socketPath,{version:1,op:'capture',items:[{kind:'image',title:'Sync probe',mediaUrl:base+'/image.png',pageUrl:base+'/post'}]});
+  let job;
+  for(let i=0;i<200;i++){
+    const message=await request(socketPath,{version:1,op:'status',jobId});
+    job=message.job;
+    if(['complete','failed'].includes(job.state))break;
+    await new Promise(r=>setTimeout(r,50));
+  }
+  assert.equal(job.state,'complete',JSON.stringify(job));
+  // The app must now report a pending capture, so a view that missed the
+  // event can still pick it up.
+  const pending=await win.webContents.executeJavaScript('api.captureSync(0)');
+  assert.equal(pending.pending,true,'The app did not report the capture as pending.');
+  assert.ok(pending.at>0,'The app did not record when the capture arrived.');
+  // And the view can pick it up on its own.
+  let rendered=0,inList=0;
+  for(let i=0;i<80;i++){
+    const state=await win.webContents.executeJavaScript(`(()=>{const a=assets.find(x=>x.name&&x.name.startsWith('Sync probe'));const cards=[...document.querySelectorAll('.card')].map(c=>c.textContent||'');return {inList:a?1:0,rendered:cards.some(t=>t.includes('Sync probe'))?1:0};})()`);
+    inList=state.inList;rendered=state.rendered;
+    if(inList&&rendered)break;
+    await new Promise(r=>setTimeout(r,100));
+  }
+  console.log('CAPTURE_SYNC',JSON.stringify({pending:pending.pending,inList,rendered}));
+  assert.equal(inList,1,'The capture never reached the view.');
+  assert.equal(rendered,1,'The capture was not drawn in the gallery.');
+  app.quit();
+})().catch(error=>{console.error(error.stack);app.exit(1);}).finally(async()=>{if(server)await new Promise(r=>server.close(r));fs.rmSync(process.env.AGAGWU_DATA_DIR,{recursive:true,force:true});});

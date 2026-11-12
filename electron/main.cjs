@@ -14,6 +14,9 @@ const crypto=require('node:crypto');
 const {CanvasStore,normalize:normalizeCanvasItem}=require('./canvas-store.cjs');
 const {publicFetch}=require('./public-fetch.cjs');
 const {Bookmarks}=require('./bookmarks.cjs');
+const {resolveSocialVideo}=require('./social-video.cjs');
+const {Readable,Transform}=require('node:stream');
+const {pipeline}=require('node:stream/promises');
 const {WebPreview}=require('./web-preview.cjs');
 const {SmartIndex}=require('./smart-index.cjs');
 const {LocalModel}=require('./local-model.cjs');
@@ -187,7 +190,62 @@ async function importBuffer(buffer, name, folder, sourceURL='') {
   } finally { await fs.promises.rm(dir,{recursive:true,force:true}); }
 }
 function escapeXML(value){return value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');}
-async function importURL(value,folder){return bookmarks.save(value,folder);}
+async function downloadMediaToTemp(mediaUrl,pageUrl,title,kind='video'){
+  const extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/avif':'avif','video/mp4':'mp4','video/x-m4v':'m4v','video/3gpp':'3gp','video/webm':'webm','video/quicktime':'mov','audio/mpeg':'mp3','audio/mp4':'m4a','audio/wav':'wav'};
+  const tempDir=await fs.promises.mkdtemp(path.join(app.getPath('temp'),'canvas-social-'));
+  try{
+    const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),300000);
+    try{
+      const response=await publicFetch(mediaUrl,{signal:controller.signal,referrer:pageUrl,referrerPolicy:'strict-origin-when-cross-origin'});
+      if(!response.ok)throw new Error('Download failed ('+response.status+')');
+      const type=(response.headers.get('content-type')||'').split(';')[0].trim();
+      let ext=extensions[type];
+      if(!ext&&type==='application/octet-stream'){const candidate=path.extname(new URL(mediaUrl).pathname).slice(1).toLowerCase();if(['mp4','m4v','3gp','webm','mov','jpg','jpeg','png','gif','webp','mp3','m4a'].includes(candidate))ext=candidate;}
+      if(!ext){
+        const candidate=path.extname(new URL(mediaUrl).pathname).slice(1).toLowerCase().replace('jpeg','jpg');
+        if(['mp4','m4v','3gp','webm','mov','jpg','png','gif','webp','mp3','m4a'].includes(candidate)) ext=candidate;
+      }
+      if(kind==='video' && !['mp4','m4v','3gp','webm','mov'].includes(ext||'')) throw new Error('No downloadable video file found');
+      if(kind==='image' && !['jpg','png','gif','webp','avif'].includes(ext||'')) throw new Error('No downloadable image found');
+      const limit=kind==='video'?1024*1024*1024:100*1024*1024;
+      if(Number(response.headers.get('content-length'))>limit) throw new Error('Media is too large');
+      const safe=(String(title||'Social media').replace(/[\x00-\x1f/\\:*?"<>|]/g,' ').trim().slice(0,120)||'Social media')+'.'+ext;
+      const file=path.join(tempDir,safe); let size=0;
+      const count=new Transform({transform(chunk,_e,cb){size+=chunk.length; if(size>limit) return cb(new Error('Media is too large')); cb(null,chunk);}});
+      await pipeline(Readable.fromWeb(response.body),count,fs.createWriteStream(file),{signal:controller.signal});
+      return {file,tempDir};
+    }finally{clearTimeout(timer);}
+  }catch(e){await fs.promises.rm(tempDir,{recursive:true,force:true}); throw e;}
+}
+async function importSocialMediaURL(value,folder){
+  const resolved=await resolveSocialVideo(value).catch(()=>null);
+  if(!resolved?.items?.length) return null;
+  const results={imported:0,duplicates:0,errors:[],skipped:0,ids:[]};
+  for(const item of resolved.items){
+    try{
+      const dl=await downloadMediaToTemp(item.mediaUrl,resolved.permalink,item.title||'Post',item.kind==='video'?'video':'image');
+      try{
+        const imported=await library.importFile(dl.file,folder||null);
+        const id=imported.imported||imported.duplicate;
+        if(id){
+          const metadata={kind:item.kind,mediaUrl:item.mediaUrl,pageUrl:resolved.permalink,pageTitle:item.title||resolved.permalink,sourceUrl:resolved.permalink,title:item.title||'Post',author:item.author||'',description:item.description||'',capturedAt:new Date().toISOString(),...(resolved.notice?{note:resolved.notice}:{})};
+          try{library.setCaptureMetadata(id,metadata);}catch{}
+          try{if(!library.asset(id).url)library.update(id,{url:resolved.permalink});}catch{}
+          if(item.width&&item.height)try{library.setAspectRatios([[id,item.width/item.height]]);}catch{}
+          results.ids.push(id);
+          if(imported.imported)results.imported++; else results.duplicates++;
+        }
+      }finally{await fs.promises.rm(dl.tempDir,{recursive:true,force:true});}
+    }catch(e){results.errors.push((item.title||'Media')+': '+e.message);} 
+  }
+  if(!results.ids.length && results.errors.length) return null; // fall back to bookmark
+  return results.ids.length?results:null;
+}
+async function importURL(value,folder){
+  const social=await importSocialMediaURL(value,folder).catch(()=>null);
+  if(social) return social;
+  return bookmarks.save(value,folder);
+}
 function canvasPNG(value){
  if(typeof value!=='string'||!value.startsWith('data:image/png;base64,')||value.length>350000000)throw Error('Invalid canvas image.');
  const bytes=Buffer.from(value.slice('data:image/png;base64,'.length),'base64');
@@ -239,6 +297,23 @@ function applyAppearanceWindow(){
 loadAppearancePrefs();
 nativeTheme.themeSource=appearancePrefs.theme;
 nativeTheme.on('updated',()=>applyAppearanceWindow());
+// A capture can arrive while the window is still loading. The change is then
+// remembered here and handed to the view once it is ready, so a file saved
+// from the browser shows up straight away instead of after a restart.
+const pendingLibraryChanges=new Set();
+let lastCaptureAt=0;
+function notifyLibraryChanged(ids){
+  if(Array.isArray(ids))for(const id of ids)pendingLibraryChanges.add(id);
+  lastCaptureAt=Date.now();
+  if(win&&!win.isDestroyed()&&!win.webContents.isLoading())win.webContents.send('library-changed',ids);
+}
+function flushLibraryChanges(){
+  if(!win||win.isDestroyed())return;
+  if(pendingLibraryChanges.size){
+    const ids=[...pendingLibraryChanges];pendingLibraryChanges.clear();
+    win.webContents.send('library-changed',ids);
+  }else win.webContents.send('library-changed');
+}
 function createWindow() {
   const appearance=appearanceState();
   win = new BrowserWindow({ width: 1480, height: 940, minWidth: 960, minHeight: 640, title: 'Canvas Pro', backgroundColor: appearance.nativeGlass?'#00000000':appearance.dark?'#202020':'#f4f4f6', ...(appearance.nativeGlass?{vibrancy:'sidebar',visualEffectState:'followWindow'}:{}), titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
@@ -258,6 +333,7 @@ function createWindow() {
   win.on('close',event=>{if((!canvasDirty&&!notesDirty)||shutdownStarted)return;event.preventDefault();const target=win;flushWorkspaces().then(()=>{if(!target.isDestroyed())target.close();}).catch(error=>dialog.showErrorBox('Workspace could not be saved',error.message));});
   win.on('closed',()=>{webPreview?.close();webPreview=null;});
   win.loadFile(path.join(__dirname, '../src/index.html'));
+  win.webContents.on('did-finish-load',()=>{setTimeout(flushLibraryChanges,150);});
   if(process.env.ASSET_TEST_MODE)global.assetTestWindow=win;
 }
 function ensureWindow() {
@@ -622,6 +698,15 @@ app.whenReady().then(async () => {
     if(!Array.isArray(ids)||ids.length>500||ids.some(id=>typeof id!=='string'||! /^[a-f0-9-]{36}$/.test(id)))throw new Error('Invalid captured assets.');
     return library.list(ids);
   });
+  // The view tells the app when it is ready to receive changes, and when it
+  // comes back to the front. A capture that happened in between is handed
+  // over then, so the library never looks out of date.
+  ipcMain.handle('capture-sync',(event,seen)=>{
+    trusted(event);
+    const since=Number.isFinite(seen)?Number(seen):0;
+    if(lastCaptureAt>since){flushLibraryChanges();return {pending:true,at:lastCaptureAt};}
+    return {pending:false,at:lastCaptureAt};
+  });
   function libraryNavigation(){
     return {navigation:library.navSummary(),folders:library.folders(),folderRecords:library.folderRecords(),
       canvases:canvasStore.list(),prototype:!!process.env.CANVAS_PROTOTYPE,workbench:{icons:workbench.icons()}};
@@ -822,7 +907,7 @@ app.whenReady().then(async () => {
   });
   powerMonitor.on('resume',()=>originalsWatch.scan());
   const bridgeDirectory=(process.env.ASSET_TEST_MODE||process.env.CANVAS_PROTOTYPE)?path.join(app.getPath('userData'),'Bridge'):path.join(app.getPath('appData'),'Canvas Pro/Bridge');
-  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>{if(win&&!win.isDestroyed())win.webContents.send('library-changed',ids);},onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);}});
+  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);}});
   try{await captureBridge.start();}catch(e){console.error('Browser capture bridge:',e.message);}
   setImmediate(()=>{
     try{

@@ -10,42 +10,27 @@ function native(message){return new Promise((resolve,reject)=>chrome.runtime.sen
 async function badge(text,error=false){await chrome.action.setBadgeText({text});await chrome.action.setBadgeBackgroundColor({color:error?'#a24949':'#3478d5'});}
 async function progress(value,tabId){
  await chrome.storage.session.set({lastCapture:value});
- for(const id of new Set((Array.isArray(tabId)?tabId:[tabId]).filter(Boolean)))try{await chrome.scripting.executeScript({target:{tabId:id},func:canvasCaptureActivity,args:[value]});}catch{/* Browser/internal pages may prohibit overlays; the popup retains progress. */}
-}
-async function captureThumbnail(item){
- const url=item.poster||item.previewImage||(item.kind==='image'?item.mediaUrl:'');
- if(url && /^data:image\//i.test(url)) return url.length<300000 ? url : '';
- if(url && /^https?:\/\//i.test(url)){
-   try{
-     const res=await fetch(url,{credentials:'omit'});
-     if(res.ok){
-       const blob=await res.blob();
-       if(/^image\//i.test(blob.type||'')){
-         if(blob.size<200000) {
-           const bytes=new Uint8Array(await blob.arrayBuffer());
-           let binary=''; for(let i=0;i<bytes.length;i+=0x8000) binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
-           return 'data:'+(blob.type||'image/jpeg')+';base64,'+btoa(binary);
-         }
-         try{
-           const bitmap=await createImageBitmap(blob);
-           const scale=Math.min(1,96/Math.max(bitmap.width,bitmap.height));
-           const canvas=new OffscreenCanvas(Math.max(1,Math.round(bitmap.width*scale)),Math.max(1,Math.round(bitmap.height*scale)));
-           canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
-           bitmap.close();
-           const bytes=new Uint8Array(await (await canvas.convertToBlob({type:'image/jpeg',quality:.82})).arrayBuffer());
-           let binary=''; for(let i=0;i<bytes.length;i+=0x8000) binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
-           return 'data:image/jpeg;base64,'+btoa(binary);
-         }catch{ return url; }
-       }
-     }
-   }catch{}
-   return url;
+ for(const id of new Set((Array.isArray(tabId)?tabId:[tabId]).filter(Boolean))){
+  // The page's own content script shows the toast. Injecting it directly needs
+  // permission for that site, which the reader may not have granted, and the
+  // toast would then never appear.
+  try{await chrome.tabs.sendMessage(id,{type:'capture-activity',job:value});continue;}catch{}
+  try{await chrome.scripting.executeScript({target:{tabId:id},func:canvasCaptureActivity,args:[value]});}catch{/* Browser/internal pages may prohibit overlays; the popup retains progress. */}
  }
- if(!item.dataUrl||!['image','screenshot'].includes(item.kind))return '';
- if(item.dataUrl.length<300000)return item.dataUrl;
+}
+// Thumbnails come in two parts: the original address (cheap, and usually
+// allowed by the page) and an inline copy (used when the page's own rules
+// block the address). The toast tries the address first, then the inline copy.
+async function inlineCopy(url){
  try{
-   const bitmap=await createImageBitmap(await (await fetch(item.dataUrl)).blob());
-   const scale=Math.min(1,96/Math.max(bitmap.width,bitmap.height));
+   const res=await fetch(url,{credentials:'omit'});
+   if(!res.ok) return '';
+   const length=Number(res.headers.get('content-length')||0);
+   if(length&&length>3*1024*1024) return '';
+   const blob=await res.blob();
+   if(!/^image\//i.test(blob.type||'')) return '';
+   const bitmap=await createImageBitmap(blob);
+   const scale=Math.min(1,160/Math.max(bitmap.width,bitmap.height));
    const canvas=new OffscreenCanvas(Math.max(1,Math.round(bitmap.width*scale)),Math.max(1,Math.round(bitmap.height*scale)));
    canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
    bitmap.close();
@@ -54,10 +39,30 @@ async function captureThumbnail(item){
    return 'data:image/jpeg;base64,'+btoa(binary);
  }catch{return '';}
 }
+async function captureThumbnail(item){
+ if(item.thumbnail&&/^data:image\//i.test(item.thumbnail)) return {url:'',data:item.thumbnail.length<400000?item.thumbnail:''};
+ const url=item.poster||item.previewImage||(item.kind==='image'?item.mediaUrl:'');
+ if(url&&/^data:image\//i.test(url)) return {url:'',data:url.length<300000?url:''};
+ if(url&&/^https?:\/\//i.test(url)) return {url,data:await inlineCopy(url)};
+ if(item.dataUrl&&['image','screenshot'].includes(item.kind)){
+   if(item.dataUrl.length<300000) return {url:'',data:item.dataUrl};
+   try{
+     const bitmap=await createImageBitmap(await (await fetch(item.dataUrl)).blob());
+     const scale=Math.min(1,160/Math.max(bitmap.width,bitmap.height));
+     const canvas=new OffscreenCanvas(Math.max(1,Math.round(bitmap.width*scale)),Math.max(1,Math.round(bitmap.height*scale)));
+     canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+     bitmap.close();
+     const bytes=new Uint8Array(await (await canvas.convertToBlob({type:'image/jpeg',quality:.82})).arrayBuffer());
+     let binary=''; for(let i=0;i<bytes.length;i+=0x8000) binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+     return {url:'',data:'data:image/jpeg;base64,'+btoa(binary)};
+   }catch{return {url:'',data:''};}
+ }
+ return {url:'',data:''};
+}
 async function sendCapture(items,folder,tabId,notice='',activityId){
  if(!items?.length)throw new Error('No items selected.');
  const id=activityId||crypto.randomUUID(),title=items.length===1?items[0].title:items.length+' captures';
- const previews=await Promise.all(items.map(async item=>({title:item.title,kind:item.kind,thumbnail:await captureThumbnail(item),mediaUrl:item.kind==='image'?item.mediaUrl:'',poster:item.poster||''})));
+ const previews=await Promise.all(items.map(async item=>{const thumb=await captureThumbnail(item);return {title:item.title,kind:item.kind,thumbnail:thumb.url||'',thumbnailData:thumb.data||'',mediaUrl:item.kind==='image'?item.mediaUrl:'',poster:item.poster||''};}));
  let latest={id,title,kind:items[0].kind,state:'queued',total:items.length,done:0,notice,items:previews};
  await progress(latest,tabId);await badge('…');
  try{const options=await chrome.storage.local.get('folder');const result=await native({op:'capture',items,folder:folder??options.folder??''});
@@ -110,7 +115,29 @@ async function fullPage(tab){
 }
 
 async function runAction(action,tabId){const tab=await tabFor(tabId);if(action==='viewport')return screenshot(tab);if(action==='region')return region(tab);if(action==='fullpage')return fullPage(tab);if(action==='collect')return collect(tab);if(action==='videos')return collect(tab,'videos');if(action==='content')return sendCapture([await inspect(tab.id,'content')],undefined,tab.id);if(action==='bookmark')return sendCapture([{...await inspect(tab.id,'media'),kind:'bookmark'}],undefined,tab.id);throw new Error('Unknown capture action');}
-chrome.runtime.onInstalled.addListener(()=>{chrome.contextMenus.removeAll(()=>{for(const [id,title,contexts]of [['save-image','Save Image to Canvas Pro...',['image','video']],['video','Download video to Canvas Pro',['video']],['audio','Save audio to Canvas Pro',['audio']],['link','Save link to Canvas Pro',['link']],['selection','Save selected text to Canvas Pro',['selection']],['content','Save page content to Canvas Pro',['page']],['viewport','Capture visible page to Canvas Pro',['page']],['region','Capture an area to Canvas Pro',['page']],['fullpage','Capture full page to Canvas Pro',['page']],['collect','Collect images with Canvas Pro',['page']],['videos','Find videos with Canvas Pro',['page','video']]])chrome.contextMenus.create({id,title,contexts,documentUrlPatterns:['http://*/*','https://*/*']});});});
+chrome.runtime.onInstalled.addListener(()=>{chrome.contextMenus.removeAll(()=>{for(const [id,title,contexts]of [['save-image','Save Image to Canvas Pro...',['image','video']],['video','Download video to Canvas Pro',['video']],['audio','Save audio to Canvas Pro',['audio']],['link','Save link to Canvas Pro',['link']],['selection','Save selected text to Canvas Pro',['selection']],['content','Save page content to Canvas Pro',['page']],['viewport','Capture visible page to Canvas Pro',['page']],['region','Capture an area to Canvas Pro',['page']],['fullpage','Capture full page to Canvas Pro',['page']],['collect','Collect images with Canvas Pro',['page']],['videos','Find videos with Canvas Pro',['page','video']]])chrome.contextMenus.create({id,title,contexts,documentUrlPatterns:['http://*/*','https://*/*']});});reinjectQuickSave();});
+// A page that was already open when the extension updated still runs the old
+// content script, whose extension context is dead ("Extension context
+// invalidated"). Re-injecting the current script restores Alt+click and
+// drag-and-drop there without asking the reader to refresh every tab.
+// A page that was already open when the extension updated still runs the old
+// content script, whose extension context is dead ("Extension context
+// invalidated"). Re-injecting the current script restores Alt+click and
+// drag-and-drop there, so the reader does not have to refresh every tab.
+async function reinjectInto(tabId){
+ if(!Number.isInteger(tabId)) return false;
+ try{await chrome.scripting.executeScript({target:{tabId},files:['quick-save.js']});return true;}catch{return false;}
+}
+async function reinjectQuickSave(){
+ let tabs=[];try{tabs=await chrome.tabs.query({});}catch{return;}
+ for(const tab of tabs){
+  const url=String(tab?.url||tab?.pendingUrl||'');
+  if(!/^https?:\/\//i.test(url))continue;
+  if(/^https?:\/\/(?:[a-z0-9-]+\.)*(?:chrome|edge|devtools|chrome-extension|about|view-source)\b/i.test(url))continue;
+  try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['quick-save.js']});}catch{/* the tab may not allow injection */ }
+ }
+}
+if(chrome.runtime.onStartup)chrome.runtime.onStartup.addListener(()=>{reinjectQuickSave();});
 async function captureContext(info,tab){
  if(info.menuItemId==='save-image'||(info.menuItemId==='video'&&info.srcUrl?.startsWith('blob:')&&CanvasSocialCore.platformFor(info.frameUrl||tab.url))){
   const item=await chrome.tabs.sendMessage(tab.id,{type:'focused-media'},{frameId:info.frameId??0}).catch(()=>null);
@@ -128,10 +155,10 @@ async function captureContext(info,tab){
   throw new Error('Right-click directly on the image or video you want to save.');
  }
 if(['viewport','region','fullpage','collect','content','videos'].includes(info.menuItemId))return runAction(info.menuItemId,tab.id);const base=await baseFor(tab,info.frameId,info.srcUrl);if(info.menuItemId==='selection')return sendCapture([{...base,kind:'content',selection:true,title:base.pageTitle+' — selection',text:info.selectionText||''}],undefined,tab.id);if(info.menuItemId==='link')return sendCapture([{...base,kind:'bookmark',book:false,pageUrl:info.linkUrl,title:info.linkUrl,previewImage:'',siteIcon:''}],undefined,tab.id);if(['video','audio'].includes(info.menuItemId)&&(!info.srcUrl||info.srcUrl.startsWith('blob:')))return collect(tab,'videos',info.frameId);return sendCapture([{...base,kind:info.menuItemId,...(info.srcUrl?.startsWith('data:image/')?{dataUrl:info.srcUrl}:{mediaUrl:info.srcUrl})}],undefined,tab.id);}
-chrome.contextMenus.onClicked.addListener((info,tab)=>{if(['collect','videos'].includes(info.menuItemId)&&tab?.id&&chrome.sidePanel)chrome.sidePanel.open({tabId:tab.id}).catch(()=>{});captureContext(info,tab).catch(async error=>{await badge('!',true);await progress({id:crypto.randomUUID(),state:'failed',errors:[error.message]},tab?.id);});});
+chrome.contextMenus.onClicked.addListener((info,tab)=>{if(['collect','videos'].includes(info.menuItemId)&&tab?.id&&chrome.sidePanel)chrome.sidePanel.open({tabId:tab.id}).catch(()=>{});if(tab?.id)reinjectInto(tab.id);captureContext(info,tab).catch(async error=>{await badge('!',true);await progress({id:crypto.randomUUID(),state:'failed',errors:[error.message]},tab?.id);});});
 chrome.commands.onCommand.addListener(command=>runAction(command==='capture-area'?'region':'viewport').catch(async e=>{await badge('!',true);await progress({state:'failed',errors:[e.message]});}));
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{(async()=>{if(sender.id!==chrome.runtime.id)throw new Error('Invalid capture sender');if(message.type==='social-save'){if(!sender.tab||!CanvasSocialCore.platformFor(sender.url))throw new Error('Post capture is available only on supported platforms.');return captureSocial(message.post,sender.tab);}if(message.type==='social-error'){if(!sender.tab||!CanvasSocialCore.platformFor(sender.url))throw new Error('Invalid social capture');await progress({id:crypto.randomUUID(),state:'failed',title:'Post capture',errors:[String(message.error||'Could not save this post').slice(0,500)]},sender.tab.id);return {};}if(['region-result','cancel-region'].includes(message.type)){const records=(await chrome.storage.session.get('regions')).regions||{},record=records[message.token];if(!record||record.tabId!==sender.tab?.id||record.expires<Date.now())throw new Error('This capture selection expired. Try again.');delete records[message.token];await chrome.storage.session.set({regions:records});if(message.type==='cancel-region')return {cancelled:true};const rect=message.rect;if(!rect||Object.values(rect).some(n=>!Number.isFinite(n))||rect.x<0||rect.y<0||rect.width<1||rect.height<1||rect.x+rect.width>rect.viewportWidth+1||rect.y+rect.height>rect.viewportHeight+1)throw new Error('Invalid screenshot region');return screenshot(await tabFor(record.tabId),rect);}
-if(message.type==='quick-save'){if(!sender.tab?.id)throw new Error('Open a web page first.');const item=message.item||{},url=String(item.mediaUrl||item.url||'');if(!/^(https?:|data:image\/)/i.test(url))throw new Error('This item cannot be saved directly.');const kind=item.kind==='video'?'video':'image',base={pageUrl:String(item.pageUrl||sender.tab.url||''),pageTitle:String(item.pageTitle||sender.tab.title||''),title:String(item.title||sender.tab.title||'Saved media').slice(0,160)};const payload={...base,kind,alt:String(item.alt||''),width:Number(item.width)||0,height:Number(item.height)||0,poster:String(item.poster||''),...(url.startsWith('data:')?{dataUrl:url}:{mediaUrl:url})};return sendCapture([payload],undefined,sender.tab.id);}if(!sender.url?.startsWith(chrome.runtime.getURL('')))throw new Error('Capture must be initiated from Canvas Pro.');if(message.type==='watch-media'){const tab=await tabFor(message.tabId);if(!await chrome.permissions.contains({origins:['http://*/*','https://*/*']}))throw new Error('Allow media scanning in the browser first.');await chrome.storage.session.set({['media-watch:'+tab.id]:{expires:Date.now()+1800000,items:[]}});return {watching:true};}if(message.type==='ping')return native({op:'ping'});if(message.type==='action')return runAction(message.action,message.tabId);if(message.type==='save-batch'){const record=(await chrome.storage.session.get('collection:'+message.collectionId))['collection:'+message.collectionId];if(!record||!Array.isArray(message.indices)||!message.indices.length||message.indices.length>100)throw new Error('Choose up to 100 images.');const items=[...new Set(message.indices)].map(i=>record.items[i]);if(items.some(item=>!item))throw new Error('Invalid image selection');return sendCapture(items,message.folder,[record.tabId,sender.tab?.id]);}throw new Error('Unknown message');})().then(result=>respond({ok:true,result}),async error=>{await progress({state:'failed',errors:[error.message]});respond({ok:false,error:error.message});});return true;});
+if(message.type==='reinject-quick-save'){const tabId=Number(message.tabId);if(Number.isInteger(tabId))await reinjectInto(tabId);else await reinjectQuickSave();return {reinjected:true};}if(message.type==='quick-save'){if(!sender.tab?.id)throw new Error('Open a web page first.');const item=message.item||{},url=String(item.mediaUrl||item.url||'');if(!/^(https?:|data:image\/)/i.test(url))throw new Error('This item cannot be saved directly.');const kind=item.kind==='video'?'video':'image',base={pageUrl:String(item.pageUrl||sender.tab.url||''),pageTitle:String(item.pageTitle||sender.tab.title||''),title:String(item.title||sender.tab.title||'Saved media').slice(0,160)};const payload={...base,kind,alt:String(item.alt||''),width:Number(item.width)||0,height:Number(item.height)||0,poster:String(item.poster||''),thumbnail:String(item.thumbnail||''),...(url.startsWith('data:')?{dataUrl:url}:{mediaUrl:url})};return sendCapture([payload],undefined,sender.tab.id);}if(!sender.url?.startsWith(chrome.runtime.getURL('')))throw new Error('Capture must be initiated from Canvas Pro.');if(message.type==='watch-media'){const tab=await tabFor(message.tabId);if(!await chrome.permissions.contains({origins:['http://*/*','https://*/*']}))throw new Error('Allow media scanning in the browser first.');await chrome.storage.session.set({['media-watch:'+tab.id]:{expires:Date.now()+1800000,items:[]}});return {watching:true};}if(message.type==='ping')return native({op:'ping'});if(message.type==='action')return runAction(message.action,message.tabId);if(message.type==='save-batch'){const record=(await chrome.storage.session.get('collection:'+message.collectionId))['collection:'+message.collectionId];if(!record||!Array.isArray(message.indices)||!message.indices.length||message.indices.length>100)throw new Error('Choose up to 100 images.');const items=[...new Set(message.indices)].map(i=>record.items[i]);if(items.some(item=>!item))throw new Error('Invalid image selection');return sendCapture(items,message.folder,[record.tabId,sender.tab?.id]);}throw new Error('Unknown message');})().then(result=>respond({ok:true,result}),async error=>{await progress({state:'failed',errors:[error.message]});respond({ok:false,error:error.message});});return true;});
 
 // Opt-in, tab-scoped media observation. No request bodies, cookies or authorization headers are read.
 const mediaWrites=new Map();

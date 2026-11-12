@@ -232,6 +232,10 @@ if (globalThis.chrome?.storage?.onChanged) {
 
 (async () => {
   if (!globalThis.chrome?.tabs || !globalThis.chrome?.storage) return;
+  try {
+    const build = $('#build');
+    if (build) build.textContent = 'v' + (chrome.runtime.getManifest?.().version || '?');
+  } catch {}
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
   const { folder } = await chrome.storage.local.get('folder');
