@@ -24,6 +24,8 @@
   --muted: #939393;
   --text: #e8e8e8;
   --accent: #b5b5b5;
+  /* The ring a focused field wears. It is the app's grey, never a blue. */
+  --focus: #a9a9ad;
   /* OpenCode's dark palette (packages/tui/src/theme/assets/opencode.json). */
   --oc-bg: #0a0a0a;
   --oc-panel: #141414;
@@ -633,6 +635,27 @@ body.hide-file-names .card-meta {
   color: #757575;
   margin-top: 19px;
 }
+/* An empty shelf says so the way the canvas says it: the mark, the heading
+   and the line, in the canvas's colours, with nothing to click. */
+.empty-plain h2 {
+  font-size: 22px;
+  color: #c9c9ce;
+  margin: 15px 0 8px;
+}
+.empty-plain p {
+  color: #84868e;
+  margin-bottom: 0;
+}
+.empty-plain .empty-icon {
+  color: #8b8f9c;
+}
+body.light-mode .empty-plain h2,
+body.light-mode .empty-plain p {
+  color: var(--muted);
+}
+body.light-mode .empty-plain .empty-icon {
+  color: #6d7078;
+}
 .empty button {
   padding: 8px 15px;
 }
@@ -1187,9 +1210,11 @@ dialog select {
      the colour is set: the shorthand would wipe the chevron away. */
   padding-block: 8px;
   padding-inline-start: 10px;
-  background-color: var(--surface-field);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-button);
+  /* A field in a sheet is the same field as everywhere else, so the canvas
+     sheet and the new-note sheet are made of the same parts. */
+  background-color: #ffffff05;
+  border: 1px solid #ffffff14;
+  border-radius: var(--radius-input);
 }
 dialog label {
   display: block;
@@ -2728,7 +2753,9 @@ body.light-mode .smart-settings button {
   margin: 0;
   width: 238px;
   padding: 5px;
-  border: 1px solid #ffffff20;
+  /* The menu has its own shadow; it does not need a line around it. The
+     light appearance keeps a hairline, where there is no shadow to read. */
+  border: 1px solid transparent;
   border-radius: 12px;
   background: linear-gradient(150deg, #ffffff05, transparent), #28292df2;
   color: var(--text);
@@ -2863,7 +2890,6 @@ body.light-mode .smart-settings button {
   .layout-menu {
     background: var(--surface-card);
     backdrop-filter: none;
-    border-color: #aaa;
   }
 }
 
@@ -3404,9 +3430,6 @@ main {
   background: transparent;
   border: 0;
   border-radius: 0;
-}
-.canvas-zoom button:hover {
-  background: #ffffff12;
 }
 .canvas-zoom button .sf-symbol {
   width: 13px;

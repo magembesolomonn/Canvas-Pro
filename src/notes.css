@@ -199,7 +199,8 @@
 .note-tracker h3 { margin: 0 0 10px; }
 .tracker-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
 .tracker-tools input[type="search"] { flex: 1 1 130px; padding: 5px 7px; }
-.tracker-tools [aria-pressed="true"] { background: var(--selection, var(--panel)); border-color: var(--text); }
+/* The chosen tab is marked by its fill, not by a line around it. */
+.tracker-tools [aria-pressed="true"] { background: var(--selection, var(--panel)); }
 .tracker-results { overflow: auto; max-height: 560px; }
 .tracker-results table { width: 100%; border-collapse: collapse; }
 .tracker-results :is(th,td) { text-align: left; padding: 7px; border-bottom: 1px solid var(--line); }
@@ -247,9 +248,6 @@
   margin: 8px 0 0;
   padding-block: 8px;
   padding-inline-start: 10px;
-  background-color: var(--surface-field);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-button);
 }
 #note-template-dialog .dialog-actions {
   margin-top: 22px;
@@ -514,7 +512,17 @@ body.light-mode .note-dialog-search:focus-within {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
 }
 .note-tracker-dialog { width: min(550px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; }
-.note-tracker-dialog > :is(input,select), .note-tracker-dialog form > input { width: 100%; margin-bottom: 10px; }
+/* Everything under the heading sits inside the sheet's margins, and the
+   actions sit in a strip at the foot of it, so every sheet in the app is
+   built from the same parts. */
+.note-tracker-dialog .note-dialog-body {
+  padding: 14px 20px 18px;
+}
+.note-tracker-dialog .note-dialog-body > :is(input,select), .note-tracker-dialog .note-dialog-body form > input { width: 100%; margin: 0 0 10px; }
+.note-tracker-dialog .note-dialog-body > :last-child { margin-bottom: 0; }
+/* An empty line of feedback takes no room. */
+.note-tracker-dialog .note-dialog-body p:empty { display: none; }
+.note-tracker-dialog .note-dialog-actions { margin-top: 0; }
 .tracker-record-panel {
   width: min(440px, calc(100vw - 40px));
   margin: auto 20px auto auto;
@@ -526,9 +534,9 @@ body.light-mode .note-dialog-search:focus-within {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 15px;
-  /* The same insets as the heading above, so the fields line up with the
-     close button and nothing touches the sheet's edges. */
-  padding: 2px 16px 0 20px;
+  /* The sheet's body gives the insets, so the fields line up with the close
+     button and nothing touches the sheet's edges. */
+  padding: 2px 0 0;
 }
 .tracker-property {
   display: flex;
@@ -887,10 +895,10 @@ body.light-mode .calendar-now:hover {
   border-radius: var(--note-radius-control);
 }
 
-/* Focus reads the way Notion's does: a blue ring, not a grey one. */
+/* Focus reads the way the rest of the app reads: one quiet ring. */
 .notes-document :is(textarea, input, select):focus-visible,
 .note-block-menu-search input:focus-visible {
-  outline: 2px solid #2383e2;
-  outline-offset: 1px;
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
   border-color: transparent;
 }

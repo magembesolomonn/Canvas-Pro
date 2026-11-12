@@ -34,15 +34,24 @@ async function handleContextAction(command){
  }
 }
 function renderEmptyState(){
- const empty=$('#empty'),icon=empty.querySelector('.empty-icon'),heading=empty.querySelector('h2'),description=empty.querySelector('p'),button=$('#empty-import'),small=empty.querySelector('small');const trashCount=pagedCatalog?navStats?.counts.trash||0:assets.filter(a=>a.trash).length;$('#empty-trash').hidden=view!=='trash';$('#import').hidden=view==='trash';$('#import-folder').hidden=view==='trash';$('#empty-trash').disabled=!trashCount;
- icon.replaceChildren();empty.classList.toggle('trash-empty',view==='trash'&&!trashCount);button.hidden=false;small.hidden=false;button.onclick=()=>importDialog();button.textContent=assets.length?'Import files':'Import your first files';const openLibrary=$('#empty-open-library');openLibrary.hidden=view==='trash';openLibrary.onclick=()=>safe(()=>api.switchLibrary('open'));
- if(view==='trash'&&!trashCount){const image=el('img');image.src='assets/trash-empty.png';image.alt='Empty macOS Trash';icon.append(image);heading.textContent='Trash is empty';description.textContent='Files you move to Trash appear here. You can restore them, or permanently delete their library originals, thumbnails, and cached previews.';button.hidden=true;small.textContent='Deleting from Trash cannot be undone.';}
- else if(view==='trash'){icon.append(glyph('search'));heading.textContent='No matching files in Trash';description.textContent='Try a different search or file type. Items elsewhere in Trash are still available to restore.';button.hidden=false;button.textContent='Clear filters';button.onclick=()=>{$('#search').value='';$('#type').value='all';render();};small.hidden=true;}
- else if(view==='favorites'&&!(pagedCatalog?navStats?.counts.favorites:assets.some(a=>!a.trash&&a.favorite))){icon.append(glyph('star'));heading.textContent='No favourites yet';description.textContent='Click the star on a file, or choose Add to Favourites from its right-click menu.';button.hidden=false;small.hidden=false;}
- else if(view==='tags'&&!(pagedCatalog?navStats?.counts.tags:assets.some(a=>!a.trash&&a.tags.length))){icon.append(glyph('tag'));heading.textContent='No tags yet';description.textContent='Add tags to your files to find them here.';button.hidden=false;small.hidden=false;}
- else if((pagedCatalog?navStats?.counts.all:assets.length)){icon.append(glyph('search'));heading.textContent='No matching files';description.textContent='Try a different search, collection, or file type.';button.textContent='Import files';small.hidden=true;}
- else{icon.append(glyph('grid'));heading.textContent='Bring your files together';description.textContent='Drop files or folders here, import them, or copy in Finder and press ⌘V.';small.textContent='Images · videos · PDFs · design files · and everything else';}
- empty.hidden=visible.length>0;
+  const empty=$('#empty'),icon=empty.querySelector('.empty-icon'),heading=empty.querySelector('h2'),description=empty.querySelector('p'),button=$('#empty-import'),small=empty.querySelector('small');const trashCount=pagedCatalog?navStats?.counts.trash||0:assets.filter(a=>a.trash).length;const inTrash=view==='trash';$('#empty-trash').hidden=!inTrash;$('#import').hidden=inTrash;$('#import-folder').hidden=inTrash;
+  // The trash takes no new files, so the add button goes with them: an
+  // empty card is worse than no card.
+  $('#import-menu-button').hidden=inTrash;$('#empty-trash').disabled=!trashCount;
+  icon.replaceChildren();empty.classList.toggle('trash-empty',inTrash&&!trashCount);button.hidden=false;small.hidden=false;button.onclick=()=>importDialog();button.textContent=assets.length?'Import files':'Import your first files';const openLibrary=$('#empty-open-library');openLibrary.hidden=inTrash;openLibrary.onclick=()=>safe(()=>api.switchLibrary('open'));
+  // An empty shelf is the mark, the heading and the line, the way the canvas
+  // says it. A shelf with nothing on it has no blue button and no link.
+  const shelf=!inTrash&&(view==='favorites'||view==='tags'||view==='folder');
+  empty.classList.toggle('empty-plain',shelf);
+  if(shelf){button.hidden=true;small.hidden=true;openLibrary.hidden=true;}
+  if(inTrash&&!trashCount){const image=el('img');image.src='assets/trash-empty.png';image.alt='Empty macOS Trash';icon.append(image);heading.textContent='Trash is empty';description.textContent='Files you move to Trash appear here. You can restore them, or permanently delete their library originals, thumbnails, and cached previews.';button.hidden=true;small.textContent='Deleting from Trash cannot be undone.';}
+  else if(inTrash){icon.append(glyph('search'));heading.textContent='No matching files in Trash';description.textContent='Try a different search or file type. Items elsewhere in Trash are still available to restore.';button.hidden=false;button.textContent='Clear filters';button.onclick=()=>{$('#search').value='';$('#type').value='all';render();};small.hidden=true;}
+  else if(view==='favorites'&&!(pagedCatalog?navStats?.counts.favorites:assets.some(a=>!a.trash&&a.favorite))){icon.append(glyph('star'));heading.textContent='No favourites yet';description.textContent='Click the star on a file, or choose Add to Favourites from its right-click menu.';}
+  else if(view==='tags'&&!(pagedCatalog?navStats?.counts.tags:assets.some(a=>!a.trash&&a.tags.length))){icon.append(glyph('tag'));heading.textContent='No tags yet';description.textContent='Add tags to your files to find them here.';}
+  else if(view==='folder'){icon.append(glyph('folder'));heading.textContent='This collection is empty';description.textContent='Files you put in this collection appear here, and stay in your library.';}
+  else if((pagedCatalog?navStats?.counts.all:assets.length)){icon.append(glyph('search'));heading.textContent='No matching files';description.textContent='Try a different search, collection, or file type.';button.textContent='Import files';small.hidden=true;}
+  else{icon.append(glyph('grid'));heading.textContent='Bring your files together';description.textContent='Drop files or folders here, import them, or copy in Finder and press \u2318V.';small.textContent='Images \u00b7 videos \u00b7 PDFs \u00b7 design files \u00b7 and everything else';}
+  empty.hidden=visible.length>0;
 }
 function initContextUI(){
 $('#preview-content').oncontextmenu=event=>{event.preventDefault();if(selected)safe(()=>api.contextMenu([selected],view==='folder'?collection:null));};

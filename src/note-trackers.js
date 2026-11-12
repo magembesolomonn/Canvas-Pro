@@ -36,10 +36,19 @@ const NoteTrackers = (() => {
     close.append(glyph('close'));
     close.onclick = () => dialog.close();
     heading.append(el('h2','',title), close);
-    dialog.append(heading);
+    // The sheet's body holds the fields, so nothing touches its edges, and
+    // the actions sit in a strip at the foot of it.
+    const body = el('div','note-dialog-body');
+    dialog.append(heading, body);
     document.body.append(dialog);
     dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    dialog.body = body;
     return dialog;
+  }
+  function actions(dialog) {
+    const strip = el('div','dialog-actions note-dialog-actions');
+    dialog.append(strip);
+    return strip;
   }
   function pickReference({notes, kinds = ['note','file','canvas']}) {
     const dialog = modal('Link a page or library item');
@@ -68,7 +77,9 @@ const NoteTrackers = (() => {
     }
     kind.onchange = () => load();
     search.oninput = () => { request++; clearTimeout(timer); results.replaceChildren(); more.hidden = true; timer = setTimeout(load,150); };
-    dialog.append(kind,search,results,more,cancel);
+    const strip = actions(dialog);
+    strip.append(more,cancel);
+    dialog.body.append(kind,search,results);
     return new Promise(resolve=>{
       dialog.addEventListener('close',()=>{ clearTimeout(timer); resolve(selected); },{once:true});
       dialog.showModal();
@@ -245,7 +256,7 @@ const NoteTrackers = (() => {
       for (const [key,input] of inputs) properties[key] = input.type==='number' && input.value ? input.valueAsNumber : input.value;
       submit(()=>persist({id:record.id,title:title.value,status:status.value,properties,body:body.value,checklist}));
     };
-    dialog.append(form);
+    dialog.body.append(form);
     dialog.showModal();
   }
   function settings(block, commit) {
@@ -265,8 +276,8 @@ const NoteTrackers = (() => {
       rows.append(row);
     }
     block.fields.forEach(({label,type,key})=>append(label,type,key));
-    const actions = el('div','dialog-actions');
-    actions.append(btn('Cancel',()=>dialog.close()),btn('Save settings',async()=>{
+    const strip = actions(dialog);
+    strip.append(btn('Cancel',()=>dialog.close()),btn('Save settings',async()=>{
       let sequence = block.nextField;
       const fields = [...rows.children].map(row=>({
         key:row.dataset.key || 'f'+sequence++,label:row.firstChild.value.trim(),type:row.children[1].value
@@ -277,7 +288,7 @@ const NoteTrackers = (() => {
       catch (error) { feedback.textContent = error.message; }
     }));
     const feedback = el('p','dialog-error');
-    dialog.append(name,...(block.fields.some(f=>f.type==='money')?[currency]:[]),rows,btn('Add field',()=>{ if (rows.children.length<12) append(); }),feedback,actions);
+    dialog.body.append(name,...(block.fields.some(f=>f.type==='money')?[currency]:[]),rows,btn('Add field',()=>{ if (rows.children.length<12) append(); }),feedback);
     dialog.showModal();
   }
   function mount(block, noteId, changed, flush) {
@@ -310,11 +321,17 @@ const NoteTrackers = (() => {
     };
     async function movieLink() {
       const dialog = modal('Add movie or series by link'), form = el('form');
+      form.id = 'note-movie-link-form';
       const input = field('IMDb, Letterboxd, Rotten Tomatoes or TMDB URL','url'), status = el('p','hint');
       input.required = true;
       const submit = el('button','primary','Import link');
       submit.type = 'submit';
-      form.append(input,status,submit,btn('Cancel',()=>dialog.close()));
+      // The button lives in the sheet's action strip and still belongs to
+      // the form, so Enter in the field does the same thing.
+      submit.setAttribute('form',form.id);
+      const strip = actions(dialog);
+      strip.append(btn('Cancel',()=>dialog.close()),submit);
+      form.append(input,status);
       form.onsubmit = async event=>{
         event.preventDefault();
         submit.disabled = true;
@@ -328,7 +345,7 @@ const NoteTrackers = (() => {
           editRecord(block,{title:info.title,properties,status:current().status},async data=>{await call('save',data);await load();});
         } catch (error) { status.textContent = error.message; submit.disabled = false; }
       };
-      dialog.append(form);
+      dialog.body.append(form);
       dialog.showModal();
     }
     function display(field, row) {
@@ -469,7 +486,7 @@ const NoteTrackers = (() => {
         setup();
         load();
       }
-      const actions = el('div','dialog-actions');
+      const strip = actions(dialog);
       if (existing) {
         const remove = btn('Delete view…',()=>{
           if (!window.confirm('Delete this view? Its records will remain in the tracker.')) return;
@@ -479,16 +496,16 @@ const NoteTrackers = (() => {
         });
         remove.disabled = block.views.length===1;
         if (remove.disabled) remove.title = 'Keep at least one view';
-        actions.append(remove);
+        strip.append(remove);
       }
-      actions.append(btn('Cancel',()=>dialog.close()),btn(existing?'Save view':'Add view',()=>{
+      strip.append(btn('Cancel',()=>dialog.close()),btn(existing?'Save view':'Add view',()=>{
         const label = name.value.trim()||layouts.find(item=>item[0]===layout.value)[1];
         const views = [...block.views];
         if (existing) views[index] = {...existing,name:label,layout:layout.value};
         else views.push(newView(label,layout.value));
         apply(views,existing?block.active:views.length-1);
       }));
-      dialog.append(name,layout,actions);
+      dialog.body.append(name,layout);
       dialog.showModal();
       name.select();
     }
