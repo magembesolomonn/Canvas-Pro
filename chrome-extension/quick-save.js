@@ -1,8 +1,9 @@
 (()=>{
   if(globalThis.__canvasQuickSaveInstalled) return; globalThis.__canvasQuickSaveInstalled=true;
-  const runtime=globalThis.chrome?.runtime; if(!runtime?.sendMessage) return;
+  const canUseRuntime=()=>{try{return !!(globalThis.chrome?.runtime?.id && globalThis.chrome?.runtime?.sendMessage);}catch{return false;}};
   const abs=v=>{try{return v?new URL(v,location.href).href:''}catch{return ''}};
   const direct=u=>{try{const url=new URL(u,location.href);return /^https?:$/.test(url.protocol)?url.href:''}catch{return ''}};
+  const contextInvalidated=e=>/Extension context invalidated/i.test(String(e?.message||e||''));
 
   function appleVideo(el){
     const v=el?.closest?.('video')||el?.querySelector?.('video')||el;
@@ -78,15 +79,16 @@
     return imgInfo;
   }
 
-  function miniToast(text,ok=true,thumb=''){
+  function miniToast(text,ok=true,thumb='',detail=''){
     try{
       let host=document.getElementById('__canvas_qs_toast');
       if(!host){host=document.createElement('div');host.id='__canvas_qs_toast';host.attachShadow({mode:'open'});(document.documentElement||document.body).appendChild(host);} 
       const root=host.shadowRoot; const hasThumb=/^(https?:|data:image\/)/.test(thumb||'');
       root.innerHTML=`<style>:host{all:initial;position:fixed;top:16px;right:16px;z-index:2147483647}.t{display:flex;align-items:center;gap:12px;min-width:220px;max-width:340px;padding:10px 12px;border-radius:14px;color:#f5f5f7;background:rgba(28,28,30,.97);backdrop-filter:blur(18px);border:1px solid ${ok?'rgba(255,255,255,.12)':'rgba(255,110,110,.55)'};box-shadow:0 18px 44px rgba(0,0,0,.34);font:13px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}.thumb{width:40px;height:40px;border-radius:10px;object-fit:cover;background:#3a3a3c;flex:none}.thumb[hidden]{display:none}.copy{display:flex;flex-direction:column;gap:1px;min-width:0}.title{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.detail{font-size:11.5px;color:rgba(245,245,247,.72);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}</style><div class="t"><img class="thumb" ${hasThumb?'':'hidden'} alt=""><div class="copy"><div class="title"></div><div class="detail"></div></div></div>`;
-      if(hasThumb){const img=root.querySelector('.thumb'); img.src=thumb; img.onerror=()=>img.hidden=true;}
-      root.querySelector('.title').textContent=text; root.querySelector('.detail').textContent=ok?'Saving to Canvas Pro':'';
-      clearTimeout(host._t); host._t=setTimeout(()=>host.remove(), ok?2500:3500);
+      if(hasThumb){const img=root.querySelector('.thumb'); img.src=thumb; img.referrerPolicy='no-referrer'; img.onerror=()=>img.hidden=true;}
+      root.querySelector('.title').textContent=text;
+      const d=root.querySelector('.detail'); d.textContent=detail || (ok?'':''); d.style.display=d.textContent?'':'none';
+      clearTimeout(host._t); host._t=setTimeout(()=>host.remove(), ok?2500:3800);
     }catch{}
   }
 
@@ -97,51 +99,57 @@
     try{
       const data=core.collect(post);
       if(!data || (!data.items?.length && !data.hasVideo)) return false;
-      await runtime.sendMessage({type:'social-save', post:data});
+      if(!canUseRuntime()){ miniToast('Reload this page to reconnect', false,'','Extension was reloaded'); return true; }
+      await chrome.runtime.sendMessage({type:'social-save', post:data});
       return true;
-    }catch{ return false; }
+    }catch(e){
+      if(contextInvalidated(e)) miniToast('Reload this page to reconnect', false,'','Extension was reloaded');
+      return false;
+    }
   }
 
   async function saveItem(item,target){
+    if(!canUseRuntime()){ miniToast('Reload this page to reconnect', false,'','Extension was reloaded'); return; }
     // On social platforms, prefer robust social/post resolution (handles X/reddit/instagram hidden streams)
-    if((item?.missing || item?.kind==='video' || !item) && await trySocialSave(target)) return;
+    if((item?.missing || item?.kind==='video') && await trySocialSave(target)) return;
     if(item?.missing){ miniToast('No downloadable video found', false); return; }
     if(!item?.mediaUrl) return;
-    miniToast(`Saving ${item.kind==='video'?'video':'image'}…`, true, item.poster||item.mediaUrl);
     try{
-      await runtime.sendMessage({type:'quick-save', item:{...item, poster:item.poster||'', pageUrl:location.href, pageTitle:document.title}});
-    }catch(e){ /* worker injects failure toast */ }
+      await chrome.runtime.sendMessage({type:'quick-save', item:{...item, poster:item.poster||'', pageUrl:location.href, pageTitle:document.title}});
+    }catch(e){
+      if(contextInvalidated(e)) miniToast('Reload this page to reconnect', false,'','Extension was reloaded');
+      else miniToast('Could not save', false,'',String(e?.message||e||''));
+    }
   }
 
   async function quickSaveFromEvent(e){
     if(!e.altKey||!e.isTrusted) return false;
+    if(!canUseRuntime()){ miniToast('Reload this page to reconnect', false,'','Extension was reloaded'); e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.(); return true; }
     const point={x:e.clientX??0,y:e.clientY??0};
     const item=pickMedia(e.target,point,true);
-    if(!item){
-      // even if no element media found, try social post save on supported platforms
-      if(await trySocialSave(e.target)){ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.(); return true; }
-      return false;
+    if(item){
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
+      await saveItem(item, e.target);
+      return true;
     }
-    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
-    await saveItem(item, e.target);
-    return true;
+    // on social platforms, Alt+click should save post media even if no direct element URL found
+    if(globalThis.CanvasSocialCore?.platformFor?.(location.href)){
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
+      const ok=await trySocialSave(e.target);
+      if(!ok) miniToast('Could not find media to save', false);
+      return true;
+    }
+    // on non-social pages, try once more with broader discovery (Apple/perf) before giving up
+    const broad=pickMedia(e.target,point,false);
+    if(broad?.mediaUrl){ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.(); await saveItem(broad,e.target); return true; }
+    return false;
   }
   window.addEventListener('contextmenu',e=>{ quickSaveFromEvent(e); },true);
   window.addEventListener('mousedown',e=>{ if(e.altKey && e.button===2) quickSaveFromEvent(e); },true);
   window.addEventListener('auxclick',e=>{ if(e.altKey && e.button===2) quickSaveFromEvent(e); },true);
   window.addEventListener('click',e=>{
     if(!e.altKey||!e.isTrusted||e.button!==0) return;
-    const point={x:e.clientX,y:e.clientY};
-    const item=pickMedia(e.target,point,true);
-    if(!item){
-      if(globalThis.CanvasSocialCore?.platformFor?.(location.href)){
-        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
-        trySocialSave(e.target);
-      }
-      return;
-    }
-    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
-    saveItem(item, e.target);
+    quickSaveFromEvent(e);
   },true);
 
   // Drag and drop saver overlay

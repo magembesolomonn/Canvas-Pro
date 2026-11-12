@@ -14,7 +14,33 @@ async function progress(value,tabId){
 }
 async function captureThumbnail(item){
  const url=item.poster||item.previewImage||(item.kind==='image'?item.mediaUrl:'');
- if(url)return url;
+ if(url && /^data:image\//i.test(url)) return url.length<300000 ? url : '';
+ if(url && /^https?:\/\//i.test(url)){
+   try{
+     const res=await fetch(url,{credentials:'omit'});
+     if(res.ok){
+       const blob=await res.blob();
+       if(/^image\//i.test(blob.type||'')){
+         if(blob.size<200000) {
+           const bytes=new Uint8Array(await blob.arrayBuffer());
+           let binary=''; for(let i=0;i<bytes.length;i+=0x8000) binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+           return 'data:'+(blob.type||'image/jpeg')+';base64,'+btoa(binary);
+         }
+         try{
+           const bitmap=await createImageBitmap(blob);
+           const scale=Math.min(1,96/Math.max(bitmap.width,bitmap.height));
+           const canvas=new OffscreenCanvas(Math.max(1,Math.round(bitmap.width*scale)),Math.max(1,Math.round(bitmap.height*scale)));
+           canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+           bitmap.close();
+           const bytes=new Uint8Array(await (await canvas.convertToBlob({type:'image/jpeg',quality:.82})).arrayBuffer());
+           let binary=''; for(let i=0;i<bytes.length;i+=0x8000) binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+           return 'data:image/jpeg;base64,'+btoa(binary);
+         }catch{ return url; }
+       }
+     }
+   }catch{}
+   return url;
+ }
  if(!item.dataUrl||!['image','screenshot'].includes(item.kind))return '';
  if(item.dataUrl.length<300000)return item.dataUrl;
  try{
@@ -24,15 +50,18 @@ async function captureThumbnail(item){
    canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
    bitmap.close();
    const bytes=new Uint8Array(await (await canvas.convertToBlob({type:'image/jpeg',quality:.82})).arrayBuffer());
-   return 'data:image/jpeg;base64,'+btoa(String.fromCharCode(...bytes));
+   let binary=''; for(let i=0;i<bytes.length;i+=0x8000) binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+   return 'data:image/jpeg;base64,'+btoa(binary);
  }catch{return '';}
 }
 async function sendCapture(items,folder,tabId,notice='',activityId){
  if(!items?.length)throw new Error('No items selected.');
- const id=activityId||crypto.randomUUID(),title=items.length===1?items[0].title:items.length+' captures';const previews=await Promise.all(items.map(async item=>({title:item.title,thumbnail:await captureThumbnail(item)})));let latest={id,title,state:'queued',total:items.length,done:0,notice,items:previews};
+ const id=activityId||crypto.randomUUID(),title=items.length===1?items[0].title:items.length+' captures';
+ const previews=await Promise.all(items.map(async item=>({title:item.title,kind:item.kind,thumbnail:await captureThumbnail(item),mediaUrl:item.kind==='image'?item.mediaUrl:'',poster:item.poster||''})));
+ let latest={id,title,kind:items[0].kind,state:'queued',total:items.length,done:0,notice,items:previews};
  await progress(latest,tabId);await badge('…');
  try{const options=await chrome.storage.local.get('folder');const result=await native({op:'capture',items,folder:folder??options.folder??''});
- for(let attempt=0;attempt<1200;attempt++){const {job}=await native({op:'status',jobId:result.jobId});latest={...job,id,title,notice,items:previews.map((item,index)=>({...item,state:job.results?.[index]?.state||(index===(job.done||0)?job.phase||'saving':'queued'),error:job.results?.[index]?.error||''}))};await progress(latest,tabId);if(['complete','failed'].includes(job.state)){await badge(job.errors.length?'!':String(job.imported+job.duplicates),!!job.errors.length);return job;}await new Promise(resolve=>setTimeout(resolve,500));}
+ for(let attempt=0;attempt<1200;attempt++){const {job}=await native({op:'status',jobId:result.jobId});latest={...job,id,title,kind:items[0].kind,notice,items:previews.map((item,index)=>({...item,state:job.results?.[index]?.state||(index===(job.done||0)?job.phase||'saving':'queued'),error:job.results?.[index]?.error||''}))};await progress(latest,tabId);if(['complete','failed'].includes(job.state)){await badge(job.errors.length?'!':String(job.imported+job.duplicates),!!job.errors.length);return job;}await new Promise(resolve=>setTimeout(resolve,500));}
  throw new Error('Capture is taking longer than expected. Check Canvas Pro.');
  }catch(error){await badge('!',true);await progress({...latest,state:'failed',errors:[error.message]},tabId);throw error;}
 }

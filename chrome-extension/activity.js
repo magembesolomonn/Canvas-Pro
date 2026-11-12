@@ -41,7 +41,7 @@ function canvasCaptureActivity(job,mount){
   const active=(job.items||[])[Math.min(job.done||0, Math.max(0,(job.items||[]).length-1))] || (job.items||[])[0];
   const src=job.thumbnail || active?.thumbnail || active?.poster || (active?.kind==='image' ? active?.mediaUrl : '');
   if(src && /^(https?:\/\/|data:image\/)/i.test(src)){
-    if(thumb.dataset.source!==src){thumb.dataset.source=src; thumb.src=src;}
+    if(thumb.dataset.source!==src){thumb.dataset.source=src; thumb.referrerPolicy='no-referrer'; thumb.src=src;}
     thumb.hidden=false; icon.style.display='none';
     thumb.onerror=()=>{thumb.hidden=true; icon.style.display='grid';};
   } else { thumb.hidden=true; icon.style.display='grid'; }
