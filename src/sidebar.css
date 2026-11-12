@@ -15,7 +15,20 @@ body.light-mode .sidebar-hover-pill { background: #00000008; }
   position: relative;
   z-index: 1;
 }
-.sidebar nav button { position: relative; min-height: 32px; }
+.sidebar nav button {
+  position: relative;
+  min-height: 32px;
+  /* The rows keep the same inset on both sides, so the names sit in a column
+     with room for the count. */
+  padding-inline: 10px 12px;
+}
+/* Finder keeps every icon in one column and every name in another, so a
+   line drawn down the sidebar meets the icons and then the names. */
+.sidebar nav button > :first-child {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
 .sidebar nav button:is(:hover,.active),
 body.light-mode .sidebar nav button.active {
   background: transparent;
@@ -26,7 +39,9 @@ body.light-mode .sidebar nav button.active {
      disclosure control: no arrow, and clicking it does nothing. */
   justify-content: flex-start;
   gap: 6px;
-  padding-left: 12px;
+  /* The heading sits in the icon column, the way Finder puts its section
+     names above the items. */
+  padding-left: 0;
   cursor: default;
   list-style: none;
 }
@@ -42,11 +57,13 @@ body.light-mode .sidebar nav button.active {
   align-items: center;
   justify-content: flex-end;
   margin-inline: -12px; padding-inline: 12px;
-  background: linear-gradient(to bottom, rgb(41 42 44 / 82%) 0 64%, rgb(41 42 44 / 58%) 82%, transparent 100%);
-  backdrop-filter: blur(15px) saturate(130%);
+  /* The band is part of the card, so it is the card's own surface. The File
+     Details panel is a solid piece, and the sidebar now matches it. */
+  background: var(--island-surface);
+  backdrop-filter: none;
 }
 body.light-mode .sidebar .window-space {
-  background: linear-gradient(to bottom, rgb(241 241 243 / 90%) 0 64%, rgb(241 241 243 / 66%) 82%, transparent 100%);
+  background: var(--island-surface);
 }
 .sidebar #navigation,.sidebar [data-section="media"] { position: relative; padding-bottom: 12px; margin-bottom: 10px; }
 .sidebar #navigation::after,.sidebar [data-section="media"]::after {
@@ -54,8 +71,8 @@ body.light-mode .sidebar .window-space {
   background: linear-gradient(to right, transparent, var(--line) 14%, var(--line) 86%, transparent);
 }
 @media (prefers-reduced-transparency: reduce) {
-  .sidebar .window-space { background: var(--bg); backdrop-filter: none; }
-  body.light-mode .sidebar .window-space { background: #f1f1f3; }
+  .sidebar .window-space { background: var(--island-surface); backdrop-filter: none; }
+  body.light-mode .sidebar .window-space { background: var(--island-surface); }
 }
 body.hide-sidebar { --sidebar: 0px; }
 body.hide-sidebar .sidebar {

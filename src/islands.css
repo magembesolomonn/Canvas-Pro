@@ -41,7 +41,14 @@ body {
   overflow: hidden;
   padding: 0;
   gap: 0;
-  grid-template-columns: var(--sidebar) minmax(360px, 1fr) var(--inspector);
+  /* The sidebar island keeps its own margin inside its track, so the window
+     shows the same gap on both sides of it and the gallery is not pushed
+     against it. */
+  --sidebar-track: calc(var(--sidebar) + var(--island-gap) * 2);
+  grid-template-columns: var(--sidebar-track) minmax(360px, 1fr) var(--inspector);
+}
+body.hide-sidebar {
+  --sidebar-track: 0px;
 }
 
 /* The two panels sit on the background ---------------------------------- */
@@ -236,7 +243,7 @@ body.light-mode .layout-switch button[aria-checked="true"] {
 /* A narrow window keeps the details panel as a sheet over the gallery. */
 @media (max-width: 880px) {
   body.narrow-inspector {
-    grid-template-columns: var(--sidebar) minmax(0, 1fr) 0px;
+    grid-template-columns: var(--sidebar-track) minmax(0, 1fr) 0px;
   }
 }
 

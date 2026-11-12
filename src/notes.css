@@ -217,13 +217,42 @@
    sheet.
    --------------------------------------------------------------------------- */
 .note-tracker-dialog,
-#note-template-dialog,
 #note-image-dialog {
   width: min(460px, calc(100vw - 48px));
   max-height: calc(100vh - 80px);
   padding: 0;
   border-radius: var(--radius-window);
   overflow: hidden;
+}
+/* The new-note sheet has the same shape as the canvas sheet: a heading, one
+   line of explanation, the field, and the actions. */
+#note-template-dialog {
+  width: min(460px, calc(100vw - 48px));
+  padding: 20px;
+}
+#note-template-dialog h2 {
+  margin: 0;
+}
+#note-template-dialog p {
+  margin: 6px 0 0;
+}
+#note-template-dialog label {
+  display: block;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+#note-template-dialog select {
+  width: 100%;
+  margin: 8px 0 0;
+  padding-block: 8px;
+  padding-inline-start: 10px;
+  background-color: var(--surface-field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+}
+#note-template-dialog .dialog-actions {
+  margin-top: 22px;
 }
 .note-dialog-heading {
   position: sticky;

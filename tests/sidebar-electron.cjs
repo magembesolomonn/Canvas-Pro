@@ -27,9 +27,13 @@ function key(keyCode,modifiers=[]) {
   win.webContents.setBackgroundThrottling(false);
   if(win.webContents.isLoading()) await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
   await until(()=>run("!!$('#navigation button') && !$('.sidebar-active-pill').hidden"));
-  const sectionSpacing = await run("(()=>{const collections=$('[data-section=collections] > summary').getBoundingClientRect(),notes=$('#notes-tree > summary').getBoundingClientRect();return {gap:notes.top-collections.bottom,margin:getComputedStyle($('#notes-tree')).marginTop};})()");
+  // The sections follow one another with an even gap, and Collections sits
+  // right after the Library.
+  const sectionSpacing = await run("(()=>{const library=$('#navigation').getBoundingClientRect(),collections=$('[data-section=collections] > summary').getBoundingClientRect(),media=$('[data-section=media] > summary').getBoundingClientRect(),canvas=$('[data-section=canvas] > summary').getBoundingClientRect(),notes=$('#notes-tree > summary').getBoundingClientRect();return {libraryGap:collections.top-library.bottom,sectionGap:media.top-collections.bottom,notesGap:notes.top-canvas.bottom,margin:getComputedStyle($('#notes-tree')).marginTop};})()");
   assert.equal(sectionSpacing.margin,'0px');
-  assert.ok(sectionSpacing.gap < 36, `Notes section is too far from Collections: ${sectionSpacing.gap}px`);
+  assert.ok(sectionSpacing.libraryGap < 36, `Collections is too far from the Library: ${sectionSpacing.libraryGap}px`);
+  assert.ok(sectionSpacing.sectionGap < 36, `The section after Collections is too far: ${sectionSpacing.sectionGap}px`);
+  assert.ok(sectionSpacing.notesGap < 36, `The Notes section is too far from the Canvas section: ${sectionSpacing.notesGap}px`);
   const initial = await run("$('.sidebar-active-pill').style.transform");
   await run("$('#navigation button:nth-child(2)').click()");
   await until(()=>run("view==='favorites' && $('.sidebar-active-pill').style.transform!=="+JSON.stringify(initial)));

@@ -177,7 +177,7 @@ async function refreshCaptured(ids){
 }
 
 function current(){return selection.ids.size?assetById.get(selected):null;}
-function navButton(label,icon,count,active,handler){const b=el('button',active?'active':'');b.append(glyph(icon),el('span','',label),el('span','badge',String(count)));b.title=label;b.setAttribute('aria-label',label);b.onclick=handler;return b;}
+function navButton(label,icon,count,active,handler){const b=el('button',active?'active':'');b.append(glyph(icon),el('span','',label));/* A row without a count has no badge at all. */if(count!==null&&count!==undefined)b.append(el('span','badge',String(count)));b.title=label;b.setAttribute('aria-label',label);b.onclick=handler;return b;}
 function setView(next,folder=null,keepCatalog=false){rememberGalleryPosition();if(view==='notes'&&next!=='notes')safe(NotesWorkspace.flush);WorkbenchUI.reset();if(next!=='canvas'&&view==='canvas')CanvasWorkspace.leave();stopHover();
  if(temporaryCatalog&&!keepCatalog&&!['canvas','smart'].includes(next)){
   temporaryCatalog=false;pagedCatalog=true;catalogKey='';catalogNavigation=null;

@@ -4,9 +4,9 @@
 <aside class="sidebar">
  <div class="window-space"><button id="toggle-sidebar" class="icon-button sidebar-toggle" title="Toggle sidebar · ⌘B" aria-label="Toggle sidebar" aria-pressed="true"></button></div><div class="brand"><span class="brand-icon">▦</span><strong>Canvas Pro</strong></div>
  <nav id="navigation"></nav>
+ <details class="sidebar-section" data-section="collections" open><summary class="section-label"><span>COLLECTIONS</span><button id="add-folder" class="section-add" title="New collection" aria-label="New collection"></button></summary><nav id="folders" aria-label="Collections"></nav></details>
  <details class="sidebar-section" data-section="media" open><summary class="section-label media-label"><span>MEDIA</span></summary><nav id="media-navigation" aria-label="Media"></nav></details>
  <details class="sidebar-section" data-section="canvas" open><summary class="section-label"><span>CANVAS</span><button id="add-canvas" class="section-add" title="New canvas" aria-label="New canvas"></button></summary><nav id="canvas-navigation" aria-label="Canvases"></nav></details>
- <details class="sidebar-section" data-section="collections" open><summary class="section-label"><span>COLLECTIONS</span><button id="add-folder" class="section-add" title="New collection" aria-label="New collection"></button></summary><nav id="folders" aria-label="Collections"></nav></details>
  <details id="notes-tree" class="sidebar-section notes-section" data-section="notes" open>
   <summary class="section-label"><span>NOTES</span><button id="new-note" class="section-add" type="button" aria-label="New note" title="New note"></button></summary>
   <nav id="note-pages" aria-label="Note pages"></nav>
@@ -41,7 +41,7 @@
    <button id="canvas-library" aria-controls="canvas-tray" aria-expanded="false" title="Drag files, collections and bookmarks onto this canvas">Library</button><button id="canvas-import">Import files</button>
    <div class="canvas-tool-group canvas-history"><button id="canvas-undo" title="Undo · ⌘Z" aria-label="Undo"></button><button id="canvas-redo" title="Redo · ⇧⌘Z" aria-label="Redo"></button></div>
   </div>
-  <div class="canvas-status"><span id="canvas-save-state" class="canvas-save-state" role="status">Saved</span><button id="canvas-retry" hidden>Retry save</button></div>
+  <div class="canvas-status"><span id="canvas-item-count" class="canvas-item-count"></span><span id="canvas-save-state" class="canvas-save-state" role="status">Saved</span><button id="canvas-retry" hidden>Retry save</button></div>
   <div id="canvas-viewport" class="canvas-viewport" tabindex="0" role="group" aria-label="Canvas. Drag to select, hold Space to pan, pinch to zoom."><canvas id="canvas-overview" aria-hidden="true"></canvas><div id="canvas-world" class="canvas-world"></div><div id="canvas-marquee" class="canvas-marquee" hidden></div><div id="canvas-empty" class="canvas-empty"><div class="canvas-empty-mark" aria-hidden="true"></div><h2>An open canvas for your ideas</h2><p>Drag files, collections or bookmarks onto this board.<br>Add text and shapes, then make room for your next idea.</p><button id="canvas-empty-library">Browse your library</button></div></div>
   <div class="canvas-zoom"><button id="canvas-zoom-out" aria-label="Zoom out"></button><button id="canvas-fit" title="Fit content · ⌘0">100%</button><button id="canvas-zoom-in" aria-label="Zoom in"></button></div>
   <div class="canvas-dock" role="toolbar" aria-label="Canvas tools">

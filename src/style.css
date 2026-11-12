@@ -328,9 +328,19 @@ nav button.active svg {
 }
 nav .badge {
   margin-left: auto;
+  padding-left: 8px;
+  flex: none;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: #a1a1a1;
+}
+/* A long name gives way to the count instead of pushing it out of the card. */
+nav button > span:not(.badge):not(.sf-symbol):not(.emoji-icon):not(.note-emoji) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sidebar-bottom {
   margin-top: auto;
@@ -1168,6 +1178,23 @@ dialog p {
 dialog input {
   width: 100%;
   margin: 10px 0 20px;
+}
+/* A field in a dialog reads like a field, whatever it is. */
+dialog select {
+  width: 100%;
+  margin: 10px 0 20px;
+  /* The room for the chevron is left to the shared select rule, and only
+     the colour is set: the shorthand would wipe the chevron away. */
+  padding-block: 8px;
+  padding-inline-start: 10px;
+  background-color: var(--surface-field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+}
+dialog label {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
 }
 .dialog-actions {
   display: flex;
@@ -3337,6 +3364,14 @@ main {
 .canvas-status .canvas-save-state {
   margin-left: 0;
 }
+.canvas-status .canvas-item-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.canvas-status .canvas-item-count:empty {
+  display: none;
+}
 .canvas-status button {
   height: 22px;
   padding: 2px 8px;
@@ -3350,9 +3385,9 @@ main {
   bottom: 20px;
   z-index: 6;
   display: flex;
-  gap: 0;
+  gap: 2px;
   align-items: center;
-  padding: 3px;
+  padding: 4px;
   border: 1px solid #ffffff12;
   border-radius: 10px;
   background: #242528e6;
@@ -3360,11 +3395,18 @@ main {
   backdrop-filter: blur(18px) saturate(140%);
 }
 .canvas-zoom button {
+  /* One card holds the three controls: they do not each carry a surface. */
   display: grid;
   place-items: center;
   min-width: 26px;
   height: 26px;
   padding: 0 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.canvas-zoom button:hover {
+  background: #ffffff12;
 }
 .canvas-zoom button .sf-symbol {
   width: 13px;
@@ -5293,8 +5335,9 @@ body.light-mode footer {
   vertical-align: middle;
 }
 .sidebar .sf-symbol {
-  width: 20px;
-  height: 20px;
+  /* Finder sizes its sidebar icons to the text beside them. */
+  width: 16px;
+  height: 16px;
 }
 .icon-button > .sf-symbol {
   width: 22px;
@@ -5302,9 +5345,9 @@ body.light-mode footer {
 }
 .emoji-icon {
   font-family: Apple Color Emoji;
-  font-size: 20px;
-  width: 20px;
-  line-height: 22px;
+  font-size: 16px;
+  width: 16px;
+  line-height: 18px;
   display: inline-block;
   flex: none;
 }
@@ -5538,8 +5581,8 @@ body.light-mode footer {
 }
 #canvas-navigation button > .sf-symbol,
 #canvas-navigation button > .emoji-icon {
-  flex: 0 0 20px;
-  min-width: 20px;
+  flex: 0 0 16px;
+  min-width: 16px;
   overflow: visible;
 }
 nav .sf-symbol {
