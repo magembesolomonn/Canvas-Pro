@@ -86,11 +86,14 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
  assert.ok((altJob.imported||0)+(altJob.duplicates||0)>=1,JSON.stringify(altJob));
  console.log('EXTENSION_ALT_CLICK',JSON.stringify({imported:altJob.imported,duplicates:altJob.duplicates}));
  // The toast appears in the top right corner with a thumbnail of what was saved.
- const altToast=await poll(async()=>page.evaluate(`(()=>{const root=document.querySelector('[data-canvas-capture-activity]')?.shadowRoot;const toast=root?.querySelector('.toast');if(!toast)return null;const thumb=toast.querySelector('.thumb');return {title:toast.querySelector('.title')?.textContent||'',hasThumb:!!thumb&&!thumb.hidden,thumbReady:!!thumb&&thumb.complete&&thumb.naturalWidth>0};})()`),15000).catch(()=>null);
+ const altToast=await poll(async()=>page.evaluate(`(()=>{const root=document.querySelector('[data-canvas-capture-activity]')?.shadowRoot;const toast=root?.querySelector('.toast');if(!toast)return null;const thumb=toast.querySelector('.thumb');return {count:root?.querySelectorAll('.toast').length||0,title:toast.querySelector('.title')?.textContent||'',hasThumb:!!thumb&&!thumb.hidden,thumbReady:!!thumb&&thumb.complete&&thumb.naturalWidth>0};})()`),15000).catch(()=>null);
  assert.ok(altToast,'No toast appeared for the Alt+Right-click save.');
  assert.match(altToast.title,/saved to Canvas Pro/i);
  assert.equal(altToast.hasThumb,true,'The toast had no thumbnail.');
  assert.equal(altToast.thumbReady,true,'The toast thumbnail did not load.');
+ assert.equal(altToast.count,1,'Expected one toast, saw '+altToast.count+'.');
+ const extraToasts=await page.evaluate(`document.getElementById('__canvas_qs_toast')?1:0`);
+ assert.equal(extraToasts,0,'A second toast from the page script appeared.');
  console.log('EXTENSION_ALT_TOAST',JSON.stringify(altToast));
  // Drag and drop saves the dropped picture through the extension. Real drag
  // events are used, so the page sees the gesture a person makes.

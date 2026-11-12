@@ -177,15 +177,12 @@
     }catch{}
   }
 
-  // The same top-right card the app-side capture uses.
-  function showCaptureToast(job){
-    try{ if(typeof canvasCaptureActivity==='function'){ canvasCaptureActivity(job,null); return true; } }catch{}
-    return false;
-  }
   // The worker asks the page to show progress; this script is on every page.
+  // The card it draws is the single toast for a capture, so this script does
+  // not add a second one.
   chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     if(message?.type!=='capture-activity')return;
-    try{ showCaptureToast(message.job||{}); }catch{}
+    try{ if(typeof canvasCaptureActivity==='function') canvasCaptureActivity(message.job||{},null); }catch{}
     respond({ok:true});
   });
 
@@ -199,12 +196,8 @@
     if(!canUseRuntime()){ toast('Reload this page to reconnect', false,'','The extension was reloaded'); return true; }
     try{
       const response=await chrome.runtime.sendMessage({type:'social-save', post:data});
+      // The page shows one toast for this capture: the worker's own card.
       if(!response?.ok) throw new Error(response?.error||'Could not save this post');
-      const result=response.result||{};
-      const failed=result.errors?.length?result.errors[0]:'';
-      if(failed){ toast('Save failed', false,'',failed); return true; }
-      showCaptureToast({id:'social-'+Date.now(),state:'complete',kind:'video',total:1,done:1,imported:result.imported||0,duplicates:result.duplicates||0,items:[{title:data.title||'Post'}]});
-      toast(result.imported?'Video saved to Canvas Pro':'Already in your library', true, data.items?.find(i=>i.kind==='video')?.poster||'', result.imported?'Saved to Canvas Pro':'');
       return true;
     }catch(e){
       if(contextInvalidated(e)) toast('Reload this page to reconnect', false,'','The extension was reloaded');
@@ -220,14 +213,9 @@
     if(!item?.mediaUrl) return;
     const thumbnail=await makeThumbnail(item);
     try{
+      // The worker saves the file and shows one toast for it in this page.
       const response=await chrome.runtime.sendMessage({type:'quick-save', item:{...item, thumbnail, pageUrl:location.href, pageTitle:document.title}});
-      if(!response?.ok) throw new Error(response?.error||'Could not save');
-      const result=response.result||{};
-      const failed=result.errors?.length?result.errors[0]:'';
-      const label=item.kind==='video'?'Video':'Image';
-      if(failed){ toast('Save failed', false, thumbnail, failed); return; }
-      showCaptureToast({id:'quick-'+Date.now(),state:'complete',kind:item.kind||'image',total:1,done:1,imported:result.imported||0,duplicates:result.duplicates||0,items:[{title:item.title||label,thumbnail:item.displayURL||item.mediaUrl,thumbnailData:thumbnail}]});
-      toast(result.imported?`${label} saved to Canvas Pro`:'Already in your library', true, thumbnail||item.displayURL||item.mediaUrl, result.imported?'':'This file is already in your library');
+      if(!response?.ok) return; // the worker already reported the failure
     }catch(e){
       if(contextInvalidated(e)) toast('Reload this page to reconnect', false,'','The extension was reloaded');
       else toast('Could not save', false,thumbnail,String(e?.message||e||''));
