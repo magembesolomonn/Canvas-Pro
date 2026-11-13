@@ -2260,18 +2260,20 @@ body.light-mode .settings-search input:focus-visible {
 .settings-nav-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* The app sidebar's item rhythm. */
+  gap: 8px;
 }
 .settings-nav-group + .settings-nav-group {
   margin-top: 8px;
 }
 .settings-nav-title {
-  margin: 0 0 4px;
-  padding: 12px 0 0;
+  margin: 12px 0 8px;
+  padding: 0;
   /* Same heading treatment as the app sidebar sections. */
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--section-ink);
 }
@@ -2280,7 +2282,8 @@ body.light-mode .settings-search input:focus-visible {
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* Same icon-to-name gap as .sidebar nav button. */
+  gap: 10px;
   width: 100%;
   min-height: 32px;
   padding: 7px 8px;
@@ -2289,7 +2292,9 @@ body.light-mode .settings-search input:focus-visible {
   border-radius: 7px;
   background: transparent;
   color: var(--text);
-  font: 13px var(--app-font);
+  /* Body: 13px at 160%, the sidebar's line box. The shorthand carries the
+     line height; a separate declaration after it would be reset. */
+  font: 13px/1.6 var(--app-font);
   text-align: left;
   white-space: nowrap;
 }
@@ -6251,7 +6256,8 @@ body.light-mode .social-card-icon[alt="X"] {
 .raster-preview > .image-preview {
   /* The element is the picture, not the stage: object-fit on a 100% × 100%
      box puts the rounded corners in the letterbox where nobody can see them.
-     Capped, intrinsic sizing keeps the radius on the photo's own edges. */
+     mountRasterPreview() sizes this element to the fitted picture, so the
+     radius lands on the photo's own edges. */
   width: auto;
   height: auto;
   max-width: 100%;

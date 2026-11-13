@@ -435,7 +435,18 @@ function mountRasterPreview(a,unsupported){
  let zoom=1,detail=0,disposed=false,request=0,timer,offset={x:0,y:0},drag=null;
  image.alt=a.name;image.draggable=false;
  image.style.visibility='hidden';
- image.onload=()=>{image.style.visibility='';};
+ image.onload=()=>{image.style.visibility='';fit();};
+ // The picture, not the stage, wears the rounded corners: size the element to
+ // the fitted photograph so its radius sits on the photo's own edges instead
+ // of in the empty letterbox around it.
+ function fit(){
+  if(!image.naturalWidth||!image.naturalHeight)return;
+  const width=element.clientWidth,height=element.clientHeight;
+  if(!width||!height)return;
+  const scale=Math.min(width/image.naturalWidth,height/image.naturalHeight);
+  image.style.width=Math.max(1,Math.round(image.naturalWidth*scale))+'px';
+  image.style.height=Math.max(1,Math.round(image.naturalHeight*scale))+'px';
+ }
  const cached=mounted.get(a.id)?.querySelector('.card-surface img');
  image.src=cached?.naturalWidth?cached.currentSrc:'asset://thumb/'+a.id+'?v=2&cached';
  element.append(image);
@@ -496,8 +507,8 @@ function mountRasterPreview(a,unsupported){
   offset={x:event.clientX-drag.x,y:event.clientY-drag.y};paint();
  });
  element.addEventListener('lostpointercapture',()=>drag=null);
- const observer=new ResizeObserver(load);observer.observe(element);
- queueMicrotask(load);
+ const observer=new ResizeObserver(()=>{fit();load();});observer.observe(element);
+ queueMicrotask(()=>{fit();load();});
  api.previewZoomActive(true);paint();
  return {element,zoomBy:factor=>setZoom(zoom*factor),resetZoom:()=>setZoom(1),
   dispose(){disposed=true;api.previewZoomActive(false);clearTimeout(timer);observer.disconnect();image.removeAttribute('src');element.remove();}};
