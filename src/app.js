@@ -308,7 +308,7 @@ function renderSelectionInspector(){
   stack.append(face);
  }box.append(stack,el('h2','selection-title',items.length.toLocaleString()+' files selected'),el('p','hint',new Set(items.map(a=>a.ext)).size+' file types'));
  const tags=section('Add tags to all');const tagInput=field('','Tags, separated by commas',async value=>{const list=value.split(',').map(t=>t.trim()).filter(Boolean);if(list.length)await bulkAction({type:'tags',tags:list});});tagInput.id='bulk-tags';tagInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();tagInput.blur();}};tags.append(tagInput);box.append(tags);
- const collections=section('Add to collection');const choice=el('select');choice.setAttribute('aria-label','Collection for selected files');const first=el('option','','Choose a collection…');first.value='';choice.append(first);for(const folder of folders){const option=el('option','',folder);option.value=folder;choice.append(option);}choice.onchange=()=>{if(choice.value)safe(()=>bulkAction({type:'collection',folder:choice.value}));};collections.append(AppSelect.attach(choice,{placeholder:'Choose a collection…'}).root);box.append(collections);
+ const collections=section('Add to collection');const choice=field('','Collection name, then Enter',async text=>{const name=text.trim();if(!name)return;if(!folders.includes(name)){folders.push(name);folders.sort((one,two)=>one.localeCompare(two));await api.addFolder(name);}await bulkAction({type:'collection',folder:name});});choice.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();choice.blur();}};collections.append(choice);box.append(collections);
  const canvas=section('Canvas');if(view!=='trash')canvas.append(action('Add to Canvas…',()=>CanvasWorkspace.choose({ids})));box.append(canvas);
  const favourites=section('Favourites');favourites.append(action(items.every(a=>a.favorite)?'Remove from Favourites':'Add to Favourites',()=>setFavorites(ids,!items.every(a=>a.favorite))));box.append(favourites);
  const names=section('Selected files');const list=el('div','selection-names');for(const a of items.slice(0,8))list.append(el('p','',a.name));if(items.length>8)list.append(el('p','hint','and '+(items.length-8)+' more'));names.append(list);box.append(names);
@@ -344,48 +344,78 @@ function renderInspector() {
   if(k==='image'){box.append(SmartCards.paletteSection(a));}
   else if(k==='video'||k==='audio'){const mediaDetails=el('p','hint','Reading media information…');box.append(mediaDetails);api.mediaInfo(a.id,true).then(info=>{if(selected!==a.id||!mediaDetails.isConnected)return;mediaDetails.textContent=[info.duration?'Duration '+timecode(info.duration):'',info.width&&info.height?info.width+' × '+info.height:'',info.codec||'',info.artist||'',info.album||''].filter(Boolean).join(' · ')||'Media information unavailable';}).catch(()=>mediaDetails.textContent='Media information unavailable');}
   else if(k==='link'&&a.captureMetadata){const metadata=a.captureMetadata;const source=section('Website');const details=el('dl','properties');for(const [label,value]of [['Original URL',metadata.pageUrl],['Website title',metadata.pageTitle],['Domain',metadata.pageUrl?new URL(metadata.pageUrl).hostname:''],['Capture date',metadata.capturedAt?new Date(metadata.capturedAt).toLocaleString():'']])if(value)details.append(el('dt','',label),el('dd','',String(value)));source.append(details);box.append(source);}
-  // Tags, with the local model offering words for this picture.
+  // Tags are typed, not chosen from a list: the field below takes one word or
+  // several separated by commas and saves them on Enter or when it loses
+  // focus. The words this file already carries sit above it as chips.
   const tags=el('section');
   const tagHead=el('div','inspector-section-head');
   tagHead.append(el('h3','','Tags'));
-  // The tags themselves are the list: the words this library already knows,
-  // and the ones this file carries.
-  const choices=[...new Set([...a.tags,...TAG_VOCABULARY,...assets.flatMap(one=>one.tags)])].sort();
-  const suggestions=TagSuggestions.mount(a,{add:tag=>picker.values=[...new Set([...picker.values,tag])]});
-  tagHead.append(suggestions.button);
-  tags.append(tagHead);
-  const picker=AppSelect.create({
-    options:choices.map(tag=>({value:tag,label:tag})),
-    value:a.tags,
-    multiple:true,
-    placeholder:'Add tags…',
-    // A tag is one answer of several: saving it must not redraw the panel,
-    // or the list would close after every choice.
-    onChange:values=>update({tags:values},{repaint:false}),
-  });
-  const addRow=el('div','select-add');
-  const addInput=field('','New tag',()=>{});
-  addInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addTag();}};
-  addInput.setAttribute('aria-label','New tag');
-  const addButton=action('Add',addTag);
-  addButton.type='button';
-  addRow.append(addInput,addButton);
-  picker.popover.append(addRow);
-  function addTag(){
-    const words=addInput.value.split(',').map(tag=>tag.trim()).filter(Boolean);
-    if(!words.length)return;
-    // A word the library has never seen joins the list, so the tick beside it
-    // appears with the choice.
-    for(const word of words)if(!choices.includes(word))choices.push(word);
-    picker.setOptions(choices.map(tag=>({value:tag,label:tag})));
-    picker.values=[...new Set([...picker.values,...words])];
-    addInput.value='';
-    addInput.focus();
+  let tagWords=[...a.tags];
+  const tagChips=el('div','chips');
+  function tagChip(word){
+    const chip=el('span','chip',word);
+    chip.append(action('×',()=>{
+      tagWords=tagWords.filter(one=>one!==word);
+      chip.remove();
+      tagChips.hidden=!tagWords.length;
+      update({tags:tagWords},{repaint:false});
+    }));
+    return chip;
   }
-  tags.append(picker.root);
-  tags.append(suggestions.results);
+  function addTags(text){
+    const words=text.split(',').map(word=>word.trim()).filter(Boolean);
+    const added=[...new Set(words)].filter(word=>!tagWords.includes(word));
+    if(!added.length)return;
+    tagWords=[...tagWords,...added];
+    for(const word of added)tagChips.append(tagChip(word));
+    tagChips.hidden=false;
+    // Saving leaves the panel alone, so the field keeps the cursor and a
+    // second word can be typed straight away.
+    update({tags:tagWords},{repaint:false});
+  }
+  const tagInput=field('','Add tags, separated by commas',text=>{addTags(text);tagInput.value='';});
+  tagInput.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();addTags(tagInput.value);tagInput.value='';}};
+  const suggestions=TagSuggestions.mount(a,{add:word=>addTags(word)});
+  tagHead.append(suggestions.button);
+  for(const word of tagWords)tagChips.append(tagChip(word));
+  tagChips.hidden=!tagWords.length;
+  tags.append(tagHead,tagChips,tagInput,suggestions.results);
   box.append(tags);
-  const coll=section('Collections'); const assigned=el('div','chips');for(const f of a.folders){const chip=el('span','chip',f);chip.append(action('×',()=>update({folders:a.folders.filter(x=>x!==f)})));assigned.append(chip);}coll.append(assigned);const choose=el('select');choose.setAttribute('aria-label','Add to collection');const first=el('option','','Add to collection…');first.value='';choose.append(first);for(const f of folders.filter(f=>!a.folders.includes(f))){const o=el('option','',f);o.value=f;choose.append(o);}choose.onchange=()=>safe(()=>update({folders:[...a.folders,choose.value]}));coll.append(AppSelect.attach(choose,{placeholder:'Add to collection…'}).root);box.append(coll);
+  // A collection is typed too: a name the library knows joins it to the file,
+  // a new name becomes a collection and is added in the same breath.
+  const coll=section('Collections');
+  let collNames=[...a.folders];
+  const collChips=el('div','chips');
+  function collChip(name){
+    const chip=el('span','chip',name);
+    chip.append(action('×',()=>{
+      collNames=collNames.filter(one=>one!==name);
+      chip.remove();
+      collChips.hidden=!collNames.length;
+      update({folders:collNames},{repaint:false});
+    }));
+    return chip;
+  }
+  function addCollection(text){
+    const name=text.trim();
+    if(!name||collNames.includes(name))return;
+    // A name the library does not know yet is created first, so the sidebar
+    // lists it straight away.
+    if(!folders.includes(name)){
+      folders.push(name);folders.sort((one,two)=>one.localeCompare(two));
+      safe(()=>api.addFolder(name));
+    }
+    collNames=[...collNames,name];
+    collChips.append(collChip(name));
+    collChips.hidden=false;
+    update({folders:collNames},{repaint:false});
+  }
+  const collInput=field('','Add to collection, then Enter',text=>{addCollection(text);collInput.value='';});
+  collInput.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();addCollection(collInput.value);collInput.value='';}};
+  for(const name of collNames)collChips.append(collChip(name));
+  collChips.hidden=!collNames.length;
+  coll.append(collChips,collInput);
+  box.append(coll);
   if(k==='image'){
    const props=section('Image properties'),dl=el('dl','properties'),sizeLabel=el('dt','','Dimensions'),sizeValue=el('dd','','Reading…');
    dl.append(el('dt','','Type'),el('dd','',(a.ext||'File').toUpperCase()),sizeLabel,sizeValue,el('dt','','Imported'),el('dd','',new Date(a.imported).toLocaleDateString()),el('dt','','Created'),el('dd','',new Date(a.created).toLocaleDateString()));

@@ -7,10 +7,8 @@
   pointer-events: none;
   border-radius: 8px;
 }
-.sidebar-active-pill { background: #ffffff13; }
-.sidebar-hover-pill { background: #ffffff0b; }
-body.light-mode .sidebar-active-pill { background: var(--selection, #e8e8ea); }
-body.light-mode .sidebar-hover-pill { background: #00000008; }
+.sidebar-active-pill { background: var(--fill-active, #ffffff13); }
+.sidebar-hover-pill { background: var(--fill-hover, #ffffff0b); }
 .sidebar nav, .sidebar .section-label, .sidebar .sidebar-bottom {
   position: relative;
   z-index: 1;
@@ -19,8 +17,11 @@ body.light-mode .sidebar-hover-pill { background: #00000008; }
   position: relative;
   min-height: 32px;
   /* The rows sit in the sidebar's own inset, so a line drawn down the
-     sidebar meets the icons and then the names. */
-  padding-inline: 0;
+     sidebar meets the icons and then the names. The 8px of padding, pulled
+     back out with an equal margin, gives the chosen fill room around the
+     icon without moving the icon or the name. */
+  padding-inline: 8px;
+  margin-inline: -8px;
   /* Body: 13px at 160%. */
   font-size: 13px;
 }
@@ -130,9 +131,10 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
   body.hide-sidebar .sidebar .brand { display: flex; }
   body.hide-sidebar .sidebar nav button {
     justify-content: flex-start;
-    gap: 10px;
+    gap: 8px;
     padding: 7px 10px;
-    font-size: 12px;
+    margin-inline: 0;
+    font-size: 13px;
   }
   body.hide-sidebar .sidebar nav button > :is(.badge,span:not(.sf-symbol):not(.emoji-icon):not(.note-emoji)) { display: initial; }
   body.hide-sidebar .sidebar :is(#notes-tree,#new-note) { display: block; }

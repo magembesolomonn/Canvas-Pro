@@ -765,8 +765,9 @@ body.light-mode .tracker-record-panel .dialog-actions { background: var(--bg-pri
 }
 .calendar-day.is-selected,
 .calendar-month.is-selected {
-  background: var(--settings-accent);
-  color: #ffffff;
+  /* The chosen day is a filled cell, the same fill a chosen row wears. */
+  background: var(--fill-active);
+  color: var(--text);
 }
 .calendar-footer {
   display: flex;
@@ -782,7 +783,7 @@ body.light-mode .tracker-record-panel .dialog-actions { background: var(--bg-pri
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--settings-accent);
+  color: var(--text);
   font: 12px var(--app-font);
 }
 .calendar-clear:hover,

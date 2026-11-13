@@ -29,10 +29,15 @@ const SidebarUI = (() => {
       return;
     }
     const bounds = target.getBoundingClientRect(), root = sidebar.getBoundingClientRect();
+    // The sidebar is a card with a hairline, and an absolutely placed child
+    // starts inside that line, so its width is taken off the offset.
+    const edge = getComputedStyle(sidebar);
+    const left = parseFloat(edge.borderLeftWidth) || 0;
+    const top = parseFloat(edge.borderTopWidth) || 0;
     pill.style.width = bounds.width + 'px';
     pill.style.height = bounds.height + 'px';
-    pill.style.transform = 'translate(' + (bounds.left - root.left) + 'px,' +
-      (bounds.top - root.top + sidebar.scrollTop) + 'px)';
+    pill.style.transform = 'translate(' + (bounds.left - root.left - left) + 'px,' +
+      (bounds.top - root.top + sidebar.scrollTop - top) + 'px)';
     if (pill.hidden) pill.hidden = false;
   }
 

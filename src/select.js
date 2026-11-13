@@ -137,12 +137,18 @@ const AppSelect=(()=>{
   function position(){
    const rect=trigger.getBoundingClientRect();
    const width=Math.max(rect.width,180);
-   const height=list.offsetHeight||120;
-   const below=innerHeight-rect.bottom-12;
-   const open=below<height&&rect.top>height+12;
+   // The list opens downwards when it fits, otherwise upwards, and either way
+   // it is never taller than the room it has: a long list scrolls inside the
+   // window instead of running off the bottom edge.
+   const wanted=(list.scrollHeight||0)+12;
+   const below=innerHeight-rect.bottom-18;
+   const above=rect.top-18;
+   const flip=below<Math.min(wanted,above)&&above>below;
+   const room=Math.max(150,Math.min(wanted,flip?above:below));
    popover.style.width=width+'px';
    popover.style.left=Math.max(8,Math.min(innerWidth-width-8,rect.left))+'px';
-   popover.style.top=open?Math.max(8,rect.top-height-6)+'px':rect.bottom+6+'px';
+   popover.style.maxHeight=room+'px';
+   popover.style.top=(flip?rect.top-room-6:rect.bottom+6)+'px';
   }
 
   function openList(){
@@ -154,6 +160,8 @@ const AppSelect=(()=>{
    position();
    live.add(api);
    popover.showPopover();
+   // Measured once it is on the page: a hidden list has no height.
+   position();
    const selected=[...list.querySelectorAll('.select-item')].find(item=>item.getAttribute('aria-selected')==='true');
    const first=list.querySelector('.select-item');
    (selected||first)?.focus();

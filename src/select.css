@@ -33,8 +33,10 @@
   width: 100%;
   min-height: 34px;
   padding: 7px 9px;
-  background: var(--surface-field);
-  border: 1px solid var(--line);
+  /* The same fill and hairline as every other field in the app, so a select
+     never reads as a black hole beside the input next to it. */
+  background: var(--fill-field, #ffffff05);
+  border: 1px solid var(--line-field, #ffffff14);
   border-radius: var(--radius-input);
   color: var(--text);
   font: inherit;
@@ -43,7 +45,7 @@
 }
 
 .select-trigger:hover {
-  background: #ffffff13;
+  background: var(--fill-hover, #ffffff0b);
 }
 
 .select-trigger:focus-visible,
@@ -89,7 +91,7 @@
   gap: 3px;
   max-width: 100%;
   padding: 1px 3px 1px 7px;
-  background: var(--selection, #ffffff12);
+  background: var(--fill-active, #ffffff12);
   border-radius: 5px;
   font-size: 12px;
   line-height: 1.5;
@@ -120,7 +122,8 @@
   z-index: 40;
   margin: 0;
   padding: 5px;
-  overflow: auto;
+  /* The list scrolls; the field for a new answer stays where it is. */
+  overflow: hidden;
   max-height: 280px;
   background: var(--surface-menu, #28292d);
   border: 1px solid var(--line);
@@ -129,7 +132,16 @@
   color: var(--text);
 }
 
+/* Only an open list is laid out: a popover that is closed must stay gone. */
+.select-popover:popover-open {
+  display: flex;
+  flex-direction: column;
+}
+
 .select-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -153,12 +165,12 @@
 
 .select-item:hover,
 .select-item:focus-visible {
-  background: #ffffff12;
+  background: var(--fill-hover, #ffffff0b);
   outline: none;
 }
 
 .select-item.is-selected {
-  background: var(--selection, #ffffff12);
+  background: var(--fill-active, #ffffff12);
   font-weight: 500;
 }
 
@@ -188,40 +200,6 @@
   opacity: 1;
 }
 
-/* A way to add an option that is not in the list yet. */
-.select-add {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px solid var(--line);
-}
-
-.select-add input {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  padding: 0 8px;
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-}
-
-.select-add input:focus {
-  outline: none;
-  background: #ffffff08;
-}
-
-.select-add button {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
 .select-empty {
   margin: 0;
   padding: 8px;
@@ -229,32 +207,8 @@
   font-size: 12px;
 }
 
-/* Light appearance: the field is white with a hairline, the card is white
-   with a shadow, and the chosen row is the grey one step down. */
-body.light-mode .select-trigger {
-  background: var(--bg-primary);
-  border-color: var(--line);
-}
-
-body.light-mode .select-trigger:hover {
-  background-color: #0000000a;
-}
-
+/* Light appearance: the field is white with a hairline and the card is white.
+   The fills themselves come from the app's tokens. */
 body.light-mode .select-popover {
-  background: var(--bg-primary);
-  border-color: var(--line);
   box-shadow: var(--shadow-popover);
-}
-
-body.light-mode .select-item:hover,
-body.light-mode .select-item:focus-visible {
-  background: #0000000a;
-}
-
-body.light-mode .select-item.is-selected {
-  background: var(--selection);
-}
-
-body.light-mode .select-chip {
-  background: var(--selection);
 }
