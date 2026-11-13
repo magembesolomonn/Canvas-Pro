@@ -657,7 +657,7 @@ const NotesWorkspace = (() => {
       control.setAttribute('aria-pressed', String((block.align || 'left') === value));
       alignment.append(control);
     }
-    toolbar.append(type, bold, alignment);
+    toolbar.append(AppSelect.attach(type).root, bold, alignment);
     return toolbar;
   }
   function blockNode(block, index) {
@@ -915,6 +915,8 @@ const NotesWorkspace = (() => {
     });
     $('#notes-tree').ontoggle = () => { if ($('#notes-tree').open) safe(loadList); };
     safe(loadList);
+    // The template list is a listbox: the sheet shows what it will make.
+    AppSelect.attach($('#note-template'),{placeholder:'Blank page'});
     $('#note-template-form').onsubmit = event => {
       event.preventDefault();
       run(async () => {

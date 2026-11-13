@@ -100,8 +100,21 @@ async function openBlockMenu() {
 }
 async function insertBlock(type) {
   const names = {paragraph:'Paragraph',table:'Table',image:'Library image',bullet:'Bulleted item'};
-  await openBlockMenu();
-  await run(`[...$('.note-block-menu').querySelectorAll('button')].find(button=>button.textContent===${JSON.stringify(names[type])}).click()`);
+  // A save or an image settling can move the page while the menu is open,
+  // and a menu puts itself away when the page scrolls, so the whole insert is
+  // retried rather than assuming the menu survived the wait.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await openBlockMenu();
+    const picked = await run(`(() => {
+      const button=[...document.querySelectorAll('.note-block-menu button')]
+        .find(button=>button.textContent===${JSON.stringify(names[type])});
+      if(!button)return false;
+      button.click();
+      return true;
+    })()`);
+    if (picked) return;
+  }
+  throw Error('The block menu would not stay open.');
 }
 (async () => {
   await app.whenReady();
@@ -121,7 +134,8 @@ async function insertBlock(type) {
   await run("$('#new-note').click();$('#note-template').focus()");
   assert.deepEqual(await run("Array.from($('#note-template').options,option=>option.value)"),['blank','movies','finance','product','youtube']);
   assert.equal(await run("$('#note-template-dialog').open && $('#notes-tree').open"),true);
-  assert.ok(await run("$('#note-template-form .dialog-actions').getBoundingClientRect().top - $('#note-template').getBoundingClientRect().bottom >= 16"));
+  // The sheet's field is the listbox now, so the space is measured from it.
+  assert.ok(await run("$('#note-template-form .dialog-actions').getBoundingClientRect().top - $('#note-template').closest('.select').querySelector('.select-trigger').getBoundingClientRect().bottom >= 16"));
   await run("$('#note-template-dialog').close()");
   await create('finance');
   const finance = await run("api.notesList().then(list=>list[0].id)");
@@ -254,13 +268,15 @@ async function insertBlock(type) {
     toolbar.querySelector('.note-format-bold').click();
     const bold = toolbar.classList.contains('is-visible') &&
       toolbar.querySelector('.note-format-bold').getAttribute('aria-pressed')==='true';
-    toolbar.querySelector('[aria-label="Text style"]').value='paragraph';
-    toolbar.querySelector('[aria-label="Text style"]').dispatchEvent(new Event('change'));
+    const style = toolbar.querySelector('[aria-label="Text style"]');
+    style.click();
+    [...style.closest('.select').querySelectorAll('.select-item')].find(item=>item.dataset.value==='paragraph').click();
     row = $('#note-blocks').firstElementChild;
     toolbar = row.querySelector('.note-format-toolbar');
     const paragraph = row.classList.contains('note-block-paragraph') && toolbar.classList.contains('is-visible');
-    toolbar.querySelector('[aria-label="Text style"]').value='heading-2';
-    toolbar.querySelector('[aria-label="Text style"]').dispatchEvent(new Event('change'));
+    const nextStyle = toolbar.querySelector('[aria-label="Text style"]');
+    nextStyle.click();
+    [...nextStyle.closest('.select').querySelectorAll('.select-item')].find(item=>item.dataset.value==='heading-2').click();
     row = $('#note-blocks').firstElementChild;
     toolbar = row.querySelector('.note-format-toolbar');
     const heading = row.classList.contains('note-block-heading') && toolbar.classList.contains('is-visible');
@@ -375,6 +391,9 @@ async function insertBlock(type) {
   assert.equal(await run("$('#notes-workspace').hidden && !document.body.classList.contains('notes-active')"), true);
   await run("Array.from($('#note-pages').children).find(row=>row.title==='Finance tracker').click()");
   await until(() => run("$('#note-title').value==='Finance tracker' && !$('#notes-editor').inert"));
+  // The image sits below the fold, and the browser only fetches an image
+  // near the viewport, so the reader scrolls to it before it loads.
+  await run("$('#note-blocks .note-inline-image')?.scrollIntoView({block:'center'})");
   await until(() => run("$('#note-blocks .note-inline-image')?.naturalWidth>0"));
   assert.equal(await run("$('.note-block-toggle textarea[aria-label=\"Toggle content\"]').value"), 'Invoice 202');
   for (const theme of ['light', 'dark']) {

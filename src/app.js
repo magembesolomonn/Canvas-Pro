@@ -308,13 +308,14 @@ function renderSelectionInspector(){
   stack.append(face);
  }box.append(stack,el('h2','selection-title',items.length.toLocaleString()+' files selected'),el('p','hint',new Set(items.map(a=>a.ext)).size+' file types'));
  const tags=section('Add tags to all');const tagInput=field('','Tags, separated by commas',async value=>{const list=value.split(',').map(t=>t.trim()).filter(Boolean);if(list.length)await bulkAction({type:'tags',tags:list});});tagInput.id='bulk-tags';tagInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();tagInput.blur();}};tags.append(tagInput);box.append(tags);
- const collections=section('Add to collection');const choice=el('select');choice.setAttribute('aria-label','Collection for selected files');const first=el('option','','Choose a collection…');first.value='';choice.append(first);for(const folder of folders){const option=el('option','',folder);option.value=folder;choice.append(option);}choice.onchange=()=>{if(choice.value)safe(()=>bulkAction({type:'collection',folder:choice.value}));};collections.append(choice);box.append(collections);
+ const collections=section('Add to collection');const choice=el('select');choice.setAttribute('aria-label','Collection for selected files');const first=el('option','','Choose a collection…');first.value='';choice.append(first);for(const folder of folders){const option=el('option','',folder);option.value=folder;choice.append(option);}choice.onchange=()=>{if(choice.value)safe(()=>bulkAction({type:'collection',folder:choice.value}));};collections.append(AppSelect.attach(choice,{placeholder:'Choose a collection…'}).root);box.append(collections);
  const canvas=section('Canvas');if(view!=='trash')canvas.append(action('Add to Canvas…',()=>CanvasWorkspace.choose({ids})));box.append(canvas);
  const favourites=section('Favourites');favourites.append(action(items.every(a=>a.favorite)?'Remove from Favourites':'Add to Favourites',()=>setFavorites(ids,!items.every(a=>a.favorite))));box.append(favourites);
  const names=section('Selected files');const list=el('div','selection-names');for(const a of items.slice(0,8))list.append(el('p','',a.name));if(items.length>8)list.append(el('p','hint','and '+(items.length-8)+' more'));names.append(list);box.append(names);
  const actions=el('div','inspector-actions');actions.append(action('Copy '+items.length+' files',async()=>{await api.copyFiles(ids);notify(items.length+' files copied.');}),action('Export copies',async()=>{const count=await api.exportFiles(ids);if(count)notify(count+' copies exported.');}),action(view==='trash'?'Restore selection':'Move selection to Trash',()=>bulkAction({type:'trash',trash:view!=='trash'}),view==='trash'?'':'danger'),action('Share…',()=>api.shareFiles(ids)),...(view==='trash'?[action('Delete Permanently…',()=>deleteSelectedPermanently(ids),'danger')]:[]),action('Clear selection',()=>{selection.clear();selected=null;paintSelection();renderInspector();}));box.append(actions);
 }
-async function update(changes){const a=current();if(!a)return;const saved=await api.update(a.id,changes);Object.assign(a,saved);a.trash=a.trash?1:0;a.searchText=SmartCards.enrichSearch(a);if(pagedCatalog)return refreshCurrent();navStats=null;renderNav();render();}
+async function update(changes,{repaint=true}={}){const a=current();if(!a)return;const saved=await api.update(a.id,changes);Object.assign(a,saved);a.trash=a.trash?1:0;a.searchText=SmartCards.enrichSearch(a);if(pagedCatalog)return refreshCurrent();navStats=null;renderNav();/* A panel that must stay put, because a list is open in it, still gets its
+ cards repainted: the card carries a file's tag count. */if(repaint)render();else renderWindow();}
 function field(value, placeholder, handler, multiline=false) {const input=el(multiline?'textarea':'input'); input.value=value; input.placeholder=placeholder; input.setAttribute('aria-label',placeholder); input.onchange=()=>safe(()=>handler(input.value)); return input;}
 function section(title) {const s=el('section');s.append(el('h3','',title));return s;}
 function action(text,handler,cls='') {const b=el('button',cls,text); b.onclick=()=>safe(handler);return b;}
@@ -347,14 +348,44 @@ function renderInspector() {
   const tags=el('section');
   const tagHead=el('div','inspector-section-head');
   tagHead.append(el('h3','','Tags'));
-  const suggestions=TagSuggestions.mount(a,{add:tag=>update({tags:[...new Set([...a.tags,tag])]})});
+  // The tags themselves are the list: the words this library already knows,
+  // and the ones this file carries.
+  const choices=[...new Set([...a.tags,...TAG_VOCABULARY,...assets.flatMap(one=>one.tags)])].sort();
+  const suggestions=TagSuggestions.mount(a,{add:tag=>picker.values=[...new Set([...picker.values,tag])]});
   tagHead.append(suggestions.button);
   tags.append(tagHead);
-  const chips=el('div','chips');for(const t of a.tags){const chip=el('span','chip',t);chip.append(action('×',()=>update({tags:a.tags.filter(x=>x!==t)})));chips.append(chip);}tags.append(chips);
-  const add=field('','Add tags, separated by commas',v=>update({tags:[...a.tags,...v.split(',')]}));add.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add.blur();}};tags.append(add);
+  const picker=AppSelect.create({
+    options:choices.map(tag=>({value:tag,label:tag})),
+    value:a.tags,
+    multiple:true,
+    placeholder:'Add tags…',
+    // A tag is one answer of several: saving it must not redraw the panel,
+    // or the list would close after every choice.
+    onChange:values=>update({tags:values},{repaint:false}),
+  });
+  const addRow=el('div','select-add');
+  const addInput=field('','New tag',()=>{});
+  addInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addTag();}};
+  addInput.setAttribute('aria-label','New tag');
+  const addButton=action('Add',addTag);
+  addButton.type='button';
+  addRow.append(addInput,addButton);
+  picker.popover.append(addRow);
+  function addTag(){
+    const words=addInput.value.split(',').map(tag=>tag.trim()).filter(Boolean);
+    if(!words.length)return;
+    // A word the library has never seen joins the list, so the tick beside it
+    // appears with the choice.
+    for(const word of words)if(!choices.includes(word))choices.push(word);
+    picker.setOptions(choices.map(tag=>({value:tag,label:tag})));
+    picker.values=[...new Set([...picker.values,...words])];
+    addInput.value='';
+    addInput.focus();
+  }
+  tags.append(picker.root);
   tags.append(suggestions.results);
-    box.append(tags);
-  const coll=section('Collections'); const assigned=el('div','chips');for(const f of a.folders){const chip=el('span','chip',f);chip.append(action('×',()=>update({folders:a.folders.filter(x=>x!==f)})));assigned.append(chip);}coll.append(assigned);const choose=el('select');choose.setAttribute('aria-label','Add to collection');const first=el('option','','Add to collection…');first.value='';choose.append(first);for(const f of folders.filter(f=>!a.folders.includes(f))){const o=el('option','',f);o.value=f;choose.append(o);}choose.onchange=()=>safe(()=>update({folders:[...a.folders,choose.value]}));coll.append(choose);box.append(coll);
+  box.append(tags);
+  const coll=section('Collections'); const assigned=el('div','chips');for(const f of a.folders){const chip=el('span','chip',f);chip.append(action('×',()=>update({folders:a.folders.filter(x=>x!==f)})));assigned.append(chip);}coll.append(assigned);const choose=el('select');choose.setAttribute('aria-label','Add to collection');const first=el('option','','Add to collection…');first.value='';choose.append(first);for(const f of folders.filter(f=>!a.folders.includes(f))){const o=el('option','',f);o.value=f;choose.append(o);}choose.onchange=()=>safe(()=>update({folders:[...a.folders,choose.value]}));coll.append(AppSelect.attach(choose,{placeholder:'Add to collection…'}).root);box.append(coll);
   if(k==='image'){
    const props=section('Image properties'),dl=el('dl','properties'),sizeLabel=el('dt','','Dimensions'),sizeValue=el('dd','','Reading…');
    dl.append(el('dt','','Type'),el('dd','',(a.ext||'File').toUpperCase()),sizeLabel,sizeValue,el('dt','','Imported'),el('dd','',new Date(a.imported).toLocaleDateString()),el('dt','','Created'),el('dd','',new Date(a.created).toLocaleDateString()));

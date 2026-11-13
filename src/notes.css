@@ -898,7 +898,7 @@ body.light-mode .calendar-now:hover {
 /* Focus reads the way the rest of the app reads: one quiet ring. */
 .notes-document :is(textarea, input, select):focus-visible,
 .note-block-menu-search input:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--focus);
   outline-offset: 2px;
   border-color: transparent;
 }

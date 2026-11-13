@@ -1,0 +1,260 @@
+/* A select that reads like a field and opens a list of options.
+   ------------------------------------------------------------------
+   The trigger is a field: the same surface, hairline and radius as every
+   other field in the app. The list that drops from it is the app's own
+   menu: a solid card, a shadow, plain rows and a tick beside the chosen
+   option. In the light appearance the field is white and the card is the
+   one soft grey, the way every other panel is. */
+
+.select {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.select-native {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  background: var(--surface-field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-input);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-trigger:hover {
+  background: #ffffff13;
+}
+
+.select-trigger:focus-visible,
+.select.is-open .select-trigger {
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.select-value {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.select-value.is-placeholder {
+  color: var(--muted);
+}
+
+.select-indicator {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  opacity: 0.55;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+
+.select.is-open .select-indicator {
+  opacity: 0.8;
+}
+
+/* The answer, when there is more than one. */
+.select-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 1px 3px 1px 7px;
+  background: var(--selection, #ffffff12);
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.select-chip-remove {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.select-chip-remove:hover {
+  background: var(--selection);
+}
+
+/* The list. */
+.select-popover {
+  position: fixed;
+  inset: auto;
+  z-index: 40;
+  margin: 0;
+  padding: 5px;
+  overflow: auto;
+  max-height: 280px;
+  background: var(--surface-menu, #28292d);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-popover);
+  color: var(--text);
+}
+
+.select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.select-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-item:hover,
+.select-item:focus-visible {
+  background: #ffffff12;
+  outline: none;
+}
+
+.select-item.is-selected {
+  background: var(--selection, #ffffff12);
+  font-weight: 500;
+}
+
+.select-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-item-description {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.select-item-tick {
+  flex: none;
+  width: 13px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0;
+}
+
+.select-item.is-selected .select-item-tick {
+  opacity: 1;
+}
+
+/* A way to add an option that is not in the list yet. */
+.select-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line);
+}
+
+.select-add input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.select-add input:focus {
+  outline: none;
+  background: #ffffff08;
+}
+
+.select-add button {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.select-empty {
+  margin: 0;
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Light appearance: the field is white with a hairline, the card is white
+   with a shadow, and the chosen row is the grey one step down. */
+body.light-mode .select-trigger {
+  background: var(--bg-primary);
+  border-color: var(--line);
+}
+
+body.light-mode .select-trigger:hover {
+  background-color: #0000000a;
+}
+
+body.light-mode .select-popover {
+  background: var(--bg-primary);
+  border-color: var(--line);
+  box-shadow: var(--shadow-popover);
+}
+
+body.light-mode .select-item:hover,
+body.light-mode .select-item:focus-visible {
+  background: #0000000a;
+}
+
+body.light-mode .select-item.is-selected {
+  background: var(--selection);
+}
+
+body.light-mode .select-chip {
+  background: var(--selection);
+}

@@ -13,6 +13,10 @@ const NoteTrackers = (() => {
     input.setAttribute('aria-label',label);
     for (const [key,name] of options) input.add(new Option(name,key));
     input.value = value;
+    // The listbox the app uses everywhere else; the native element keeps
+    // the value, so the code below reads it as before.
+    const control = AppSelect.attach(input,{placeholder:label});
+    input.control = control;
     return input;
   }
   function field(label, type, value = '') {
@@ -79,7 +83,7 @@ const NoteTrackers = (() => {
     search.oninput = () => { request++; clearTimeout(timer); results.replaceChildren(); more.hidden = true; timer = setTimeout(load,150); };
     const strip = actions(dialog);
     strip.append(more,cancel);
-    dialog.body.append(kind,search,results);
+    dialog.body.append(kind.control.root,search,results);
     return new Promise(resolve=>{
       dialog.addEventListener('close',()=>{ clearTimeout(timer); resolve(selected); },{once:true});
       dialog.showModal();
@@ -118,7 +122,8 @@ const NoteTrackers = (() => {
     const properties = {...record.properties};
     function labeled(label, control) {
       const line = el('div','tracker-property');
-      line.append(el('span','',label),control);
+      // A field with a listbox of its own brings the listbox.
+      line.append(el('span','',label),control.control?control.control.root:control);
       form.append(line);
       return line;
     }
@@ -272,7 +277,7 @@ const NoteTrackers = (() => {
       const types = selectField('Field type',fieldTypes.map(type=>[type,type]),type);
       types.disabled = !!key;
       row.dataset.key = key;
-      row.append(input,types,btn('Remove',()=>row.remove()));
+      row.append(input,types.control.root,btn('Remove',()=>row.remove()));
       rows.append(row);
     }
     block.fields.forEach(({label,type,key})=>append(label,type,key));
@@ -505,7 +510,7 @@ const NoteTrackers = (() => {
         else views.push(newView(label,layout.value));
         apply(views,existing?block.active:views.length-1);
       }));
-      dialog.body.append(name,layout);
+      dialog.body.append(name,layout.control.root);
       dialog.showModal();
       name.select();
     }
@@ -526,7 +531,7 @@ const NoteTrackers = (() => {
       search.oninput = ()=>{view.query=search.value;changed();generation++;more.hidden=true;clearTimeout(timer);timer=setTimeout(load,150);};
       filter.onchange = ()=>{view.status=filter.value;changed();load();};
       sort.onchange = ()=>{view.sort=sort.value;changed();load();};
-      controls.replaceChildren(search,...(block.statuses.length?[filter]:[]),sort);
+      controls.replaceChildren(search,...(block.statuses.length?[filter.control.root]:[]),sort.control.root);
       if (block.fields.some(f=>f.type==='date')) {
         const month = field('Filter by month','month',view.month);
         month.onchange = ()=>{view.month=month.value;changed();load();};

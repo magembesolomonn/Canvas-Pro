@@ -255,7 +255,10 @@ const SmartSearch=(()=>{
  box.append(statusRow,progress,modelStatus,actions,idleLabel);$('#settings-local-intelligence').append(box);
  api.onSmartWork(wakeIndex);
  api.onModelProgress(model=>{paintModel(model);updateStatus(model.state==='downloading'?('Downloading '+(model.model||model.name)+' · '+Math.round(model.bytes/Math.max(1,model.total)*100)+'%'):model.error||status);});
- api.onSmartChanged(({id,smart,name})=>{const a=assetById.get(id);if(!a)return;a.smart=smart;if(name&&name!==a.name){a.name=name;const card=mounted.get(id);const label=card?.querySelector('.card-name');if(label)label.textContent=name;card?.setAttribute('aria-label',name);}a.searchText=SmartCards.enrichSearch(a);if(SmartCards.isNote(a)){const card=mounted.get(id),surface=card?.querySelector('.card-surface');if(surface&&!surface.querySelector('.smart-note-card')){surface.querySelector('img,.file-placeholder')?.remove();surface.prepend(SmartCards.fileVisual(a));layoutDirty=true;scheduleGallery();}}if(selected===id&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]'))scheduleInspector();});
+ api.onSmartChanged(({id,smart,name})=>{const a=assetById.get(id);if(!a)return;a.smart=smart;if(name&&name!==a.name){a.name=name;const card=mounted.get(id);const label=card?.querySelector('.card-name');if(label)label.textContent=name;card?.setAttribute('aria-label',name);}a.searchText=SmartCards.enrichSearch(a);if(SmartCards.isNote(a)){const card=mounted.get(id),surface=card?.querySelector('.card-surface');if(surface&&!surface.querySelector('.smart-note-card')){surface.querySelector('img,.file-placeholder')?.remove();surface.prepend(SmartCards.fileVisual(a));layoutDirty=true;scheduleGallery();}}const active=document.activeElement;
+ // The panel is not redrawn under the pointer: a field with the caret in it,
+ // or a list of choices that is open, owns the panel until it is done.
+ if(selected===id&&!active?.matches('input,textarea,select,[contenteditable=true]')&&!active?.closest('.select')&&!AppSelect.anyOpen())scheduleInspector();});
  // The index status lives with the rest of the local intelligence settings,
  // not in the sidebar.
  const activity=el('div','settings-row ai-activity-row');

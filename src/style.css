@@ -83,8 +83,10 @@
   --settings-accent: #0a84ff;
   --gallery-gap: 16px;
   --gallery-pad: 22px;
-  /* The note sheet. The document and its toolbar are the same paper. */
-  font: 13px/1.45 var(--app-font);
+  /* The note sheet. The document and its toolbar are the same paper.
+     Body: 13px at 160%, tracked -0.5%. */
+  font: 13px/1.6 var(--app-font);
+  letter-spacing: -0.005em;
   font-optical-sizing: auto;
 }
 * {
@@ -187,7 +189,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 canvas:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--focus);
   outline-offset: 3px;
 }
 input,
@@ -246,7 +248,9 @@ svg {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin: 12px 10px 25px;
+  /* The brand sits in the sidebar's own inset, with the first group 14px
+     below it. */
+  margin: 0 0 14px;
 }
 .brand strong {
   font-size: 14px;
@@ -265,13 +269,15 @@ svg {
   font-size: 20px;
 }
 .section-label {
-  margin: 21px 10px 7px;
-  /* The same ink, size and weight as File Details, so the two rails read as
-     one app rather than two. */
+  /* A group heading: 12px above the next group, 8px above its own items. */
+  margin: 12px 0 8px;
+  /* The same ink as File Details, so the two rails read as one app rather
+     than two. */
   color: var(--section-ink);
-  font-size: 10px;
-  letter-spacing: 0.3px;
-  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  font-weight: 400;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -346,7 +352,8 @@ nav button > span:not(.badge):not(.sf-symbol):not(.emoji-icon):not(.note-emoji) 
 }
 .sidebar-bottom {
   margin-top: auto;
-  padding: 25px 0 14px;
+  /* 16px of air above the footer and 16px below it. */
+  padding: 16px 0;
 }
 .sidebar-bottom button {
   width: 100%;
@@ -2911,7 +2918,8 @@ main {
   -webkit-app-region: no-drag;
 }
 .sidebar .brand {
-  margin-top: 6px;
+  /* 14px between the band and the brand, the way the reference sets it. */
+  margin-top: 14px;
 }
 .library-header {
   height: 44px;
@@ -5101,26 +5109,28 @@ body:not(.light-mode) {
    two surfaces; no other grey is hard-coded into the light theme. */
 body.light-mode {
   --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f7;
+  /* The rails are the one soft grey, and the window behind them is white. */
+  --bg-secondary: #f7f7f7;
   --surface-app: var(--bg-primary);
   --surface-panel: var(--bg-secondary);
   --surface-raised: var(--bg-primary);
   --surface-card: var(--bg-primary);
   --surface-field: var(--bg-primary);
   --surface-menu: var(--bg-primary);
-  --surface-canvas: var(--bg-secondary);
+  --surface-canvas: var(--bg-primary);
   --bg: var(--surface-app);
   --panel: var(--bg-primary);
-  --text: #1c1c1e;
-  --muted: #6b6b70;
-  --line: #e2e2e4;
+  --text: #2a2a2a;
+  --muted: #777777;
+  --line: #ebebeb;
   --accent: #3a3a3c;
   /* One accent for the whole light theme, including the Settings window. */
   --settings-accent: var(--accent);
   --focus: #7c7c80;
-  --selection: var(--bg-secondary);
+  /* The chosen row is the grey one step down from the rail. */
+  --selection: #ebebeb;
   --sidebar-surface: var(--bg-secondary);
-  --section-ink: #8a8a90;
+  --section-ink: #777777;
   /* Light mode needs far less depth: the same surfaces are told apart by their
      fills, so the shadows get much tighter. */
   --shadow-popover: 0 6px 22px #0000001f, inset 0 1px 0 #ffffffb3;
@@ -5615,7 +5625,10 @@ nav button.active .sf-symbol {
   color: #c9c9c9;
 }
 body.light-mode nav .sf-symbol {
-  color: #6d7078;
+  color: #777777;
+}
+body.light-mode nav button.active .sf-symbol {
+  color: #2a2a2a;
 }
 .full-player.video-player .player-controls {
   animation: none;

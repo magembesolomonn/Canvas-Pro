@@ -63,7 +63,8 @@ body.hide-sidebar {
 }
 
 .sidebar {
-  padding: 0 12px 12px;
+  /* 16px of inset on both sides, 16px under the last row. */
+  padding: 0 16px 16px;
   /* The island is solid: the window no longer has a translucent sidebar. */
   --sidebar-surface: var(--island-surface);
 }
@@ -199,15 +200,15 @@ main {
 /* Light appearance ----------------------------------------------------- */
 
 body.light-mode {
-  /* Light mirrors the dark theme: the panels are raised white and the work
-     area is recessed into the window behind them. */
-  --island-surface: #ffffff;
+  /* Light mirrors the dark theme: the rails are the one soft grey and the
+     window behind them is white. */
+  --island-surface: #f7f7f7;
   --island-line: #00000012;
 }
 
 /* Light: the window is the recessed grey and the panels are raised white. */
 body.light-mode {
-  --surface-canvas: #f5f5f7;
+  --surface-canvas: #ffffff;
   background: var(--surface-canvas);
 }
 

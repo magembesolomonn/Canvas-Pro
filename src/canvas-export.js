@@ -95,9 +95,9 @@ const CanvasExport=(()=>{
    const option=el('option','',value+'×');option.value=value;scale.append(option);
   }
   function field(text,input){const label=el('label','canvas-export-field',text);label.append(input);return label;}
-  const resolution=field('Resolution',scale);
+  const resolution=field('Resolution',AppSelect.attach(scale,{placeholder:'Resolution'}).root);
   format.onchange=()=>resolution.hidden=format.value==='pdf';
-  if(!saveToFiles)options.append(field('Format',format));
+  if(!saveToFiles)options.append(field('Format',AppSelect.attach(format,{placeholder:'Format'}).root));
   options.append(resolution);
   const selected=el('input');selected.type='checkbox';selected.disabled=!CanvasWorkspace.doc.selection.size;
   const scope=el('label','canvas-export-scope');scope.append(selected,el('span','','Selected items only'));
