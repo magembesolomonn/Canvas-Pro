@@ -1245,6 +1245,7 @@ dialog label {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  align-items: center;
 }
 [hidden] {
   display: none !important;
@@ -2030,6 +2031,7 @@ dialog {
 }
 .reliability-dialog .dialog-actions {
   margin-top: 20px;
+  align-items: center;
 }
 .model-viewer > .format-status {
   position: absolute;
@@ -3802,7 +3804,7 @@ main {
   height: 90px;
   width: 100%;
   background: #1c1e20;
-  border-radius: 6px;
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 .canvas-tray-image > img {
@@ -5627,7 +5629,8 @@ body.light-mode footer {
 }
 .creation-icon {
   font-size: 11px;
-  margin: 8px 0;
+  /* Inside dialog-actions, remove vertical margin so the button sits on the same line as Cancel/Create. */
+  margin: 0;
 }
 #canvas-navigation button > .sf-symbol,
 #canvas-navigation button > .emoji-icon {
@@ -6426,6 +6429,7 @@ dialog {
 }
 dialog .dialog-actions {
   flex-wrap: wrap;
+  align-items: center;
 }
 
 /* Distinguish the keyboard cursor from the selection in the virtualized grid. */
