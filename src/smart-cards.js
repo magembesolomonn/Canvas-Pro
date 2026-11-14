@@ -276,7 +276,33 @@ const SmartCards=(()=>{
    node.append(footer);
  }
  }
- function runtime(value){if(!value)return '';const m=String(value).match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);return m?[m[1]?m[1]+'h':'',m[2]?m[2]+'m':'',!m[1]&&!m[2]&&m[3]?m[3]+'s':''].filter(Boolean).join(' '):String(value);}
+ function runtime(value){
+  if(value==null||value==='')return '';
+  const text=String(value).trim();
+  if(!text)return '';
+  // Recipe sites publish schema durations as ISO 8601, often with date
+  // components (P0Y0M0DT0H45M0.000S) rather than PT45M. Parse the whole value
+  // instead of showing it verbatim.
+  const iso=text.match(/^P(?:(\d+(?:\.\d+)?)Y)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)W)?(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i);
+  if(iso){
+   const [,y,mo,w,d,h,m,s]=iso.map(part=>part==null?0:Number(part));
+   const minutes=Math.round(y*365*24*60+mo*30*24*60+w*7*24*60+d*24*60+h*60+m+(s?1:0)/60);
+   if(!minutes&&s)return Math.round(s)+'s';
+   if(!minutes)return '0m';
+   const hours=Math.floor(minutes/60), rest=minutes%60;
+   return hours?(rest?hours+'h '+rest+'m':hours+'h'):minutes+'m';
+  }
+  // Recipes also use plain minute counts or written durations.
+  const count=text.match(/^(\d+(?:\.\d+)?)$/);
+  if(count)return Math.round(Number(count[1]))+'m';
+  const written=text.match(/^(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\s*(?:(\d+)\s*(?:minutes?|mins?|m))?$/i);
+  if(written)return Math.round(Number(written[1]))+'h'+(written[2]?Number(written[2])+'m':'');
+  const mins=text.match(/^(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)$/i);
+  if(mins)return Math.round(Number(mins[1]))+'m';
+  const secs=text.match(/^(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)$/i);
+  if(secs)return Math.round(Number(secs[1]))+'s';
+  return text;
+ }
  function renderArticle(a,info,article,web){
   const toolbar=el('div','smart-reader-toolbar');
   toolbar.append(el('span','','Reading mode'),action('View original page',web));

@@ -1434,7 +1434,12 @@ body.hide-sidebar {
   margin-right: -4px;
   flex-shrink: 0;
 }
-header > div:has(h1) {
+/* The Library header --------------------------------------------------------
+   Only the library chrome wears these rules. A recipe view also uses a
+   <header> for its title block, so a bare `header` selector would indent that
+   block when the sidebar is hidden and break its spacing. */
+
+.library-header > div:has(h1) {
   margin-right: auto;
 }
 .sidebar-bottom {
@@ -1558,7 +1563,7 @@ header > div:has(h1) {
   transform: translateX(-100%);
   opacity: 0;
 }
-.hide-sidebar header {
+.hide-sidebar .library-header {
   padding-left: 104px;
 }
 @media (max-width: 1200px) {
@@ -5275,7 +5280,7 @@ body.light-mode {
 /* The main window, header and gallery are paper white. The sidebar and File
    Details rail are the one secondary grey. */
 body.light-mode main,
-body.light-mode header,
+body.light-mode .library-header,
 body.light-mode .filter-bar,
 body.light-mode .gallery,
 body.light-mode .canvas-actions,
