@@ -1,15 +1,5 @@
 function revealFromTrigger(surface, trigger) {
- if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
- for (const animation of surface.getAnimations()) animation.cancel();
- const bounds = surface.getBoundingClientRect(), source = trigger.getBoundingClientRect();
- if (!bounds.width || !source.width) return;
- const x = Math.max(0, Math.min(bounds.width, source.left + source.width / 2 - bounds.left));
- const y = Math.max(0, Math.min(bounds.height, source.top + source.height / 2 - bounds.top));
- const transformOrigin = `${x}px ${y}px`;
- surface.animate([
-  { transformOrigin, transform: 'scale(.97)', opacity: .82 },
-  { transformOrigin, transform: 'none', opacity: 1 }
- ], { duration: 125, easing: 'cubic-bezier(.23,1,.32,1)' });
+ return Motion.fadeScaleIn(surface, trigger);
 }
 
 function showFileNamesEnabled(){

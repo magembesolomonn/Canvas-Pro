@@ -4,7 +4,7 @@ const SidebarUI = (() => {
   let sidebar, activePill, hoverPill, backdrop, edge, handle;
   let frame = 0, hovered = null, pointer = null, drawerOpen = false, gesture = null;
   let compact = localStorage.getItem('hide-sidebar') === 'true';
-  let drawerMotion = [];
+  let drawerMotion = null;
 
   function syncAccessibility() {
     if (!sidebar) return;
@@ -92,8 +92,7 @@ const SidebarUI = (() => {
   }
 
   function stopDrawerMotion() {
-    for (const animation of drawerMotion) animation.cancel();
-    drawerMotion = [];
+    if (drawerMotion) { try { drawerMotion.cancel(); } catch {} drawerMotion = null; }
   }
 
   function drawGesture(offset, width) {
@@ -126,24 +125,22 @@ const SidebarUI = (() => {
     requestAnimationFrame(() => $(drawerOpen ? '#toggle-sidebar' : '#show-sidebar').focus({ preventScroll: true }));
 
     const target = drawerOpen ? 0 : -width;
-    if (reducedMotion.matches || Math.abs(from - target) < 1) return;
-    const duration = 220;
-    const difference = from - target;
-    const sidebarFrames = [], backdropFrames = [];
-    // Sample a critically damped spring so release keeps its velocity and
-    // the drawer and scrim can settle on the compositor together.
-    for (let i = 0; i <= 16; i++) {
-      const time = duration * i / 16;
-      const position = i === 16 ? target :
-        target + (difference + (velocity + .028 * difference) * time) * Math.exp(-.028 * time);
-      const offset = Math.max(-width, Math.min(0, position));
-      sidebarFrames.push({ transform: `translateX(${offset}px)`, visibility: 'visible' });
-      backdropFrames.push({ opacity: 1 + offset / width, visibility: 'visible' });
-    }
-    drawerMotion = [
-      sidebar.animate(sidebarFrames, { duration }),
-      backdrop.animate(backdropFrames, { duration })
-    ];
+    if (Motion.reduced() || Math.abs(from - target) < 1) return;
+    const render = offset => {
+      const clamped = Math.max(-width, Math.min(0, offset));
+      sidebar.style.transform = `translateX(${clamped}px)`;
+      sidebar.style.visibility = 'visible';
+      backdrop.style.opacity = String(1 + clamped / width);
+      backdrop.style.visibility = 'visible';
+    };
+    drawerMotion = Motion.animateNumber({
+      from, to: target, velocity,
+      render,
+      onFinish: () => {
+        drawerMotion = null;
+        clearGestureStyles();
+      }
+    });
   }
 
   function toggle() {
@@ -248,8 +245,7 @@ const SidebarUI = (() => {
     });
     // The closing panel is inert. Its visible handle can still be re-grabbed.
     document.addEventListener('pointerdown', event => {
-      if (drawerOpen || !drawerMotion[0] || drawerMotion[0].playState !== 'running' ||
-          event.target === edge || event.button !== 0) return;
+      if (drawerOpen || !drawerMotion || event.target === edge || event.button !== 0) return;
       const bounds = handle.getBoundingClientRect();
       if (event.clientX < bounds.left || event.clientX > bounds.right ||
           event.clientY < bounds.top || event.clientY > bounds.bottom) return;

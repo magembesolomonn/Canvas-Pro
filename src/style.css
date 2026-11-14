@@ -1,9 +1,13 @@
 :root {
   --app-font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
   /* Motion: one curve, two lengths. */
-  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --duration-instant: 100ms;
   --duration-fast: 150ms;
-  --duration-normal: 250ms;
+  --duration-normal: 220ms;
+  --duration-slow: 320ms;
   /* Corners: a window, a card, a button, a field. */
   --radius-window: 10px;
   --radius-card: 8px;
@@ -178,13 +182,15 @@ button {
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
+  transition: background-color var(--duration-instant) var(--ease-standard), border-color var(--duration-instant) var(--ease-standard), color var(--duration-instant) var(--ease-standard), transform var(--duration-instant) var(--ease-standard), opacity var(--duration-instant) var(--ease-standard);
 }
 button:hover {
   background: #ffffff13;
 }
 button:active {
   background: #ffffff20;
-  transform: translateY(0.5px);
+  transform: scale(0.98);
+  transition-duration: 0ms;
 }
 button:disabled {
   opacity: 0.35;
@@ -954,12 +960,12 @@ body.light-mode .chip button:hover {
    of appearing flat. Reduced motion keeps a plain cross-fade. */
 @media (prefers-reduced-motion: no-preference) {
   #preview:not([hidden]) .preview-body {
-    animation: preview-arrive 200ms var(--ease-out) both;
+    animation: preview-arrive var(--duration-normal) var(--ease-out) both;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   #preview:not([hidden]) .preview-body {
-    animation: preview-fade 160ms linear both;
+    animation: preview-fade 140ms linear both;
   }
 }
 @keyframes preview-arrive {
@@ -1468,7 +1474,7 @@ header > div:has(h1) {
     rotate(calc(var(--depth, 0) * -5deg))
     scale(calc(1 - var(--depth, 0) * 0.045));
   opacity: calc(1 - var(--depth, 0) * 0.16);
-  transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease;
+  transition: transform var(--duration-normal) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard);
 }
 .stack-card-lead {
   border-color: #ffffff45;

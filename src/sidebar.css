@@ -92,7 +92,7 @@ body.hide-sidebar .library-header { padding-left: 104px; }
 body.hide-sidebar #show-sidebar { display: inline-flex; }
 .sidebar-backdrop,.sidebar-drawer-edge,.sidebar-drawer-handle { display: none; }
 @media (prefers-reduced-motion: no-preference) {
-  .sidebar .sidebar-pill { transition: transform 180ms cubic-bezier(.22,1,.36,1); }
+  .sidebar .sidebar-pill { transition: transform var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard); }
 }
 @media (max-width: 1040px) {
   body,body.hide-sidebar { --sidebar: 0px; }
