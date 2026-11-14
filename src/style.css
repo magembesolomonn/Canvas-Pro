@@ -5246,6 +5246,12 @@ body.light-mode button.primary {
   background: #3a3a3c;
   color: #fff;
 }
+/* A primary button keeps the app's light hover fill in light mode, with
+   readable text, instead of turning into a second dark surface. */
+body.light-mode button.primary:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
 body.light-mode .sidebar nav button {
   background: transparent;
 }
@@ -5311,7 +5317,7 @@ body.light-mode .toolbar-button {
   color: #56565a;
 }
 body.light-mode .toolbar-button:hover {
-  background: var(--selection);
+  background: var(--fill-hover);
   color: var(--text);
 }
 body.light-mode .filter-bar .search,
@@ -6667,6 +6673,12 @@ body.light-mode .canvas-item-menu {
   --menu-rule: #d9d9d9;
   background: var(--bg-primary);
   border-color: var(--line);
+}
+/* Inside a menu, the import action is a row like the one below it. The
+   primary fill belongs on the page, not on a menu item. */
+body.light-mode .layout-menu button.primary {
+  background: transparent;
+  color: var(--text);
 }
 body.light-mode .layout-menu button:hover,
 body.light-mode .layout-menu button:focus-visible,
