@@ -77,7 +77,7 @@ class Bookmarks{
    const title=info.title.replace(/^.*?review of /i,'').match(/^(.+?)\s*\((\d{4})\)/);
    if(title){info.title=title[1];info.details={year:title[2]};}
  }
- try{if(true){const response=await this.fetcher(pageURL,{signal:controller.signal,credentials:'omit',...(instagramEmbed?{headers:{'User-Agent':'Canvas Pro'}}:{})});const type=response.headers.get('content-type')||'';if(/text\/html|application\/xhtml\+xml/i.test(type)){const html=(await limited(response,3*1024*1024)).toString('utf8'),parsed=metadata(html,response.url||pageURL),smart=await smartPage(html,response.url||pageURL);article=smart.article;delete smart.article;
+ try{if(true){const headers={'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15','Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'en-US,en;q=0.9'};const response=await this.fetcher(pageURL,{signal:controller.signal,credentials:'omit',headers});const type=response.headers.get('content-type')||'';if(/text\/html|application\/xhtml\+xml/i.test(type)){const html=(await limited(response,3*1024*1024)).toString('utf8'),parsed=metadata(html,response.url||pageURL),smart=await smartPage(html,response.url||pageURL);article=smart.article;delete smart.article;
  if(platform.film)posterURLs=smart.posterURLs||[];
  if(platform.social){
    socialCandidates=[...(smart.postImageURLs||[]),smart.imageURL,parsed.imageURL,captureMetadata.previewImage];
