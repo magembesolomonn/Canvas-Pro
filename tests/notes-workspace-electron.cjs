@@ -187,13 +187,17 @@ async function insertBlock(type) {
   assert.ok(global.notesMenu.getMenuItemById('delete'));
   assert.equal(await run("!!$('dialog[aria-label=\"Note actions\"]')"), false);
   global.notesMenu.getMenuItemById('icon').click();
-  await until(() => run("!!$('dialog[aria-label=\"Note icon\"] form')"));
+  await until(() => run("document.activeElement?.classList.contains('emoji-capture')"));
+  assert.equal(await run("!!$('dialog')?.open"), false);
   await run(`(() => {
-    const form = $('dialog[aria-label="Note icon"] form');
-    form.querySelector('input').value='🎬';
-    form.requestSubmit();
+    const field = $('.emoji-capture');
+    field.value='🎬';
+    field.dispatchEvent(new Event('input',{bubbles:true}));
   })()`);
   await until(() => run("$('#note-pages .note-emoji')?.textContent==='🎬'"));
+  await run("$('#note-pages button').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+  await until(() => global.notesMenu.getMenuItemById('remove-icon'));
+  assert.ok(global.notesMenu.getMenuItemById('remove-icon'));
   assert.equal(await run("$('#note-cover img').naturalWidth>0"),true);
   await create('youtube');
   await run("[...$('.note-tracker').querySelectorAll('button')].find(button=>button.textContent==='Table').click()");

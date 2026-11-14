@@ -13,11 +13,55 @@ function publishVisibleAssets(ids){
 }
 function assetRatio(a,width){return SmartCards.ratio(a,width)||a.aspectRatio||(kind(a)==='video'?16/9:kind(a)==='audio'?3.5:kind(a)==='pdf'?.707:kind(a)==='link'?1.6:1);}
 function rememberRatio(a,ratio){if(!Number.isFinite(ratio)||ratio<=0||Math.abs((a.aspectRatio||0)-ratio)<.001)return;a.aspectRatio=ratio;layoutDirty=true;scheduleGallery();api.setAspectRatio(a.id,ratio);}
+// The gallery footer is the file name plus, when present, the tag count.
+// These match the line heights in .card-name and .card-details.
+const CARD_NAME_FOOTER=21, CARD_DETAIL_FOOTER=13;
+function galleryCardFooterHeight(a){
+ if(!showFileNamesEnabled()||kind(a)==='link')return 0;
+ return CARD_NAME_FOOTER+(a.tags.length?CARD_DETAIL_FOOTER:0);
+}
 const imageExt=['png','jpg','jpeg','gif','webp','avif','bmp','svg','ico','heic','heif','tiff','tif','eps','jpegxl','jxl','jfif','jpe','insp','psd','psb'];
 const videoExt=['mp4','webm','mov','m4v','ogv','mkv','avi','gifv','3gp','3g2','h265','hevc'];
 const audioExt=['mp3','wav','ogg','m4a','aac','flac','aiff','aif','oga','opus','alac'];
 const kind=a=>imageExt.includes(a.ext)?'image':videoExt.includes(a.ext)?'video':audioExt.includes(a.ext)?'audio':a.ext==='pdf'?'pdf':['webloc','url'].includes(a.ext)?'link':'other';
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
+// macOS inserts the chosen emoji into whatever editable field has focus. A
+// one-pixel capture field lets the real Apple picker do the choosing, with no
+// second dialog of our own in front of it.
+const EmojiPicker=(()=>{
+ let field, pending=null;
+ function capture(){
+  if(field)return field;
+  field=el('input','emoji-capture');
+  field.type='text';
+  field.autocomplete='off';
+  field.setAttribute('aria-label','Emoji');
+  document.body.append(field);
+  field.addEventListener('input',()=>{
+   if(!pending)return;
+   const value=[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(field.value)].pop()?.segment;
+   if(!value)return;
+   const done=pending;pending=null;field.value='';
+   field.blur();
+   done(value);
+  });
+  field.addEventListener('blur',()=>{
+   if(!pending)return;
+   const done=pending;pending=null;done(null);
+  });
+  return field;
+ }
+ function pick(){
+  return new Promise(resolve=>{
+   const node=capture();
+   node.value='';
+   pending=resolve;
+   node.focus({preventScroll:true});
+   safe(()=>api.showEmojiPicker());
+  });
+ }
+ return {pick};
+})();
 function morphSurfaceFrom(surface, origin) {
  for (const animation of surface.getAnimations()) animation.cancel();
  if (!origin.width || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -225,7 +269,9 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='notes')re
   const anchor=anchorOverride||(layout?.items===visible?AssetLayout.anchorAt(layout,gallery.scrollTop,gallery.clientHeight):null);
   // Cards with no tags render only a title, so their footer is shorter.
   // Using one fixed footer height for every card leaves uneven blank rows.
-  const footerHeight=()=>0;
+  // Cards with names hidden take no footer room; when names are shown the
+  // layout reserves the footer's real height so the next row starts below it.
+  const footerHeight=galleryCardFooterHeight;
   layout=AssetLayout.createLayout(galleryLayout,visible,gallery.clientWidth,size,assetRatio,footerHeight);layoutDirty=false;layer.style.height=layout.height+'px';
   const position=anchor&&layout.byId.get(anchor.id);if(position)gallery.scrollTop=position.y+anchor.offset*(position.width/anchor.width);
  }

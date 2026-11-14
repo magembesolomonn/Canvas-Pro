@@ -552,8 +552,20 @@ kbd {
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
+.emoji-capture {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 .card-meta {
   padding: 4px 3px 0;
+  text-shadow: none;
 }
 /* Settings → Galleries → Show file names. Off leaves the thumbnails alone. */
 body.hide-file-names .card-meta {
@@ -561,22 +573,27 @@ body.hide-file-names .card-meta {
 }
 .card-name {
   font-size: 11px;
+  line-height: 15px;
   display: block;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
   color: #d6d6d6;
+  text-shadow: none;
+  filter: none;
 }
 .card.selected .card-name {
   color: #e3e3e3;
 }
 .card-details {
   font-size: 10px;
+  line-height: 13px;
   color: #777;
   display: flex;
   justify-content: space-between;
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
+  text-shadow: none;
 }
 .file-placeholder {
   width: 100%;
@@ -5548,15 +5565,6 @@ body.light-mode footer {
 .tool-field > select {
   flex: 1;
   min-width: 140px;
-}
-.icon-picker {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
-  margin: 16px 0;
-}
-.icon-picker button {
-  height: 46px;
 }
 .shortcut-row {
   display: flex;

@@ -43,53 +43,14 @@ const NotesWorkspace = (() => {
     img.src = 'asset://note-cover/' + item.id + '?v=' + coverRevision;
     return img;
   }
-  function noteIconDialog(item) {
-    const dialog = el('dialog','note-tracker-dialog');
-    dialog.setAttribute('aria-label','Note icon');
-    const sheetHead = el('div','note-dialog-heading');
-    const sheetClose = el('button','note-dialog-close');
-    sheetClose.type = 'button';
-    sheetClose.setAttribute('aria-label','Close');
-    sheetClose.append(glyph('close'));
-    sheetClose.onclick = () => dialog.close();
-    sheetHead.append(el('h2','','Note icon'), sheetClose);
-    dialog.append(sheetHead);
-    const form = el('form'), input = el('input'), error = el('p','dialog-error');
-    input.value = item.emoji;
-    input.maxLength = 64;
-    input.placeholder = 'Choose or paste an emoji';
-    input.setAttribute('aria-label','Note emoji');
-    error.setAttribute('role','status');
-    let savingEmoji = false;
-    async function save(value) {
-      if (savingEmoji) return;
-      savingEmoji = true;
-      try {
-        item.emoji = await api.notesEmoji(item.id,value);
-        if (note?.id === item.id) note.emoji = item.emoji;
-        renderTree();
-        dialog.close();
-      } catch (failure) {
-        error.textContent = failure.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
-      } finally { savingEmoji = false; }
-    }
-    form.onsubmit = event => { event.preventDefault(); save(input.value.trim()); };
-    const actions = el('div','dialog-actions note-dialog-actions');
-    const submit = el('button','primary','Save icon');
-    submit.type = 'submit';
-    if (item.emoji) actions.append(button('Remove icon',()=>save('')));
-    actions.append(button('Cancel',()=>dialog.close()),submit);
-    const body=el('div','note-dialog-body');
-    body.append(el('h2','note-dialog-title',label(item)),input,button('Open Emoji Picker',()=>{
-      input.focus();
-      safe(()=>api.notesShowEmojiPicker());
-    }),error);
-    form.append(body,actions);
-    dialog.append(form);
-    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
-    document.body.append(dialog);
-    dialog.showModal();
-    input.select();
+  async function setNoteIcon(item, value) {
+    item.emoji = await api.notesEmoji(item.id, value);
+    if (note?.id === item.id) note.emoji = item.emoji;
+    renderTree();
+  }
+  async function pickNoteIcon(item) {
+    const value = await EmojiPicker.pick();
+    if (value) await setNoteIcon(item, value);
   }
   function renderTree() {
     const open = view === 'notes';
@@ -991,7 +952,8 @@ const NotesWorkspace = (() => {
     const item = list?.find(entry=>entry.id===id);
     if (!item) return;
     if (action==='rename') return run(()=>select(id)).then(()=>{ if (note?.id===id) $('#note-title').select(); });
-    if (action==='icon') return noteIconDialog(item);
+    if (action==='icon') return pickNoteIcon(item);
+    if (action==='remove-icon') return setNoteIcon(item,'');
     if (action==='delete') return deleteNote(id);
   }
   function addBlock(type, index, replace = false) {

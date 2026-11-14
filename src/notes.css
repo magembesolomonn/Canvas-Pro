@@ -663,8 +663,6 @@ body.light-mode .tracker-record-panel .dialog-actions { background: var(--bg-pri
   background: var(--panel);
 }
 
-.note-tracker-dialog form > input[aria-label="Note emoji"] { display: block; }
-
 .tracker-options { position: relative; margin-inline-start: auto; }
 .tracker-options summary { cursor: pointer; padding: 4px 8px; }
 .tracker-option-menu {
