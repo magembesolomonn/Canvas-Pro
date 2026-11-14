@@ -319,6 +319,45 @@ function renderSelectionInspector(){
 async function update(changes,{repaint=true}={}){const a=current();if(!a)return;const saved=await api.update(a.id,changes);Object.assign(a,saved);a.trash=a.trash?1:0;a.searchText=SmartCards.enrichSearch(a);if(pagedCatalog)return refreshCurrent();navStats=null;renderNav();/* A panel that must stay put, because a list is open in it, still gets its
  cards repainted: the card carries a file's tag count. */if(repaint)render();else renderWindow();}
 function field(value, placeholder, handler, multiline=false) {const input=el(multiline?'textarea':'input'); input.value=value; input.placeholder=placeholder; input.setAttribute('aria-label',placeholder); input.onchange=()=>safe(()=>handler(input.value)); return input;}
+// Existing names that match what is being typed, offered as chips under the
+// field. Choosing one runs the field's own change handler, so adding a tag or
+// collection works exactly as if it had been typed and confirmed.
+function entrySuggestions(input, choices) {
+  const list=el('div','entry-suggestions');
+  list.setAttribute('role','listbox');
+  list.setAttribute('aria-label','Existing matches');
+  list.hidden=true;
+  function close(){list.hidden=true;list.replaceChildren();}
+  function paint(){
+    const query=input.value.trim().toLowerCase();
+    if(!query){close();return;}
+    const matches=choices().filter(name=>name.toLowerCase().includes(query)).slice(0,6);
+    if(!matches.length){close();return;}
+    list.replaceChildren(...matches.map(name=>{
+      const option=el('button','entry-suggestion',name);
+      option.type='button';
+      option.setAttribute('role','option');
+      option.title='Add “'+name+'”';
+      // Keep focus in the field until the choice has been applied.
+      option.onmousedown=event=>event.preventDefault();
+      option.onclick=()=>{
+        input.value=name;
+        input.dispatchEvent(new Event('change',{bubbles:true}));
+        close();
+      };
+      return option;
+    }));
+    list.hidden=false;
+  }
+  input.addEventListener('input',paint);
+  input.addEventListener('focus',paint);
+  input.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==input)close();},120));
+  return list;
+}
+function knownTags() {
+  if(pagedCatalog&&catalogNavigation?.tags)return catalogNavigation.tags;
+  return [...new Set(assets.filter(a=>!a.trash).flatMap(a=>a.tags))].sort((one,two)=>one.localeCompare(two));
+}
 function section(title) {const s=el('section');s.append(el('h3','',title));return s;}
 function action(text,handler,cls='') {const b=el('button',cls,text); b.onclick=()=>safe(handler);return b;}
 function renderInspector() {
@@ -377,11 +416,12 @@ function renderInspector() {
   }
   const tagInput=field('','Add tags, separated by commas',text=>{addTags(text);tagInput.value='';});
   tagInput.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();addTags(tagInput.value);tagInput.value='';}};
+  const tagMatches=entrySuggestions(tagInput,knownTags);
   const suggestions=TagSuggestions.mount(a,{add:word=>addTags(word)});
   tagHead.append(suggestions.button);
   for(const word of tagWords)tagChips.append(tagChip(word));
   tagChips.hidden=!tagWords.length;
-  tags.append(tagHead,tagChips,tagInput,suggestions.results);
+  tags.append(tagHead,tagChips,tagInput,tagMatches,suggestions.results);
   box.append(tags);
   // A collection is typed too: a name the library knows joins it to the file,
   // a new name becomes a collection and is added in the same breath.
@@ -414,9 +454,10 @@ function renderInspector() {
   }
   const collInput=field('','Add to collection, then Enter',text=>{addCollection(text);collInput.value='';});
   collInput.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();addCollection(collInput.value);collInput.value='';}};
+  const collMatches=entrySuggestions(collInput,()=>folders);
   for(const name of collNames)collChips.append(collChip(name));
   collChips.hidden=!collNames.length;
-  coll.append(collChips,collInput);
+  coll.append(collChips,collInput,collMatches);
   box.append(coll);
   if(k==='image'){
    const props=section('Image properties'),dl=el('dl','properties'),sizeLabel=el('dt','','Dimensions'),sizeValue=el('dd','','Reading…');

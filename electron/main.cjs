@@ -477,6 +477,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('update-download',event=>{trusted(event);return getUpdater().download();});
   ipcMain.handle('update-install',event=>{trusted(event);return getUpdater().install();});
   ipcMain.handle('notes-emoji',(event,id,emoji)=>{trusted(event);return getNotesStore().setEmoji(id,emoji);});
+  ipcMain.handle('notes-menu',(event,id)=>{trusted(event);const note=getNotesStore().get(id);const menu=Menu.buildFromTemplate([{label:note.title.trim()||'Untitled note',enabled:false},{type:'separator'},{id:'rename',label:'Rename Note…',click:()=>win.webContents.send('context-action',{action:'note-rename',noteId:id})},{id:'icon',label:'Choose Icon…',click:()=>win.webContents.send('context-action',{action:'note-icon',noteId:id})},{id:'delete',label:'Delete Note…',click:()=>win.webContents.send('context-action',{action:'note-delete',noteId:id})}]);if(process.env.ASSET_TEST_MODE){global.notesMenu=menu;return;}menu.popup({window:win});});
   ipcMain.handle('notes-show-emoji-picker',event=>{trusted(event);if(process.platform==='darwin')app.showEmojiPanel();});
   ipcMain.handle('notes-list',event=>{trusted(event);return getNotesStore().list();});
   ipcMain.handle('notes-get',(event,id)=>{trusted(event);return getNotesStore().get(id);});

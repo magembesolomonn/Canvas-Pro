@@ -43,16 +43,16 @@ const NotesWorkspace = (() => {
     img.src = 'asset://note-cover/' + item.id + '?v=' + coverRevision;
     return img;
   }
-  function noteActionsDialog(item) {
+  function noteIconDialog(item) {
     const dialog = el('dialog','note-tracker-dialog');
-    dialog.setAttribute('aria-label','Note actions');
+    dialog.setAttribute('aria-label','Note icon');
     const sheetHead = el('div','note-dialog-heading');
     const sheetClose = el('button','note-dialog-close');
     sheetClose.type = 'button';
     sheetClose.setAttribute('aria-label','Close');
     sheetClose.append(glyph('close'));
     sheetClose.onclick = () => dialog.close();
-    sheetHead.append(el('h2','','Note actions'), sheetClose);
+    sheetHead.append(el('h2','','Note icon'), sheetClose);
     dialog.append(sheetHead);
     const form = el('form'), input = el('input'), error = el('p','dialog-error');
     input.value = item.emoji;
@@ -79,16 +79,8 @@ const NotesWorkspace = (() => {
     submit.type = 'submit';
     if (item.emoji) actions.append(button('Remove icon',()=>save('')));
     actions.append(button('Cancel',()=>dialog.close()),submit);
-    const noteActions = el('div','tracker-tools');
-    noteActions.append(button('Rename note',()=>{
-      dialog.close();
-      run(()=>select(item.id)).then(()=>{ if (note?.id===item.id) $('#note-title').select(); });
-    }),button('Delete note…',()=>{
-      dialog.close();
-      deleteNote(item.id);
-    }));
     const body=el('div','note-dialog-body');
-    body.append(el('h2','note-dialog-title',label(item)),noteActions,input,button('Open Emoji Picker',()=>{
+    body.append(el('h2','note-dialog-title',label(item)),input,button('Open Emoji Picker',()=>{
       input.focus();
       safe(()=>api.notesShowEmojiPicker());
     }),error);
@@ -120,7 +112,7 @@ const NotesWorkspace = (() => {
       entry.append(icon,el('span','',label(item)));
       entry.oncontextmenu = event => {
         event.preventDefault();
-        noteActionsDialog(item);
+        safe(()=>api.notesMenu(item.id));
       };
       entry.draggable = true;
       entry.ondragstart = event => {
@@ -995,6 +987,13 @@ const NotesWorkspace = (() => {
       if (next) setNote(await api.notesGet(next.id));
     });
   }
+  function noteMenuAction(action,id) {
+    const item = list?.find(entry=>entry.id===id);
+    if (!item) return;
+    if (action==='rename') return run(()=>select(id)).then(()=>{ if (note?.id===id) $('#note-title').select(); });
+    if (action==='icon') return noteIconDialog(item);
+    if (action==='delete') return deleteNote(id);
+  }
   function addBlock(type, index, replace = false) {
     return run(async()=>{
       if (!replace && note.blocks.length>=250) return;
@@ -1045,6 +1044,7 @@ const NotesWorkspace = (() => {
     init, show, flush, pickThumbnail: title => pickImage(false, true, title),
     open: id => run(async () => { await select(id); return note?.id === id; }),
     active: () => view === 'notes' && note ? { id: note.id, title: note.title } : null,
-    assistantWrite, setCoverFromLibrary: (id, assetId) => cover(false, { id: assetId }, id)
+    assistantWrite, setCoverFromLibrary: (id, assetId) => cover(false, { id: assetId }, id),
+    menuAction: noteMenuAction
   };
 })();

@@ -3,6 +3,7 @@ contextBridge.exposeInMainWorld('library', {
   previewZoomActive:active=>ipcRenderer.send('preview-zoom-active',active),
   noteImportThumbnail:extensions=>ipcRenderer.invoke('note-import-thumbnail',extensions),
   notesEmoji:(id,emoji)=>ipcRenderer.invoke('notes-emoji',id,emoji),
+  notesMenu:id=>ipcRenderer.invoke('notes-menu',id),
   notesShowEmojiPicker:()=>ipcRenderer.invoke('notes-show-emoji-picker'),
   notesList:()=>ipcRenderer.invoke('notes-list'),
   notesGet:id=>ipcRenderer.invoke('notes-get',id),

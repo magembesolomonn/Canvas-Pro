@@ -179,8 +179,17 @@ async function insertBlock(type) {
   await until(() => run("$('#note-cover img')?.naturalWidth>0"));
   assert.equal(await run("!!$('#note-pages img')"),false);
   await run("$('#note-pages button').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+  await until(() => global.notesMenu);
+  assert.equal(global.notesMenu.items[0].label, await run("$('#note-pages button').title"));
+  assert.equal(global.notesMenu.items[0].enabled, false);
+  assert.ok(global.notesMenu.getMenuItemById('rename'));
+  assert.ok(global.notesMenu.getMenuItemById('icon'));
+  assert.ok(global.notesMenu.getMenuItemById('delete'));
+  assert.equal(await run("!!$('dialog[aria-label=\"Note actions\"]')"), false);
+  global.notesMenu.getMenuItemById('icon').click();
+  await until(() => run("!!$('dialog[aria-label=\"Note icon\"] form')"));
   await run(`(() => {
-    const form = $('dialog[aria-label="Note actions"] form');
+    const form = $('dialog[aria-label="Note icon"] form');
     form.querySelector('input').value='🎬';
     form.requestSubmit();
   })()`);
