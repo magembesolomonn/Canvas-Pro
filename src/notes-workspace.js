@@ -568,13 +568,16 @@ const NotesWorkspace = (() => {
     };
   }
   function headingSettings(block, input, actions) {
+
+    const levelDefault = [0, 32, 27, 23, 20, 18, 16][block.headingLevel || 2] || 21;
     const size = el('input');
     size.type = 'number';
     size.min = 12;
     size.max = 72;
     size.step = 1;
-    size.value = block.fontSize || 21;
+    size.value = block.fontSize || levelDefault;
     size.setAttribute('aria-label','Heading size');
+    size.title = 'Leave unchanged to use Heading ' + (block.headingLevel || 2) + '’s size';
     const color = el('input');
     color.type = 'color';
     color.setAttribute('aria-label','Heading color');
@@ -584,7 +587,7 @@ const NotesWorkspace = (() => {
       color.value = block.color || getComputedStyle(document.body).getPropertyValue('--text').trim();
     }
     size.onchange = () => {
-      if (!size.value || !size.checkValidity()) { size.value = block.fontSize || 21; return; }
+      if (!size.value || !size.checkValidity()) { size.value = block.fontSize || levelDefault; return; }
       block.fontSize = size.valueAsNumber;
       paint();
       changed();
@@ -601,7 +604,7 @@ const NotesWorkspace = (() => {
     actions.append(sizeLabel,colorLabel,button('Reset heading style',()=>{
       delete block.fontSize;
       delete block.color;
-      size.value = 21;
+      size.value = levelDefault;
       paint();
       changed();
     }));
@@ -624,11 +627,14 @@ const NotesWorkspace = (() => {
       if (type.value === 'paragraph') {
         block.type = 'paragraph';
         delete block.headingLevel;
+        delete block.fontSize;
       } else {
+        const level = Number(type.value.slice(-1));
+        const levelSizes = [0, 32, 27, 23, 20, 18, 16];
+        const wasDefaultSize = !block.fontSize || levelSizes.includes(block.fontSize);
         block.type = 'heading';
-        block.headingLevel = Number(type.value.slice(-1));
-        // A heading level is a semantic default; preserve any user-set size.
-        if (!block.fontSize) block.fontSize = [0, 32, 27, 23, 20, 18, 16][block.headingLevel];
+        block.headingLevel = level;
+        if (wasDefaultSize) block.fontSize = levelSizes[level];
       }
       redrawBlock(index);
       const replacement = $('#note-blocks').children[index]?.querySelector('textarea,input:not([type="checkbox"])');
@@ -662,6 +668,8 @@ const NotesWorkspace = (() => {
   }
   function blockNode(block, index) {
     const row = el('div', 'note-block note-block-'+block.type), content = el('div', 'note-block-content');
+    // A heading's level is part of its shape, so the sheet can size it.
+    if (block.type === 'heading') row.dataset.level = String(block.headingLevel || 2);
     const embedded = ['tracker','reference','table','image'].includes(block.type);
     let toolbar;
     let heading;
@@ -697,7 +705,11 @@ const NotesWorkspace = (() => {
     else {
       const input = field(block.type === 'heading' ? 'input' : 'textarea', block.text, blockTypes[block.type], 20000, next => { block.text = next; });
       splitOnEnter(input,block,index,'text');
-      if (block.type === 'heading') heading = input;
+      if (block.type === 'heading') {
+        heading = input;
+        input.setAttribute('role', 'heading');
+        input.setAttribute('aria-level', String(block.headingLevel || 2));
+      }
       if (block.type === 'paragraph') input.placeholder = 'Write here. Type / for blocks or @ for links.';
       if (block.type === 'heading' || block.type === 'paragraph') applyTextStyle(block, input);
       if (block.type === 'toggle') {

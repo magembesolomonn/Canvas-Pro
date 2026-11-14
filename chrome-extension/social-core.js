@@ -171,8 +171,13 @@
   const audioUrl=options('audio').map(url).find(Boolean);
   return mediaUrl&&audioUrl?{mediaUrl,audioUrl}:null;
  }
+ function postTextOf(post){
+  const node=post?.querySelector?.('[data-testid="tweetText"],[data-testid="postText"],[data-ad-preview="message"]');
+  return (node?.innerText||'').trim().slice(0,4000);
+ }
  function collect(post){
   const platform=platformFor(location.href),title=(post.querySelector('[data-testid="tweetText"],h1,h2,h3')?.textContent||document.title).trim().slice(0,160),base={pageUrl:location.href,pageTitle:document.title,title},items=[],seen=new Set();
+  const text=postTextOf(post);
   const timestampLinks=[...post.querySelectorAll('time')].map(time=>time.closest('a[href]')).filter(Boolean);
   const links=[...timestampLinks,...post.querySelectorAll('a[href]')];
   const permalink=links.map(link=>postPermalink(link.href,platform)).find(Boolean)
@@ -189,7 +194,7 @@
   for(const script of query('script[type="application/ld+json"]'))try{const queue=[JSON.parse(script.textContent)];let count=0;while(queue.length&&count++<5000){const value=queue.shift();if(!value||typeof value!=='object')continue;for(const [key,child]of Object.entries(value)){if(typeof child==='object')queue.push(child);else if(typeof child==='string'&&/^(contentUrl|video_url|url)$/.test(key)&&/\.(mp4|webm|mov)(?:[?#]|$)/i.test(child))add(child,'video');}}}catch{}
   const posters=new Set(videos.map(video=>direct(video.poster)).filter(Boolean));
   for(const image of query('img')){const bounds=image.getBoundingClientRect();if(/avatar|profile|emoji|profile_images/i.test((image.alt||'')+' '+image.src)||bounds.width>0&&bounds.width<70||bounds.height>0&&bounds.height<60||image.naturalWidth&&image.naturalWidth<90||image.naturalHeight&&image.naturalHeight<70)continue;if(posters.has(direct(image.currentSrc||image.src)))continue;addImage(image,{alt:image.alt||'',width:image.naturalWidth,height:image.naturalHeight});}
-  return {platform,permalink,title,items,hasVideo:hasVideo||items.some(i=>i.kind==='video')};
+  return {platform,permalink,title,text,author:base.author,items,hasVideo:hasVideo||items.some(i=>i.kind==='video')};
  }
- const api={platformFor,postPermalink,direct,bestVariant,twitterMedia,collect,focusedMedia,rememberInstagramMedia,originalImage,largestImage};if(typeof module!=='undefined')module.exports=api;else root.CanvasSocialCore=api;
+ const api={platformFor,postPermalink,direct,bestVariant,twitterMedia,collect,postTextOf,focusedMedia,rememberInstagramMedia,originalImage,largestImage};if(typeof module!=='undefined')module.exports=api;else root.CanvasSocialCore=api;
 })(globalThis);

@@ -196,7 +196,7 @@
     if(!platform) return false;
     const post=postElement(target)||target?.closest?.('main,[role="main"]'); if(!post) return false;
     let data; try{data=core.collect(post);}catch{return false;}
-    if(!data || (!data.items?.length && !data.hasVideo)) return false;
+    if(!data || (!data.items?.length && !data.hasVideo && !data.text)) return false;
     if(!canUseRuntime()){ toast('Reload this page to reconnect', false,'','The extension was reloaded'); return true; }
     let response=null;
     try{ response=await chrome.runtime.sendMessage({type:'social-save', post:data}); }

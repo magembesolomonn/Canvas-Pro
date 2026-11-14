@@ -213,10 +213,11 @@ async function captureSocial(post,tab){
   }
  }
  if((platform==='instagram.com'||platform==='pinterest.com')&&!items.some(i=>i.kind==='video')&&post.hasVideo){const html=await publicText(source);const found=[];for(const tag of html.matchAll(/<meta\b[^>]*>/gi)){if(!/(?:og:video(?::url|:secure_url)?|twitter:player:stream)["']/i.test(tag[0]))continue;const value=tag[0].match(/content\s*=\s*["']([^"']+)["']/i)?.[1];if(value)found.push(value.replaceAll('&amp;','&'));}items.push(...[...new Set(found)].slice(0,25).map(mediaUrl=>({...base,kind:'video',mediaUrl})));}
- }catch(error){if(!visibleItems.length)throw error;}
+ }catch(error){if(!visibleItems.length&&!String(post.text||'').trim())throw error;}
  const unique=new Map([...visibleItems,...items].map(item=>[item.mediaUrl||item.dataUrl,item]));
  items=[...unique.values()].slice(0,25);
  if(post.hasVideo&&items.length&&!items.some(item=>item.kind==='video'))notice='Saved available images. This post did not expose a downloadable video.';
+ if(!items.length&&String(post.text||'').trim())return await sendCapture([{kind:'bookmark',pageUrl:source,pageTitle:base.pageTitle,title:base.title,description:String(post.text).trim().slice(0,4000),author:String(post.author||'')}],undefined,tab.id,notice,activityId);
  if(!items.length)throw new Error('This post has no public downloadable media exposed. Play the video and try again, or enable deep scan. Private or protected streams may be unavailable.');
  return await sendCapture(items,undefined,tab.id,notice,activityId);
  }catch(error){await progress({id:activityId,title:base.title,state:'failed',errors:[error.message]},tab.id);throw error;}

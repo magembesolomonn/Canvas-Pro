@@ -47,8 +47,11 @@ let server,lib;
   const [,label,count]=socialFixtures[index];
   await poll(()=>run(`mounted.get('${assetId}')?.querySelector('.social-card-icon')?.naturalWidth>0`));
   if(count)await poll(()=>run(`[...mounted.get('${assetId}').querySelectorAll('.social-card-photo')].filter(img=>img.naturalWidth>0).length===${count}`));
-  const card=await run(`(()=>{const card=mounted.get('${assetId}'),text=card.querySelector('.social-card-text');return {label:card.querySelector('.social-card-icon').alt,clamp:getComputedStyle(text).webkitLineClamp,footer:getComputedStyle(card.querySelector('.card-meta')).display,systemFont:getComputedStyle(text).fontFamily.includes('-apple-system')};})()`);
-  assert.deepEqual(card,{label,clamp:count?'3':'14',footer:'none',systemFont:true});
+  const card=await run(`(()=>{const card=mounted.get('${assetId}'),text=card.querySelector('.social-card-text');return {label:card.querySelector('.social-card-icon').alt,clamp:Number(getComputedStyle(text).webkitLineClamp)||0,overflow:text.scrollHeight>text.clientHeight+1,footer:getComputedStyle(card.querySelector('.card-meta')).display,systemFont:getComputedStyle(text).fontFamily.includes('-apple-system')};})()`);
+  assert.equal(card.label,label);assert.equal(card.footer,'none');assert.equal(card.systemFont,true);
+  if(count)assert.equal(card.clamp,3,'a post with pictures keeps three lines of words');
+  assert.ok(card.clamp>=1,'the words fit whole lines');
+  if(!count)assert.equal(card.overflow,false,'no row of letters is sliced by the card edge');
  }
  console.log('SOCIAL_POST_CARDS_OK');
  const articleId=(await run(`api.importURL('${base}/article')`)).ids[0];

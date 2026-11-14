@@ -1,4 +1,11 @@
 const{test}=require('node:test'),assert=require('node:assert/strict');const{platformFor,postPermalink,bestVariant,twitterMedia,direct}=require('../chrome-extension/social-core.js');
+test('a post with only words is still a post worth saving',()=>{
+ const textNode={innerText:'  Shipped a calmer build today.\nThe block menu shows whole words now.  '};
+ const post={querySelector:selector=>selector.includes('tweetText')?textNode:null};
+ assert.equal(require('../chrome-extension/social-core.js').postTextOf(post),'Shipped a calmer build today.\nThe block menu shows whole words now.');
+ assert.equal(require('../chrome-extension/social-core.js').postTextOf({querySelector:()=>null}),'');
+ assert.equal(require('../chrome-extension/social-core.js').postTextOf(null),'');
+});
 test('social adapters constrain origins and reject blob/stream URLs',()=>{assert.equal(platformFor('https://x.com/user/status/123'),'x.com');assert.equal(platformFor('https://www.pinterest.com/pin/123'),'pinterest.com');assert.equal(platformFor('https://x.com.attacker.test/'),null);assert.equal(platformFor('not a URL'),null);assert.equal(direct('blob:https://x.com/a'),null);assert.equal(direct('https://video.test/a.m3u8'),null);assert.equal(direct('https://video.test/file.mp4'),'https://video.test/file.mp4');});
 test('X adapter selects the best direct MP4 without collecting quoted posts',()=>{const variants=[{content_type:'application/x-mpegURL',url:'https://video.test/a.m3u8',bitrate:99999},{content_type:'video/mp4',url:'https://video.test/small.mp4',bitrate:100},{content_type:'video/mp4',url:'https://video.test/large.mp4',bitrate:2000}];assert.equal(bestVariant(variants).bitrate,2000);const media=twitterMedia({mediaDetails:[{type:'video',media_url_https:'https://image.test/poster.jpg',video_info:{variants,duration_millis:12500}}],quoted_tweet:{mediaDetails:[{type:'photo',media_url_https:'https://other.test/quoted.jpg'}]}},{title:'Post',pageUrl:'https://x.com/u/status/123'});assert.equal(media.length,1);assert.equal(media[0].mediaUrl,'https://video.test/large.mp4');assert.equal(media[0].duration,12.5);assert.equal(media[0].pageUrl,'https://x.com/u/status/123');});
 

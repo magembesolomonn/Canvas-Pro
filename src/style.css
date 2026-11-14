@@ -6105,12 +6105,12 @@ body.light-mode #health-progress {
 .smart-link.smart-social-card {
   align-items: stretch;
   justify-content: flex-start;
-  gap: 8px;
-  padding: clamp(8px, 1.1vw, 14px);
+  gap: clamp(5px, calc(var(--card-width, 230px) * .035), 8px);
+  padding: clamp(8px, calc(var(--card-width, 230px) * .06), 14px);
 }
 .social-card-icon {
-  width: 18px;
-  height: 18px;
+  width: clamp(13px, calc(var(--card-width, 230px) * .08), 18px);
+  height: clamp(13px, calc(var(--card-width, 230px) * .08), 18px);
   object-fit: contain;
   flex: none;
 }
@@ -6121,18 +6121,20 @@ body.light-mode .social-card-icon[alt="X"] {
   filter: none;
 }
 .social-card-text {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 14;
   margin: 0;
-  overflow: hidden;
   overflow-wrap: anywhere;
   white-space: pre-line;
-  font-size: clamp(12px, 0.95vw, 15px);
+  font-size: clamp(12px, calc(var(--card-width, 230px) * .065), 15px);
   line-height: 1.4;
 }
-.smart-social-card:has(.social-card-photo) .social-card-text {
+/* A post with pictures keeps its pictures, so its words step back to three
+   lines. A post that is only words is the whole card: it wraps as far as the
+   height the layout reserved for it. */
+.smart-social-card[data-post-media] .social-card-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  overflow: hidden;
   flex: 0 1 auto;
 }
 .social-card-media {

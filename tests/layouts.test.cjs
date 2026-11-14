@@ -10,4 +10,11 @@ for(const mode of ['masonry','waterfall','justified'])test(`${mode} preserves pr
  }
 });
 test('waterfall keeps sequential columns while masonry balances heights',()=>{const data=items.slice(0,20);const waterfall=Layout.createLayout('waterfall',data,1000),masonry=Layout.createLayout('masonry',data,1000);assert.deepEqual(waterfall.positions.map(p=>p.column),data.map((_,i)=>i%waterfall.columns));assert.notDeepEqual(waterfall.positions.map(p=>p.y),masonry.positions.map(p=>p.y));});
+test('a ratio that depends on the tile is measured at the tile it is drawn in',()=>{
+ const data=[{id:'a'},{id:'b'}];
+ for(const mode of ['masonry','waterfall']){
+  const layout=Layout.createLayout(mode,data,900,230,(item,width)=>width/120);
+  for(const p of layout.positions)assert.ok(Math.abs(p.surfaceHeight-120)<.001,`${mode} reserved ${p.surfaceHeight}`);
+ }
+});
 test('vertical keyboard movement follows adjacent justified rows',()=>{const layout=Layout.createLayout('justified',items.slice(0,30),1000);const first=layout.rowItems[0][1],next=Layout.verticalNeighbor(layout,first.id,1);assert.ok(layout.rowItems[1].some(p=>p.index===next));assert.equal(Layout.verticalNeighbor(layout,layout.rowItems[0][0].id,-1),layout.rowItems[0][0].index);});

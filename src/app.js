@@ -11,7 +11,7 @@ function publishVisibleAssets(ids){
  lastVisibleAssets=key;
  api.visibleAssets(ids);
 }
-function assetRatio(a){return SmartCards.ratio(a)||a.aspectRatio||(kind(a)==='video'?16/9:kind(a)==='audio'?3.5:kind(a)==='pdf'?.707:kind(a)==='link'?1.6:1);}
+function assetRatio(a,width){return SmartCards.ratio(a,width)||a.aspectRatio||(kind(a)==='video'?16/9:kind(a)==='audio'?3.5:kind(a)==='pdf'?.707:kind(a)==='link'?1.6:1);}
 function rememberRatio(a,ratio){if(!Number.isFinite(ratio)||ratio<=0||Math.abs((a.aspectRatio||0)-ratio)<.001)return;a.aspectRatio=ratio;layoutDirty=true;scheduleGallery();api.setAspectRatio(a.id,ratio);}
 const imageExt=['png','jpg','jpeg','gif','webp','avif','bmp','svg','ico','heic','heif','tiff','tif','eps','jpegxl','jxl','jfif','jpe','insp','psd','psb'];
 const videoExt=['mp4','webm','mov','m4v','ogv','mkv','avi','gifv','3gp','3g2','h265','hevc'];
@@ -208,7 +208,7 @@ function inspectorPreview(a){
  return frame;
 }
 function stopHover(){if(hoverPlayer){hoverPlayer.dispose();hoverPlayer=null;}}
-function unmount(id){if(hoverPlayer?.id===id)stopHover();cardCleanup.get(id)?.();cardCleanup.delete(id);mounted.get(id)?.remove();mounted.delete(id);}
+function unmount(id){if(hoverPlayer?.id===id)stopHover();cardCleanup.get(id)?.();cardCleanup.delete(id);const card=mounted.get(id);if(card)SmartCards.release(card);card?.remove();mounted.delete(id);}
 function makeCard(a){const card=el('article','card');card.dataset.id=a.id;card.setAttribute('role','option');card.setAttribute('aria-label',a.name);card.draggable=true;card.title='Drag out to Finder · Option-drag to a Canvas';card.onpointerdown=e=>{if(e.button===0&&e.pointerType!=='touch')api.prepareDrag(selection.ids.has(a.id)?selection.values():[a.id]);};card.ondragstart=e=>{stopHover();const ids=selection.ids.has(a.id)?selection.values():[a.id];if(e.altKey){e.dataTransfer.setData('application/x-canvaspro-assets',JSON.stringify(ids));e.dataTransfer.effectAllowed='copy';}else{e.preventDefault();safe(()=>api.startDrag(ids));}};card.ondragend=()=>CanvasWorkspace.clearDrag();const surface=el('div','card-surface');const type=kind(a);if(type==='audio')cardCleanup.set(a.id,audioTile(a,surface));else surface.append(type==='link'?bookmarkVisual(a):SmartCards.fileVisual(a)||thumb(a,'',true));
 if(!a.trash)surface.append(favoriteButton(a));if(type==='video'||type==='audio'){const duration=el('span','duration');surface.append(duration);getMediaInfo(a).then(info=>{if(info.duration)duration.textContent=timecode(info.duration);});}
 card.onpointerenter=e=>{if(type!=='video'&&type!=='audio')return;if(e.pointerType==='touch'||!$('#preview').hidden||selection.ids.size>1)return;stopHover();const player=createPlayer(a,{compact:true,muted:type==='video'});player.id=a.id;hoverPlayer=player;surface.append(player.element);};card.onpointerleave=()=>{if(hoverPlayer?.id===a.id)stopHover();};
@@ -247,6 +247,7 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='notes')re
    card.style.width=position.width+'px';
    card.style.transform=`translate(${position.x}px,${position.y}px)`;
    card.style.setProperty('--surface-height',position.surfaceHeight+'px');
+   card.style.setProperty('--card-width',position.width+'px');
   }
   const chosen=selection.ids.has(a.id),focused=a.id===selected;
   card.classList.toggle('selected',chosen);
@@ -256,6 +257,7 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='notes')re
   if(parts.name.textContent!==displayName)parts.name.textContent=displayName;
   if(parts.visual&&parts.visual.dataset.url!==a.url){
    const replacement=bookmarkVisual(a);
+   SmartCards.release(parts.visual);
    parts.visual.replaceWith(replacement);
    parts.visual=replacement;
   }

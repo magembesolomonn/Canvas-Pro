@@ -22,6 +22,49 @@ const SmartCards=(()=>{
  function postText(i){
   return i.postText??i.description??'';
  }
+ // A post's words may need more room than the card reserved (a narrow
+ // justified row, an old canvas item whose size was never refreshed). Fit the
+ // clamp to whole lines so the text ends in an ellipsis on a line boundary
+ // instead of being sliced through a row of letters.
+ const socialFit=new WeakSet();
+ const socialObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const entry of entries)fitSocial(entry.target);}):null;
+ function fitSocial(card){
+  if(!card?.isConnected)return;
+  const p=card.querySelector('.social-card-text');
+  if(!p)return;
+  const key=card.clientWidth+'x'+card.clientHeight;
+  if(card.dataset.fitSize===key)return;
+  card.dataset.fitSize=key;
+  p.style.webkitLineClamp='';
+  p.style.display='';
+  const style=getComputedStyle(card),line=parseFloat(getComputedStyle(p).lineHeight)||18;
+  const padBottom=parseFloat(style.paddingBottom)||0;
+  const offset=p.getBoundingClientRect().top-card.getBoundingClientRect().top;
+  const available=card.clientHeight-offset-padBottom;
+  const box=Math.min(p.clientHeight||available,available);
+  if(box<line)return;
+  const cap=card.dataset.postMedia==='1'?3:Infinity;
+  const lines=Math.min(cap,Math.max(1,Math.floor((box+1)/line)));
+  p.style.display='-webkit-box';
+  p.style.webkitBoxOrient='vertical';
+  p.style.webkitLineClamp=String(lines);
+ }
+ function watchSocial(card){
+  if(!socialObserver||socialFit.has(card))return;
+  socialFit.add(card);
+  socialObserver.observe(card);
+  requestAnimationFrame(()=>fitSocial(card));
+ }
+ // The gallery reuses a small pool of cards, so a card that leaves the window
+ // must leave the observers too. Otherwise every observed card is kept alive
+ // for as long as the library is open.
+ function release(node){
+  const targets=new Set([node,...(node?.querySelectorAll?.('.smart-note-card,.smart-social-card')||[])]);
+  for(const target of targets){
+   socialObserver?.unobserve(target);socialFit.delete(target);
+   quoteObserver?.unobserve(target);quoteFit.delete(target);
+  }
+ }
  function paintSocial(node,a,i){
   node.classList.add('smart-social-card');
   const platform=socialPlatform(a.url);
@@ -32,7 +75,8 @@ const SmartCards=(()=>{
   const text=postText(i);
   if(text)node.append(el('p','social-card-text',text));
   const sources=[...new Set([...(i.postImages||[]),...(i.cover&&i.imageURL?[i.imageURL]:[])])].slice(0,4);
-  if(!sources.length&&!i.cover)return;
+  if(!sources.length&&!i.cover){watchSocial(node);return;}
+  node.dataset.postMedia='1';
   const media=el('div','social-card-media');
   if(!sources.length)media.append(image(a,'social-card-photo'));
   sources.forEach(source=>{
@@ -47,17 +91,32 @@ const SmartCards=(()=>{
    media.append(photo);
   });
   node.append(media);
+  watchSocial(node);
  }
  function isNote(a){return a.captureMetadata?.kind==='content'||(['txt','md'].includes(a.ext)&&a.smart?.excerpt);}
  function type(a){return kind(a)==='link'?info(a).type||'webpage':a.ext==='pdf'?'book':isNote(a)?(a.captureMetadata?.selection?'quote':'note'):null;}
- function ratio(a){
-  if(isSocialCard(a)){
-   const i=info(a),length=postText(i).length,count=i.postImages?.length||Number(!!i.cover);
-   if(count>2)return .8;
-   if(count)return length ? .95 : 1.1;
-   if(length>350)return .85;
-   return length>100 ? 1.3 : 2.2;
-  }
+ // A post is text that reflows: the narrower the card, the more lines it
+ // needs, so its height is a function of the width it is drawn at. These
+ // numbers mirror the sizing in .smart-link.smart-social-card so the height
+ // the layout reserves and the card that is drawn always agree.
+ function socialMetrics(width){
+  const size=Number.isFinite(width)&&width>0?width:230;
+  const clamp=(min,value,max)=>Math.min(max,Math.max(min,value));
+  const padding=clamp(8,size*.06,14),icon=clamp(13,size*.08,18),gap=clamp(5,size*.035,8),font=clamp(12,size*.065,15);
+  // The words sit beside the icon, so their column is narrower than the card.
+  return {padding,icon,gap,font,line:font*1.4,text:Math.max(1,size-padding*2-icon-gap)};
+ }
+ function socialHeight(a,width){
+  const i=info(a),m=socialMetrics(width),text=postText(i);
+  const count=i.postImages?.length||Number(!!i.cover);
+  const perLine=Math.max(1,Math.floor(m.text/(m.font*.54)));
+  const lines=Math.max(1,Math.ceil(text.length/perLine));
+  const shown=count?Math.min(lines,3):lines;
+  const media=count?m.text*(count>2?.8:.66):0;
+  return Math.ceil(m.padding*2+m.icon+m.gap+shown*m.line+(media?media+m.gap:0)+2);
+ }
+ function ratio(a,width){
+  if(isSocialCard(a))return (Number.isFinite(width)&&width>0?width:230)/socialHeight(a,width);
   if(type(a)==='video')return a.aspectRatio||16/9;return ({book:.75,movie:.72,series:.72,song:1,album:1,playlist:1,music:1,social:.9,webpage:1.18,article:1.05,recipe:.86,product:1,quote:.85,note:.9})[type(a)];}
  function image(a,cls='smart-cover'){const img=el('img',cls);img.alt=info(a).title||a.name;img.loading='lazy';img.decoding='async';img.src=kind(a)==='link'?'asset://link-cover/'+a.id+'?v='+(info(a).updatedAt||0):'asset://thumb/'+a.id;img.onload=()=>{if(type(a)==='video'&&img.naturalWidth&&img.naturalHeight)rememberRatio(a,img.naturalWidth/img.naturalHeight);};img.onerror=()=>img.remove();return img;}
  function featuredImage(a,details,cls){
@@ -389,6 +448,6 @@ const SmartCards=(()=>{
  function isSelfContained(a){const t=type(a);return isSocialCard(a)||t==='webpage'||t==='article'||t==='recipe';}
  function enrichSearch(a){return [a.name,a.notes,a.url,...a.tags,...a.folders,...(a.smart?.tags||[]),a.smart?.excerpt,a.captureMetadata?.textExcerpt,a.captureMetadata?.pageTitle,a.captureMetadata?.author,JSON.stringify(info(a))].filter(Boolean).join(' ').toLowerCase();}
  function paletteSection(a){const sectionNode=section('Colours'),swatches=el('div','color-palette');const values=a.smart?.palette||[];if(!values.length){sectionNode.append(el('p','hint','Colours appear after local indexing finds a preview.'));const link=el('button','hint-link','Turn on local indexing');link.onclick=()=>safe(()=>SettingsUI.open('experimental'));sectionNode.append(link);return sectionNode;}for(const item of values){const button=el('button','color-swatch');button.style.backgroundColor=item.hex;button.title=item.hex+' · '+item.name;button.setAttribute('aria-label','Find files with '+item.hex);button.title+=' · Click to find matching colours · Option-click to copy';button.onclick=e=>e.altKey?safe(async()=>{await api.copyColor(item.hex);notify(item.hex+' copied');}):safe(()=>WorkbenchUI.findColor(item.hex));swatches.append(button);}sectionNode.append(swatches);return sectionNode;}
- return{type,ratio,isSocialCard,isSelfContained,paint,paintPending,art,fileVisual,isNote,mount,mountNote,enrichSearch,paletteSection};
+ return{type,ratio,isSocialCard,isSelfContained,paint,paintPending,art,fileVisual,isNote,mount,mountNote,enrichSearch,paletteSection,release};
 })();
 function mountBookmark(a){return SmartCards.mount(a);}

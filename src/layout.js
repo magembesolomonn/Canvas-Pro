@@ -1,5 +1,5 @@
 (function(root){
-function ratioOf(item,ratioFor){const value=ratioFor(item);return Number.isFinite(value)&&value>0?value:1;}
+function ratioOf(item,ratioFor,width){const value=ratioFor(item,width);return Number.isFinite(value)&&value>0?value:1;}
 function getGap(){try{return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gallery-gap').trim())||16;}catch{return 16;}}
 function getPad(){try{return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gallery-pad').trim())||22;}catch{return 22;}}
 function createColumns(items,width,target=230,ratioFor=a=>a.aspectRatio||1,mode='masonry',footerHeight=()=>48){
@@ -7,7 +7,7 @@ function createColumns(items,width,target=230,ratioFor=a=>a.aspectRatio||1,mode=
  for(let index=0;index<items.length;index++){
   let column=mode==='waterfall'?index%columns:0;
   if(mode==='masonry')for(let c=1;c<columns;c++)if(heights[c]<heights[column])column=c;
-  const ratio=ratioOf(items[index],ratioFor),surfaceHeight=Math.max(.000001,tile/ratio),height=surfaceHeight+footerHeight(items[index]);
+  const ratio=ratioOf(items[index],ratioFor,tile),surfaceHeight=Math.max(.000001,tile/ratio),height=surfaceHeight+footerHeight(items[index]);
   const position={index,id:items[index].id,column,x:pad+column*(tile+gap),y:heights[column],width:tile,surfaceHeight,height};
   positions.push(position);byId.set(position.id,position);columnItems[column].push(position);heights[column]+=height+gap;
  }
@@ -30,7 +30,7 @@ function createJustified(items,width,target=230,ratioFor=a=>a.aspectRatio||1,foo
  }
  for(let index=0;index<items.length;index++){
   if(row.length&&gap*row.length>=available)flush(false);
-  const ratio=ratioOf(items[index],ratioFor);row.push({index,ratio});sum+=ratio;
+  const ratio=ratioOf(items[index],ratioFor,target);row.push({index,ratio});sum+=ratio;
   if(sum*target+gap*(row.length-1)>=available)flush(true);
  }
  flush(false);

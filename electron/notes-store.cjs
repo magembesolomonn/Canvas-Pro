@@ -48,6 +48,8 @@ function encodeBlocks(blocks) {
     const result = { type, text: text(block.text, 20000) };
     if (type === 'toggle') Object.assign(result, { body: text(block.body, 20000), open: block.open === true });
     if (type === 'heading') {
+      // The level is what the heading is; the size and colour are overrides.
+      if (Number.isInteger(block.headingLevel) && block.headingLevel >= 1 && block.headingLevel <= 6) result.headingLevel = block.headingLevel;
       if (Number.isInteger(block.fontSize) && block.fontSize >= 12 && block.fontSize <= 72) result.fontSize = block.fontSize;
       if (typeof block.color === 'string' && /^#[a-f0-9]{6}$/i.test(block.color)) result.color = block.color;
     }

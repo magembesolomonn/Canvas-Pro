@@ -418,6 +418,7 @@ async function insertBlock(type) {
     const blocks = JSON.parse(ordered[2].blocks);
     const heading = blocks.find(block=>block.type==='heading');
     assert.equal(heading.fontSize,32);
+    assert.equal(heading.headingLevel,2);
     assert.equal(heading.color,'#3377aa');
     assert.equal(blocks.find(block=>block.type==='paragraph')?.text,' spec');
 
