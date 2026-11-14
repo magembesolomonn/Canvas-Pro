@@ -4466,12 +4466,14 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
   max-width: 68ch;
   margin: 0 0 16px;
   color: var(--muted);
-  font: 14px/1.6 var(--app-font);
+  font: 14px/1.7 var(--app-font);
+  white-space: pre-line;
 }
 .recipe-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 22px;
+  gap: 18px 24px;
+  margin-top: 4px;
 }
 .recipe-meta-item {
   display: flex;
@@ -4567,7 +4569,8 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 }
 .recipe-check-text {
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.55;
+  white-space: pre-line;
 }
 .recipe-check.is-checked .recipe-check-text {
   color: var(--muted);
@@ -4577,6 +4580,7 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 .recipe-copy {
   width: 100%;
   justify-content: center;
+  margin-top: 4px;
 }
 .recipe-method {
   min-width: 0;
@@ -4585,7 +4589,7 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
   counter-reset: step;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -4593,7 +4597,14 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 .recipe-steps li {
   position: relative;
   padding-left: 38px;
-  font: 14px/1.65 var(--app-font);
+  font: 14px/1.75 var(--app-font);
+  color: var(--text);
+}
+.recipe-steps li p {
+  margin: 0;
+}
+.recipe-steps li p + p {
+  margin-top: 0.55em;
 }
 .recipe-steps li::before {
   counter-increment: step;

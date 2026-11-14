@@ -384,7 +384,18 @@ const SmartCards=(()=>{
    const method=el('section','recipe-method');
    method.append(el('h2','','Method'));
    const steps=el('ol','recipe-steps');
-   d.instructions.forEach(value=>steps.append(el('li','',value)));
+   d.instructions.forEach(value=>{
+    const item=el('li');
+    const parts=String(value).split(/\n+/).map(s=>s.trim()).filter(Boolean);
+    if(parts.length>1){
+     parts.forEach((part,i)=>{
+      const p=el('p','',part);
+      if(i) p.style.marginTop='0.5em';
+      item.append(p);
+     });
+    }else item.textContent=value;
+    steps.append(item);
+   });
    method.append(steps);
    grid.append(method);
   }
