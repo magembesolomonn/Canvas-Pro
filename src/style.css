@@ -2587,6 +2587,8 @@ body.light-mode .settings-search input:focus-visible {
   color: var(--bg-primary);
 }
 .settings-button-primary:hover {
+  background: var(--text);
+  color: var(--bg-primary);
   filter: brightness(1.08);
 }
 .settings-keys {
@@ -2792,6 +2794,7 @@ body.light-mode .settings-button-primary,
 body.light-mode .settings-button-primary:hover {
   background: var(--text);
   color: var(--bg-primary);
+  filter: brightness(1.08);
 }
 body.light-mode .settings-segmented {
   background: #00000010;
