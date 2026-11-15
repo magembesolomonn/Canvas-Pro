@@ -1,4 +1,8 @@
 const linkRequests=new Map();
+// Mirrors EXTRACTOR_VERSION in electron/bookmarks.cjs. A preview saved by an
+// older extractor is refreshed once, when it is opened, so an existing link
+// picks up its recipe card without a delete-and-re-add or a launch-time sweep.
+const EXTRACTOR_VERSION=10;
 function bookmarkInfo(a,force=false){
  const existing=linkRequests.get(a.id);
  if(!force&&existing?.url===a.url&&(!existing.expires||existing.expires>Date.now()))return existing.promise;
@@ -28,11 +32,17 @@ function bookmarkInfo(a,force=false){
  linkRequests.set(a.id,entry);
  return entry.promise;
 }
+function bookmarkInfoLatest(a){
+ return bookmarkInfo(a).then(info=>{
+  const stale=info&&['webpage','link'].includes(info.type)&&(info.extractorVersion||0)<EXTRACTOR_VERSION;
+  return stale?bookmarkInfo(a,true):info;
+ });
+}
 function applyBookmarkInfo(id,info){
  const a=assetById.get(id);
  if(!a||a.url&&info.url!==a.url)return;
  const previous=a.captureMetadata?.linkPreview;
- if(previous?.url===info.url&&previous.updatedAt>=info.updatedAt&&a.name===(info.name||a.name))return;
+ if(previous?.url===info.url&&previous.updatedAt>=info.updatedAt&&a.name===(info.name||a.name)&&(info.extractorVersion||0)<=(previous.extractorVersion||0))return;
  const ratio=assetRatio(a),social=SmartCards.isSocialCard(a);
  if(!a.url)a.url=info.url;
  a.captureMetadata={...a.captureMetadata,linkPreview:info};

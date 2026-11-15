@@ -4,6 +4,10 @@ const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const run=promisify(execFile);
 const {classifyURL}=require('./bookmark-types.cjs');
+// Bumped whenever extraction starts finding more on a page that used to be a
+// plain link. Previews saved by an older extractor are upgraded on demand when
+// the reader opens them, never in bulk at launch.
+const EXTRACTOR_VERSION=10;
 function smartPage(html,url){return new Promise((resolve,reject)=>{const worker=new Worker(path.join(__dirname,'page-worker.cjs'),{workerData:{html,url},resourceLimits:{maxOldGenerationSizeMb:128}});const timeout=setTimeout(()=>{worker.terminate();reject(Error('Page extraction timed out'));},10000);worker.once('message',value=>{clearTimeout(timeout);worker.terminate();value.error?reject(Error(value.error)):resolve(value);});worker.once('error',error=>{clearTimeout(timeout);reject(error);});});}
 
 function webURL(value){const u=new URL(value);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)throw new Error('Use an HTTP or HTTPS link.');return u.href;}
@@ -66,7 +70,7 @@ class Bookmarks{
   }catch{return false;}
   finally{if(dir)await fs.promises.rm(dir,{recursive:true,force:true}).catch(()=>{});}
  }
- async enrich({asset,captureMetadata,info:previous},priority=false){const controller=new AbortController();controller.bookmarkId=asset.id;controller.priority=priority;this.controllers.add(controller);const timeout=setTimeout(()=>controller.abort(),12000);let info={url:asset.url,title:captureMetadata.pageTitle||asset.name.replace(/\.(url|webloc)$/i,''),description:captureMetadata.description||'',site:new URL(asset.url).hostname,imageURL:captureMetadata.previewImage||'',iconURL:captureMetadata.siteIcon||new URL('/favicon.ico',asset.url).href,updatedAt:Date.now(),state:'ready',type:captureMetadata.book===true?'book':classifyURL(asset.url),smartVersion:9};let coverResponse,article,posterURLs=[],socialCandidates=[captureMetadata.previewImage],socialURL;
+ async enrich({asset,captureMetadata,info:previous},priority=false){const controller=new AbortController();controller.bookmarkId=asset.id;controller.priority=priority;this.controllers.add(controller);const timeout=setTimeout(()=>controller.abort(),12000);let info={url:asset.url,title:captureMetadata.pageTitle||asset.name.replace(/\.(url|webloc)$/i,''),description:captureMetadata.description||'',site:new URL(asset.url).hostname,imageURL:captureMetadata.previewImage||'',iconURL:captureMetadata.siteIcon||new URL('/favicon.ico',asset.url).href,updatedAt:Date.now(),state:'ready',type:captureMetadata.book===true?'book':classifyURL(asset.url),smartVersion:9,extractorVersion:EXTRACTOR_VERSION};let coverResponse,article,posterURLs=[],socialCandidates=[captureMetadata.previewImage],socialURL;
  const platform=bookmarkPlatform(asset.url),{host}=platform;
  if(host==='imdb.com'&&info.type==='video'&&/^www\.imdb\.com$/i.test(info.title))info.title='IMDb trailer';
  const slug=host==='letterboxd.com'&&platform.url.pathname.match(/\/film\/([a-z0-9-]+)(?:\/|$)/i)?.[1];
@@ -77,7 +81,7 @@ class Bookmarks{
    const title=info.title.replace(/^.*?review of /i,'').match(/^(.+?)\s*\((\d{4})\)/);
    if(title){info.title=title[1];info.details={year:title[2]};}
  }
- try{if(true){const headers={'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15','Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'en-US,en;q=0.9'};const response=await this.fetcher(pageURL,{signal:controller.signal,credentials:'omit',headers});const type=response.headers.get('content-type')||'';if(/text\/html|application\/xhtml\+xml/i.test(type)){const html=(await limited(response,3*1024*1024)).toString('utf8'),parsed=metadata(html,response.url||pageURL),smart=await smartPage(html,response.url||pageURL);article=smart.article;delete smart.article;
+ try{if(true){const response=await this.fetcher(pageURL,{signal:controller.signal,credentials:'omit',...(instagramEmbed?{headers:{'User-Agent':'Canvas Pro'}}:{})});const type=response.headers.get('content-type')||'';if(/text\/html|application\/xhtml\+xml/i.test(type)){const html=(await limited(response,3*1024*1024)).toString('utf8'),parsed=metadata(html,response.url||pageURL),smart=await smartPage(html,response.url||pageURL);article=smart.article;delete smart.article;
  if(platform.film)posterURLs=smart.posterURLs||[];
  if(platform.social){
    socialCandidates=[...(smart.postImageURLs||[]),smart.imageURL,parsed.imageURL,captureMetadata.previewImage];

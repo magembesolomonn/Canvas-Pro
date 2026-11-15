@@ -37,3 +37,30 @@ test('social bookmarks keep post text separate from page chrome and retain galle
   fs.rmSync(dir,{recursive:true,force:true});
  }
 });
+
+test('a cached plain link stays offline until its preview is opened, then upgrades to the recipe',async()=>{
+ const dir=fs.mkdtempSync('/private/tmp/canvas-bookmark-upgrade-'),library=new Library(dir);
+ const url='https://recipes.example.com/chili';
+ const html='<html><head><title>Chili</title><script type="application/ld+json">'+JSON.stringify({'@type':'Recipe',name:'Chili',recipeIngredient:['Salt','Pepper'],recipeInstructions:['Cook.']})+'</script></head></html>';
+ let requests=0;
+ const service=new Bookmarks({library,fetcher:async target=>{
+  requests++;
+  if(/\.ico$|favicon/.test(String(target)))return new Response('',{status:404});
+  return new Response(html,{headers:{'content-type':'text/html'},url:String(target)});
+ }});
+ try{
+  const {ids:[id]}=await service.save(url,null);
+  library.setCaptureMetadata(id,{kind:'bookmark',pageUrl:url,capturedAt:new Date().toISOString(),
+   linkPreview:{url,type:'webpage',title:'Chili',site:'recipes.example.com',state:'ready',smartVersion:0,extractorVersion:0,updatedAt:Date.now()}});
+  const cached=await service.get(id);
+  assert.equal(cached.type,'webpage');
+  assert.equal(requests,0,'launch and grid mounts must not refetch');
+  const upgraded=await service.get(id,{force:true});
+  assert.equal(upgraded.type,'recipe');
+  assert.equal(upgraded.extractorVersion,10);
+  assert.deepEqual(upgraded.details.ingredients,['Salt','Pepper']);
+  assert.ok(requests>0);
+ }finally{
+  await service.close();library.close();fs.rmSync(dir,{recursive:true,force:true});
+ }
+});
