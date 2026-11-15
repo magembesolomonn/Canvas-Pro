@@ -22,12 +22,19 @@ const {WebPreview}=require('./web-preview.cjs');
 const {SmartIndex}=require('./smart-index.cjs');
 const {LocalModel}=require('./local-model.cjs');
 const { CaptureBridge } = require('./capture-bridge.cjs');
+const {YtDlp}=require('./yt-dlp.cjs');
 const {contextTemplate}=require('./file-menu.cjs');
 const {ImportQueue}=require('./import-queue.cjs');
 const {Workbench}=require('./workbench.cjs');
 const {HealthService}=require('./health-service.cjs');
 const {createOriginalsWatch}=require('./originals-watch.cjs');
 const {Updater}=require('./updater.cjs');
+process.on('uncaughtException', error => {
+  console.error('Unhandled exception in main process:', error);
+});
+process.on('unhandledRejection', reason => {
+  console.error('Unhandled rejection in main process:', reason);
+});
 app.setName(process.env.CANVAS_PROTOTYPE?'Canvas Pro Prototype':'Canvas Pro');
 const legacyData=path.join(app.getPath('appData'),'Asset Library');
 if(fs.existsSync(path.join(legacyData,'Library/library.sqlite')))app.setPath('userData',legacyData);
@@ -372,6 +379,7 @@ app.whenReady().then(async () => {
   if(process.env.ASSET_TEST_MODE)global.originalsWatch=originalsWatch;
   let switchingLibrary=false;
   async function changeLibrary(mode){if(switchingLibrary)return;switchingLibrary=true;try{await flushWorkspaces();const target=await chooseLibrary(mode);if(!target||target===library.root)return;pendingLibrarySwitch=()=>{locations.remember(target);app.relaunch();};app.quit();}catch(error){dialog.showErrorBox('Could not switch library',error.message);}finally{switchingLibrary=false;}}
+  const trusted=event=>{if(event.sender!==win?.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Unavailable outside the library.');};
   ipcMain.handle('library-location',event=>{trusted(event);return ({root:library.root,name:path.basename(library.root).replace(/\.canvaslibrary$/i,''),recent:locations.read().recent||[]});});
   ipcMain.handle('library-switch',(event,mode)=>{trusted(event);if(!['new','open'].includes(mode))throw Error('Invalid library action.');return changeLibrary(mode);});
   canvasStore=new CanvasStore(library);if(process.env.ASSET_TEST_MODE)global.canvasTestStore=canvasStore;
@@ -411,7 +419,7 @@ app.whenReady().then(async () => {
     updateIndexPower();
   }
   healthService=new HealthService(library.root,state=>{if(win&&!win.isDestroyed())win.webContents.send('health-state',state);});
-  ipcMain.handle('appearance-state',()=>appearanceState());
+  ipcMain.handle('appearance-state',event=>{trusted(event);return appearanceState();});
   ipcMain.handle('appearance-set',(event,patch)=>{
     trusted(event);
     if(!patch||typeof patch!=='object')throw new Error('Invalid appearance settings.');
@@ -421,13 +429,13 @@ app.whenReady().then(async () => {
     applyAppearanceWindow();
     return appearanceState();
   });
-  ipcMain.handle('app-version',()=>require('../package.json').version);
-  ipcMain.handle('import-state',()=>importQueue.snapshot());
-  ipcMain.handle('import-cancel',(_,id)=>{importQueue.cancel(id);return importQueue.snapshot();});
-  ipcMain.handle('import-retry',(_,id)=>importQueue.retry(id).done);
-  ipcMain.handle('health-state',()=>healthService.state);
-  ipcMain.handle('health-start',()=>healthService.start());
-  ipcMain.handle('health-cancel',()=>healthService.cancel());
+  ipcMain.handle('app-version',event=>{trusted(event);return require('../package.json').version;});
+  ipcMain.handle('import-state',event=>{trusted(event);return importQueue.snapshot();});
+  ipcMain.handle('import-cancel',(event,id)=>{trusted(event);importQueue.cancel(id);return importQueue.snapshot();});
+  ipcMain.handle('import-retry',(event,id)=>{trusted(event);return importQueue.retry(id).done;});
+  ipcMain.handle('health-state',event=>{trusted(event);return healthService.state;});
+  ipcMain.handle('health-start',event=>{trusted(event);return healthService.start();});
+  ipcMain.handle('health-cancel',event=>{trusted(event);return healthService.cancel();});
 
   protocol.handle('asset', async request => {
     try {
@@ -466,7 +474,6 @@ app.whenReady().then(async () => {
       return file ? await fileResponse(file, request) : new Response('', { status: 404 });
     } catch { return new Response('', { status: 404 }); }
   });
-  const trusted=event=>{if(event.sender!==win?.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Unavailable outside the library.');};
   const updateProgress=value=>{if(win&&!win.isDestroyed())win.webContents.send('update-progress',value);};
   const getUpdater=()=>updater??=new Updater({
     currentVersion:require('../package.json').version,
@@ -726,7 +733,10 @@ app.whenReady().then(async () => {
     if(data.navigation)Object.assign(result,libraryNavigation());
     return result;
   });
-  ipcMain.handle('list', () => ({ assets: library.list(), folders: library.folders(), root: library.root,canvases:canvasStore.list(),folderRecords:library.folderRecords(),prototype:!!process.env.CANVAS_PROTOTYPE,workbench:{icons:workbench.icons()} }));
+  ipcMain.handle('list', event => {
+    trusted(event);
+    return { assets: library.list(), folders: library.folders(), root: library.root,canvases:canvasStore.list(),folderRecords:library.folderRecords(),prototype:!!process.env.CANVAS_PROTOTYPE,workbench:{icons:workbench.icons()} };
+  });
   function checkedAssets(ids){return library.selectedAssets(ids);}
   async function deleteFromTrash(ids,empty=false){
     const records=checkedAssets(ids);if(records.some(a=>!a.trash))throw new Error('Only files in Trash can be permanently deleted.');
@@ -737,21 +747,22 @@ app.whenReady().then(async () => {
       await Promise.allSettled(deleting.map(id=>Promise.all([thumbPending.get(id),thumbPending.get(id+':preview'),thumbPending.get(id+':browser'),...[...previewSizes].map(size=>thumbPending.get(id+':detail-'+size))].filter(Boolean))).filter(Boolean));
     }});for(const id of result.ids){thumbnailMisses.delete(id);thumbnailMisses.delete(id+':preview');for(const size of previewSizes)thumbnailMisses.delete(id+':detail-'+size);}try{await win.webContents.session.clearCache();}catch(e){console.error('Preview cache cleanup:',e.message);}notifyLibraryChanged();return result;}finally{mediaCache.unblock(records.map(a=>a.id));notifyLibraryChanged();}
   }
-  ipcMain.handle('delete-permanently',(_,ids)=>deleteFromTrash(ids));
-  ipcMain.handle('empty-trash',()=>{const ids=library.db.prepare('SELECT id FROM assets WHERE trash=1').all().map(a=>a.id);return ids.length?deleteFromTrash(ids,true):{deleted:0};});
-  ipcMain.handle('rename-collection',(_,oldName,newName)=>library.renameCollection(oldName,newName));
-  ipcMain.handle('remove-collection',async(_,name)=>{if(!library.folders().includes(name))throw new Error('Collection not found.');const answer=await dialog.showMessageBox(win,{type:'question',message:'Remove “'+name+'”?',detail:'The collection will be removed. Its files will remain in your library.',buttons:['Cancel','Remove Collection'],defaultId:0,cancelId:0});if(answer.response!==1)return {cancelled:true};library.removeCollection(name);return {removed:true};});
-  ipcMain.handle('share-files',(_,ids)=>{const records=checkedAssets(ids);const sharingItem={filePaths:records.map(a=>library.file(a.id))};const menu=new ShareMenu(sharingItem);menu.popup({browserWindow:win});});
-  ipcMain.handle('open-file',async(_,id)=>{const error=await shell.openPath(library.file(id));if(error)throw new Error(error);});
-  ipcMain.handle('copy-source',(_,id)=>{const url=library.asset(id).url;if(!/^https?:\/\//i.test(url))throw new Error('No web source is saved for this file.');return clipboard.writeText(url);});
-  ipcMain.handle('file-context-menu',(_,ids,currentCollection)=>{
+  ipcMain.handle('delete-permanently',(event,ids)=>{trusted(event);return deleteFromTrash(ids);});
+  ipcMain.handle('empty-trash',event=>{trusted(event);const ids=library.db.prepare('SELECT id FROM assets WHERE trash=1').all().map(a=>a.id);return ids.length?deleteFromTrash(ids,true):{deleted:0};});
+  ipcMain.handle('rename-collection',(event,oldName,newName)=>{trusted(event);return library.renameCollection(oldName,newName);});
+  ipcMain.handle('remove-collection',async(event,name)=>{trusted(event);if(!library.folders().includes(name))throw new Error('Collection not found.');const answer=await dialog.showMessageBox(win,{type:'question',message:'Remove “'+name+'”?',detail:'The collection will be removed. Its files will remain in your library.',buttons:['Cancel','Remove Collection'],defaultId:0,cancelId:0});if(answer.response!==1)return {cancelled:true};library.removeCollection(name);return {removed:true};});
+  ipcMain.handle('share-files',(event,ids)=>{trusted(event);const records=checkedAssets(ids);const sharingItem={filePaths:records.map(a=>library.file(a.id))};const menu=new ShareMenu(sharingItem);menu.popup({browserWindow:win});});
+  ipcMain.handle('open-file',async(event,id)=>{trusted(event);const error=await shell.openPath(library.file(id));if(error)throw new Error(error);});
+  ipcMain.handle('copy-source',(event,id)=>{trusted(event);const url=library.asset(id).url;if(!/^https?:\/\//i.test(url))throw new Error('No web source is saved for this file.');return clipboard.writeText(url);});
+  ipcMain.handle('file-context-menu',(event,ids,currentCollection)=>{
+    trusted(event);
     const records=checkedAssets(ids).map(a=>({...a,tags:JSON.parse(a.tags),folders:JSON.parse(a.folders)}));
     const template=contextTemplate({assets:records,folders:library.folders(),canvases:canvasStore.list(),currentCollection,platform:process.platform,paths:records.flatMap(a=>{try{return [library.file(a.id)];}catch{return [];}})},payload=>{if(win&&!win.isDestroyed())win.webContents.send('context-action',payload);});
     const menu=Menu.buildFromTemplate(template);if(process.env.ASSET_TEST_MODE){global.canvasFileMenu=menu;return template.map(item=>({id:item.id,label:item.label,role:item.role,submenu:item.submenu?.map(sub=>({label:sub.label,type:sub.type}))}));}menu.popup({window:win});
   });
-  ipcMain.handle('collection-context-menu',(_,name)=>{if(!library.folders().includes(name))throw new Error('Collection not found.');const menu=Menu.buildFromTemplate([{label:name,enabled:false},{type:'separator'},{label:'Add to Canvas…',click:()=>win.webContents.send('context-action',{action:'canvas-collection',name})},{label:'Choose Icon…',click:()=>win.webContents.send('context-action',{action:'choose-icon',key:'folder:'+library.folderRecords().find(f=>f.name===name).id})},{label:'Rename Collection…',click:()=>win.webContents.send('context-action',{action:'rename-collection',name})},{label:'Remove Collection…',click:()=>win.webContents.send('context-action',{action:'delete-collection',name})}]);if(process.env.ASSET_TEST_MODE){global.canvasCollectionMenu=menu;return;}menu.popup({window:win});});
-  ipcMain.handle('bulk-update',(_,ids,operation)=>workbench.change(ids,()=>library.updateMany(ids,operation),'Edit selection'));
-  ipcMain.handle('read-text',async(_,id)=>{const a=library.asset(id);if(!['md','txt','json','csv','css','js','ts','log','xml'].includes(a.ext)||a.size>2*1024*1024)throw new Error('Text preview is unavailable for this file.');return fs.promises.readFile(library.file(id),'utf8');});
+  ipcMain.handle('collection-context-menu',(event,name)=>{trusted(event);if(!library.folders().includes(name))throw new Error('Collection not found.');const menu=Menu.buildFromTemplate([{label:name,enabled:false},{type:'separator'},{label:'Add to Canvas…',click:()=>win.webContents.send('context-action',{action:'canvas-collection',name})},{label:'Choose Icon…',click:()=>win.webContents.send('context-action',{action:'choose-icon',key:'folder:'+library.folderRecords().find(f=>f.name===name).id})},{label:'Rename Collection…',click:()=>win.webContents.send('context-action',{action:'rename-collection',name})},{label:'Remove Collection…',click:()=>win.webContents.send('context-action',{action:'delete-collection',name})}]);if(process.env.ASSET_TEST_MODE){global.canvasCollectionMenu=menu;return;}menu.popup({window:win});});
+  ipcMain.handle('bulk-update',(event,ids,operation)=>{trusted(event);return workbench.change(ids,()=>library.updateMany(ids,operation),'Edit selection');});
+  ipcMain.handle('read-text',async(event,id)=>{trusted(event);const a=library.asset(id);if(!['md','txt','json','csv','css','js','ts','log','xml'].includes(a.ext)||a.size>2*1024*1024)throw new Error('Text preview is unavailable for this file.');return fs.promises.readFile(library.file(id),'utf8');});
   function registerBrowserConnection(){
     const testHome=process.env.ASSET_TEST_MODE?process.env.CANVAS_TEST_BROWSER_HOME:null;
     if(process.platform!=='darwin'||process.env.CANVAS_PROTOTYPE||(process.env.ASSET_TEST_MODE&&!testHome))return null;
@@ -766,9 +777,10 @@ app.whenReady().then(async () => {
     const setup=registerBrowserConnection();
     return shell.openPath(setup?.extension||path.join(app.getPath('appData'),'Canvas Pro/Browser Extension'));
   });
-  ipcMain.handle('update', (_, id, changes) => {workbench.change([id],()=>library.update(id, changes));const saved=library.asset(id);return {...saved,tags:JSON.parse(saved.tags),folders:JSON.parse(saved.folders)};});
-  ipcMain.handle('folder', (_, name) => library.addFolder(name));
-  ipcMain.handle('import-dialog', async (_, folder, directory) => {
+  ipcMain.handle('update', (event, id, changes) => {trusted(event);workbench.change([id],()=>library.update(id, changes));const saved=library.asset(id);return {...saved,tags:JSON.parse(saved.tags),folders:JSON.parse(saved.folders)};});
+  ipcMain.handle('folder', (event, name) => {trusted(event);return library.addFolder(name);});
+  ipcMain.handle('import-dialog', async (event, folder, directory) => {
+    trusted(event);
     const r = await dialog.showOpenDialog(win, { properties: directory ? ['openDirectory', 'multiSelections'] : ['openFile', 'multiSelections'] });
     return r.canceled ? null : importPaths(r.filePaths, folder);
   });
@@ -788,15 +800,16 @@ app.whenReady().then(async () => {
     if(!result.ids.length)throw Error(result.errors[0]||'The image was not imported.');
     return library.asset(result.ids[0]);
   });
-  ipcMain.handle('import-url',(_,url,folder)=>importURL(url,folder));
-  ipcMain.handle('import-paths', (_, paths, folder) => {
+  ipcMain.handle('import-url',(event,url,folder)=>{trusted(event);return importURL(url,folder);});
+  ipcMain.handle('import-paths', (event, paths, folder) => {
+    trusted(event);
     if (!Array.isArray(paths) || paths.some(p => typeof p !== 'string' || !path.isAbsolute(p))) throw new Error('Invalid file paths');
     return importPaths(paths, folder);
   });
   const ratioUpdates=new Map();let ratioTimer;
-  ipcMain.on('asset-ratio',(_,id,ratio)=>{if(typeof id!=='string'||!Number.isFinite(ratio)||ratio<=0||ratio>=100000)return;ratioUpdates.set(id,ratio);clearTimeout(ratioTimer);ratioTimer=setTimeout(()=>{try{library.setAspectRatios([...ratioUpdates]);ratioUpdates.clear();}catch{}},200);});
+  ipcMain.on('asset-ratio',(event,id,ratio)=>{trusted(event);if(typeof id!=='string'||!Number.isFinite(ratio)||ratio<=0||ratio>=100000)return;ratioUpdates.set(id,ratio);clearTimeout(ratioTimer);ratioTimer=setTimeout(()=>{try{library.setAspectRatios([...ratioUpdates]);ratioUpdates.clear();}catch{}},200);});
   app.on('before-quit',()=>{clearTimeout(ratioTimer);if(ratioUpdates.size)library.setAspectRatios([...ratioUpdates]);});
-  ipcMain.handle('media-info', (_,id,priority) => mediaCache.get(id,!!priority));
+  ipcMain.handle('media-info', (event,id,priority) => {trusted(event);return mediaCache.get(id,!!priority);});
   ipcMain.handle('image-size', (event,id) => {
     trusted(event);
     const a=library.asset(id);
@@ -806,7 +819,7 @@ app.whenReady().then(async () => {
     const {width,height}=image.getSize();
     return width&&height?{width,height}:null;
   });
-  ipcMain.on('visible-assets', (_,ids) => { if(Array.isArray(ids)&&ids.length<=300){setVisibleThumbnails(ids);mediaCache.setVisible(ids);bookmarks.setVisible(ids);prepareDragIcons(ids);} });
+  ipcMain.on('visible-assets', (event,ids) => { trusted(event); if(Array.isArray(ids)&&ids.length<=300){setVisibleThumbnails(ids);mediaCache.setVisible(ids);bookmarks.setVisible(ids);prepareDragIcons(ids);} });
   // The icon must already exist when the drag starts: macOS ends the drag
   // session as soon as the dragstart event returns, so an await here would
   // leave nothing to drag. The renderer asks for an icon on pointer-down and
@@ -841,8 +854,9 @@ app.whenReady().then(async () => {
       app.getFileIcon(file,{size:'normal'}).then(icon=>{if(!icon.isEmpty())dragIcons.set(asset.ext,icon);}).catch(()=>{}).finally(()=>dragIconPending.delete(asset.ext));
     }
   }
-  ipcMain.on('prepare-drag',(_,ids)=>{if(Array.isArray(ids)&&ids.length<=100)prepareDragIcons(ids);});
+  ipcMain.on('prepare-drag',(event,ids)=>{trusted(event);if(Array.isArray(ids)&&ids.length<=100)prepareDragIcons(ids);});
   ipcMain.on('drag-file', (event,value)=>{
+    trusted(event);
     try {
       const ids=Array.isArray(value)?value:[value];
       // Always hand over the original files, never the thumbnails.
@@ -853,8 +867,9 @@ app.whenReady().then(async () => {
       event.sender.startDrag({file:files[0],files,icon});
     }catch(error){console.error('Drag failed:',error.message);}
   });
-  ipcMain.handle('open-link', (_,id) => {const url=new URL(library.asset(id).url);if(['http:','https:'].includes(url.protocol))return shell.openExternal(url.href);});
-  ipcMain.handle('paste', async (_, folder) => {
+  ipcMain.handle('open-link', (event,id) => {trusted(event);const url=new URL(library.asset(id).url);if(['http:','https:'].includes(url.protocol))return shell.openExternal(url.href);});
+  ipcMain.handle('paste', async (event, folder) => {
+    trusted(event);
     if (process.platform === 'darwin') {
       const script = `ObjC.import('AppKit'); const p = $.NSPasteboard.generalPasteboard; const a = p.propertyListForType('NSFilenamesPboardType'); a ? JSON.stringify(ObjC.deepUnwrap(a)) : '[]';`;
       try {const {stdout}=await run('/usr/bin/osascript',['-l','JavaScript','-e',script]);const paths=JSON.parse(stdout.trim()||'[]');if(paths.length)return importPaths(paths,folder);} catch { }
@@ -869,30 +884,35 @@ app.whenReady().then(async () => {
     if(data.text?.trim()){const text=data.text.trim().slice(0,2000000),result=await importBuffer(Buffer.from(text),'Note '+new Date().toISOString().replaceAll(':','-')+'.txt',folder);for(const id of result.ids)library.setCaptureMetadata(id,{kind:'content',selection:true,textExcerpt:text.slice(0,2000)});return result;}
     return {imported:0,duplicates:0,errors:['Copy files, an image, or a web link, then paste here.'],skipped:0};
   });
-  ipcMain.handle('copy-files',async(_,ids)=>{
+  ipcMain.handle('copy-files',async(event,ids)=>{
+    trusted(event);
     const files=checkedAssets(ids).map(a=>library.file(a.id));
     const script=`ObjC.import('AppKit');const files=${JSON.stringify(files)};const urls=$.NSMutableArray.array;for(const file of files)urls.addObject($.NSURL.fileURLWithPath(file));const p=$.NSPasteboard.generalPasteboard;p.clearContents;p.writeObjects(urls);`;
     const dir=await fs.promises.mkdtemp(path.join(app.getPath('temp'),'canvas-copy-'));try{const file=path.join(dir,'copy.js');await fs.promises.writeFile(file,script);await run('/usr/bin/osascript',['-l','JavaScript',file]);}finally{await fs.promises.rm(dir,{recursive:true,force:true});}
   });
-  ipcMain.handle('export-files',async(_,ids)=>{
+  ipcMain.handle('export-files',async(event,ids)=>{
+    trusted(event);
     const assets=checkedAssets(ids);
     const chosen=await dialog.showOpenDialog(win,{properties:['openDirectory','createDirectory'],buttonLabel:'Export copies'});if(chosen.canceled)return 0;
     for(const a of assets){const base=path.basename(a.name).replace(/[\/\\]/g,'_')||'File';let target=path.join(chosen.filePaths[0],base),counter=1;while(fs.existsSync(target)){const parts=path.parse(base);target=path.join(chosen.filePaths[0],parts.name+' ('+(counter++)+')'+parts.ext);}await fs.promises.copyFile(library.file(a.id),target,fs.constants.COPYFILE_EXCL);}return assets.length;
   });
-  ipcMain.handle('reveal', (_, id) => shell.showItemInFolder(library.file(id)));
-  ipcMain.handle('copy-path', async (_, id) => {
+  ipcMain.handle('reveal', (event, id) => {trusted(event);return shell.showItemInFolder(library.file(id));});
+  ipcMain.handle('copy-path', async (event, id) => {
+    trusted(event);
     const file = library.file(id);
     clipboard.writeText(file);
     return file;
   });
-  ipcMain.handle('quick-look', async (_, id) => {
+  ipcMain.handle('quick-look', async (event, id) => {
+    trusted(event);
     if (process.platform === 'darwin') win.previewFile(library.file(id), library.asset(id).name);
   });
-  ipcMain.handle('export', async (_, id) => {
+  ipcMain.handle('export', async (event, id) => {
+    trusted(event);
     const a = library.asset(id); const r = await dialog.showSaveDialog(win, { defaultPath: a.name });
     if (!r.canceled) await fs.promises.copyFile(library.file(id), r.filePath);
   });
-  ipcMain.handle('show-library', () => shell.openPath(library.root));
+  ipcMain.handle('show-library', event => {trusted(event);return shell.openPath(library.root);});
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' }, { label: 'File', submenu: [{label:'New Library…',click:()=>changeLibrary('new')},{label:'Open Library…',click:()=>changeLibrary('open')},{type:'separator'},{ label: 'Import files…', accelerator: 'CmdOrCtrl+O', click: () => openImportWindow().catch(error=>console.error('Import menu:',error.message)) }, { label: 'Show library folder', click: () => shell.openPath(library.root) }, { role: 'close' }] },
     {label:'Edit',submenu:[{label:'Undo',accelerator:'CmdOrCtrl+Z',click:()=>win?.webContents.send('history-command',false)},{label:'Redo',accelerator:'CmdOrCtrl+Shift+Z',click:()=>win?.webContents.send('history-command',true)},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]}, { role: 'viewMenu' }, { role: 'windowMenu' }
@@ -908,7 +928,8 @@ app.whenReady().then(async () => {
   });
   powerMonitor.on('resume',()=>originalsWatch.scan());
   const bridgeDirectory=(process.env.ASSET_TEST_MODE||process.env.CANVAS_PROTOTYPE)?path.join(app.getPath('userData'),'Bridge'):path.join(app.getPath('appData'),'Canvas Pro/Bridge');
-  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);}});
+  const ytDlp=new YtDlp({root:app.getPath('userData'),fetcher:(url,options)=>net.fetch(url,options)});
+  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);},videoDownloader:ytDlp});
   try{await captureBridge.start();}catch(e){console.error('Browser capture bridge:',e.message);}
   setImmediate(()=>{
     try{

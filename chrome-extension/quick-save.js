@@ -17,6 +17,10 @@
   const abs=v=>{try{return v?new URL(v,location.href).href:''}catch{return ''}};
   // An empty attribute resolves to the page itself, which is never the file.
   const direct=u=>{try{if(!u) return '';const url=new URL(u,location.href);return /^https?:$/.test(url.protocol)&&url.href!==location.href?url.href:''}catch{return ''}};
+  function youtubeWatchURL(value){try{const u=new URL(value||location.href,location.href);if(u.hostname==='youtu.be'){const id=u.pathname.slice(1).split('/')[0];return id?'https://www.youtube.com/watch?v='+id:'';}if(!/(^|\.)youtube\.com$/i.test(u.hostname))return '';if(u.pathname==='/watch'&&u.searchParams.get('v'))return 'https://www.youtube.com/watch?v='+u.searchParams.get('v');const m=u.pathname.match(/^\/(shorts|live|embed)\/([^/?#]+)/);return m?'https://www.youtube.com/watch?v='+m[2]:'';}catch{return '';}}
+  function extractableVideoURL(value){try{const u=new URL(value||location.href,location.href),h=u.hostname.toLowerCase();const yt=youtubeWatchURL(u.href);if(yt)return yt;if((/(^|\.)reddit\.com$/i.test(h)||h==='redd.it')&&/\/comments\/[a-z0-9]+/i.test(u.pathname)){u.hash='';u.search='';return u.href;}if(h==='v.redd.it')return u.href;if(/(^|\.)facebook\.com$/i.test(h)||h==='fb.watch'||h==='fb.com'||/(^|\.)fb\.com$/i.test(h)){u.hash='';return u.href;}return '';}catch{return '';}}
+  function extractableItem(el){const u=extractableVideoURL(location.href);if(!u)return null;return {kind:'video',mediaUrl:u,pageUrl:u,title:document.title,poster:originalURL(el?.poster||''),width:el?.videoWidth||0,height:el?.videoHeight||0,element:el};}
+  function youtubeItem(el){return extractableItem(el);}
   // The page shows a resized copy of the picture. The original file is asked
   // for instead, so what is saved is full quality and not the thumbnail.
   function originalURL(value){
@@ -90,14 +94,14 @@
   // how to read VideoObject/og:video without site-specific rules.
   function pageVideo(el){
     const core=globalThis.CanvasSocialCore;
-    if(!core?.pageVideoMedia) return null;
     let resolved;
-    try{resolved=core.pageVideoMedia(el||null);}catch{return null;}
-    if(!resolved?.mediaUrl) return null;
-    return {kind:'video',mediaUrl:resolved.mediaUrl,title:document.title,
+    try{resolved=core?.pageVideoMedia?.(el||null);}catch{}
+    if(resolved?.mediaUrl) return {kind:'video',mediaUrl:resolved.mediaUrl,title:document.title,
       poster:resolved.poster||originalURL(el?.poster||''),
       width:resolved.width||el?.videoWidth||0,height:resolved.height||el?.videoHeight||0,
       ...(el?{element:el}:{})};
+    const ex=extractableItem(el||null); if(ex) return ex;
+    return null;
   }
   function videoItem(el,url){
     return {kind:'video',mediaUrl:url,title:document.title,poster:originalURL(el.poster||''),
@@ -150,13 +154,13 @@
     if(first?.tagName==='VIDEO'&&videoEl){
       const url=videoURLFound||videoURL(videoEl);
       if(url) return videoItem(videoEl,url);
-      return pageVideo(videoEl)||{kind:'video', missing:true, element:videoEl};
+      return pageVideo(videoEl)||extractableItem(videoEl)||{kind:'video', missing:true, element:videoEl};
     }
     if(imgInfo) return imgInfo;
     if(videoEl){
       const url=videoURLFound||videoURL(videoEl);
       if(url) return videoItem(videoEl,url);
-      return pageVideo(videoEl)||{kind:'video', missing:true, element:videoEl};
+      return pageVideo(videoEl)||extractableItem(videoEl)||{kind:'video', missing:true, element:videoEl};
     }
     return imgInfo;
   }
@@ -276,7 +280,7 @@
     if(!el&&document.querySelectorAll('video').length===1)el=document.querySelector('video');
     if(!el)return null;
     const url=videoURL(el);
-    return (url?videoItem(el,url):null)||pageVideo(el)||{kind:'video',missing:true,element:el};
+    return (url?videoItem(el,url):null)||pageVideo(el)||extractableItem(el)||{kind:'video',missing:true,element:el};
   }
   // The focused media of the last right-click, for the browser's own context
   // menu entry, which cannot see blob: sources.
@@ -333,7 +337,8 @@
 
   async function saveItem(item,target){
     if(!canUseRuntime()){ toast('Reload this page to reconnect', false,'','The extension was reloaded'); return; }
-    if((item?.missing || item?.kind==='video') && await trySocialSave(target)) return;
+    const extractableReady=item?.kind==='video'&&item?.mediaUrl&&extractableVideoURL(item.mediaUrl);
+    if(!extractableReady && (item?.missing || item?.kind==='video') && await trySocialSave(target)) return;
     if(item?.missing){ toast('This player streams its video', false,'','Save the cover image or open the original page'); return; }
     if(!item?.mediaUrl) return;
     const thumbnail=await makeThumbnail(item);
@@ -365,7 +370,7 @@
     if(item){
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
       // Right-click offers a choice; a left-click saves what is under it.
-      if(e.type==='contextmenu'&&item.kind==='video'){ showVideoMenu(item,e); return true; }
+      if(e.type==='contextmenu'&&item.kind==='video'){ showVideoMenu(item.mediaUrl?item:(extractableItem(item.element)||item),e); return true; }
       await saveItem(item, e.target);
       return true;
     }

@@ -156,6 +156,18 @@ async function refreshStalePages(){
  }catch{}
 }
 refreshStalePages();
+function youtubeWatchURL(value){
+ try{const u=new URL(value);if(u.hostname==='youtu.be'){const id=u.pathname.slice(1).split('/')[0];return id?'https://www.youtube.com/watch?v='+id:'';}if(!/(^|\.)youtube\.com$/i.test(u.hostname))return '';if(u.pathname==='/watch'&&u.searchParams.get('v'))return 'https://www.youtube.com/watch?v='+u.searchParams.get('v');const m=u.pathname.match(/^\/(shorts|live|embed)\/([^/?#]+)/);return m?'https://www.youtube.com/watch?v='+m[2]:'';}catch{return '';}
+}
+function extractableVideoURL(value){
+ try{
+  const u=new URL(value), h=u.hostname.toLowerCase();
+  const yt=youtubeWatchURL(value); if(yt) return yt;
+  if(/(^|\.)reddit\.com$/i.test(h)||h==='v.redd.it'||h==='redd.it'){ if(/\/comments\/[a-z0-9]+/i.test(u.pathname)||h==='v.redd.it'){u.hash='';u.search=h==='v.redd.it'?u.search:'';return u.href;} }
+  if(/(^|\.)facebook\.com$/i.test(h)||h==='fb.watch'||h==='fb.com'||/(^|\.)fb\.com$/i.test(h)){u.hash='';return u.href;}
+  return '';
+ }catch{return '';}
+}
 async function captureContext(info,tab){
  // A blob: source is a streaming player on any site, not just the supported
  // social ones. Ask the page to resolve the real file from its own metadata.
@@ -169,9 +181,14 @@ async function captureContext(info,tab){
    return sendCapture([{...base,kind:'image',mediaUrl:item.poster,poster:item.poster}],undefined,tab.id);
   }
   if(item?.mediaUrl||item?.dataUrl)return sendCapture([item],undefined,tab.id);
-  if(item?.kind==='video'&&CanvasSocialCore.platformFor(item.pageUrl)==='instagram.com'){
-   const resolved=await native({op:'instagram-video',pageUrl:item.pageUrl,poster:item.poster}).catch(()=>null);
-   if(resolved?.item?.mediaUrl)return sendCapture([{...item,...resolved.item}],undefined,tab.id);
+  if(item?.kind==='video'&&CanvasSocialCore.platformFor(item.pageUrl||tab?.url)==='instagram.com'){
+   const resolved=await native({op:'instagram-video',pageUrl:item.pageUrl||tab.url,poster:item.poster}).catch(()=>null);
+   if(resolved?.item?.mediaUrl)return sendCapture([{...item,pageUrl:item.pageUrl||tab.url,...resolved.item}],undefined,tab.id);
+  }
+  const extractable=info.menuItemId==='video'&&extractableVideoURL(tab?.url||item?.pageUrl||'');
+  if(extractable){
+   const base=await baseFor(tab,info.frameId,extractable);
+   return sendCapture([{...base,kind:'video',mediaUrl:extractable,pageUrl:extractable,title:item?.title||base.pageTitle||base.title,poster:item?.poster||'',width:item?.width||0,height:item?.height||0}],undefined,tab.id);
   }
   if(item?.kind==='video')throw new Error('This player streams its video and exposes no downloadable file. Save the cover image, or use Find videos.');
   if(info.menuItemId==='save-image'&&info.srcUrl){
@@ -181,7 +198,7 @@ async function captureContext(info,tab){
   }
   throw new Error('Right-click directly on the image or video you want to save.');
  }
-if(['viewport','region','fullpage','collect','content','videos'].includes(info.menuItemId))return runAction(info.menuItemId,tab.id);const base=await baseFor(tab,info.frameId,info.srcUrl);if(info.menuItemId==='selection')return sendCapture([{...base,kind:'content',selection:true,title:base.pageTitle+' — selection',text:info.selectionText||''}],undefined,tab.id);if(info.menuItemId==='link')return sendCapture([{...base,kind:'bookmark',book:false,pageUrl:info.linkUrl,title:info.linkUrl,previewImage:'',siteIcon:''}],undefined,tab.id);if(['video','audio'].includes(info.menuItemId)&&(!info.srcUrl||info.srcUrl.startsWith('blob:')))return collect(tab,'videos',info.frameId);return sendCapture([{...base,kind:info.menuItemId,...(info.srcUrl?.startsWith('data:image/')?{dataUrl:info.srcUrl}:{mediaUrl:info.srcUrl})}],undefined,tab.id);}
+if(['viewport','region','fullpage','collect','content','videos'].includes(info.menuItemId))return runAction(info.menuItemId,tab.id);const base=await baseFor(tab,info.frameId,info.srcUrl);if(info.menuItemId==='selection')return sendCapture([{...base,kind:'content',selection:true,title:base.pageTitle+' — selection',text:info.selectionText||''}],undefined,tab.id);if(info.menuItemId==='link')return sendCapture([{...base,kind:'bookmark',book:false,pageUrl:info.linkUrl,title:info.linkUrl,previewImage:'',siteIcon:''}],undefined,tab.id);const extractableVideo=['video','audio'].includes(info.menuItemId)&&extractableVideoURL(tab?.url||'');if(extractableVideo){return sendCapture([{...base,kind:'video',mediaUrl:extractableVideo,pageUrl:extractableVideo}],undefined,tab.id);}if(['video','audio'].includes(info.menuItemId)&&(!info.srcUrl||info.srcUrl.startsWith('blob:')))return collect(tab,'videos',info.frameId);return sendCapture([{...base,kind:info.menuItemId,...(info.srcUrl?.startsWith('data:image/')?{dataUrl:info.srcUrl}:{mediaUrl:info.srcUrl})}],undefined,tab.id);}
 chrome.contextMenus.onClicked.addListener((info,tab)=>{if(['collect','videos'].includes(info.menuItemId)&&tab?.id&&chrome.sidePanel)chrome.sidePanel.open({tabId:tab.id}).catch(()=>{});if(tab?.id)reinjectInto(tab.id);captureContext(info,tab).catch(async error=>{await badge('!',true);await progress({id:crypto.randomUUID(),state:'failed',errors:[error.message]},tab?.id);});});
 chrome.commands.onCommand.addListener(command=>runAction(command==='capture-area'?'region':'viewport').catch(async e=>{await badge('!',true);await progress({state:'failed',errors:[e.message]});}));
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{(async()=>{if(sender.id!==chrome.runtime.id)throw new Error('Invalid capture sender');if(message.type==='social-save'){if(!sender.tab||!CanvasSocialCore.platformFor(sender.url))throw new Error('Post capture is available only on supported platforms.');return captureSocial(message.post,sender.tab);}if(message.type==='social-error'){if(!sender.tab||!CanvasSocialCore.platformFor(sender.url))throw new Error('Invalid social capture');await progress({id:crypto.randomUUID(),state:'failed',title:'Post capture',errors:[String(message.error||'Could not save this post').slice(0,500)]},sender.tab.id);return {};}if(['region-result','cancel-region'].includes(message.type)){const records=(await chrome.storage.session.get('regions')).regions||{},record=records[message.token];if(!record||record.tabId!==sender.tab?.id||record.expires<Date.now())throw new Error('This capture selection expired. Try again.');delete records[message.token];await chrome.storage.session.set({regions:records});if(message.type==='cancel-region')return {cancelled:true};const rect=message.rect;if(!rect||Object.values(rect).some(n=>!Number.isFinite(n))||rect.x<0||rect.y<0||rect.width<1||rect.height<1||rect.x+rect.width>rect.viewportWidth+1||rect.y+rect.height>rect.viewportHeight+1)throw new Error('Invalid screenshot region');return screenshot(await tabFor(record.tabId),rect);}
@@ -216,16 +233,24 @@ async function captureSocial(post,tab){
  if((platform==='x.com'||platform==='twitter.com')&&!items.some(i=>i.kind==='video')&&(post.hasVideo||!items.length)){
   const id=new URL(source).pathname.match(/\/status\/(\d+)/)?.[1];if(id){const token=((Number(id)/1e15)*Math.PI).toString(36).replace(/(0+|\.)/g,'');const data=await publicJSON('https://cdn.syndication.twimg.com/tweet-result?id='+id+'&token='+token);items=CanvasSocialCore.twitterMedia(data,{...base,description:data.text||'',author:data.user?.name||''});}
  }
- if(platform==='reddit.com'&&!items.some(i=>i.kind==='video')&&(post.hasVideo||!items.length)){
-  const u=new URL(source);if(u.pathname.includes('/comments/')){u.search='';u.hash='';u.pathname=u.pathname.replace(/\/$/,'')+'.json';u.searchParams.set('raw_json','1');const json=await publicJSON(u.href);const data=json?.[0]?.data?.children?.[0]?.data,video=data?.secure_media?.reddit_video||data?.media?.reddit_video;
-   if(video?.fallback_url){notice=video.is_gif?'':'Reddit’s public fallback may not include the separate audio track.';items=[{...base,kind:'video',mediaUrl:video.fallback_url,width:video.width,height:video.height,duration:video.duration,author:data.author||'',description:(data.title||'')+(notice?'\n'+notice:'')}];}
-  }
+ // Reddit/Facebook/YouTube: use yt-dlp extraction for highest quality (and merged A/V).
+ if(platform==='reddit.com'&&(post.hasVideo||/\/comments\/[a-z0-9]+/i.test(new URL(source).pathname))){
+  const ru=extractableVideoURL(source)||extractableVideoURL(tab.url);
+  if(ru){items=[...items.filter(i=>i.kind!=='video'),{...base,kind:'video',mediaUrl:ru,pageUrl:ru}];notice='';}
+ }
+ if(platform==='facebook.com'&&post.hasVideo){
+  const fu=extractableVideoURL(source)||extractableVideoURL(tab.url);
+  if(fu){items=[...items.filter(i=>i.kind!=='video'),{...base,kind:'video',mediaUrl:fu,pageUrl:fu}];notice='';}
  }
  if((platform==='instagram.com'||platform==='pinterest.com')&&!items.some(i=>i.kind==='video')&&post.hasVideo){const html=await publicText(source);const found=[];for(const tag of html.matchAll(/<meta\b[^>]*>/gi)){if(!/(?:og:video(?::url|:secure_url)?|twitter:player:stream)["']/i.test(tag[0]))continue;const value=tag[0].match(/content\s*=\s*["']([^"']+)["']/i)?.[1];if(value)found.push(value.replaceAll('&amp;','&'));}items.push(...[...new Set(found)].slice(0,25).map(mediaUrl=>({...base,kind:'video',mediaUrl})));}
+ if(platform==='youtube.com'){
+  const yt=youtubeWatchURL(source)||youtubeWatchURL(tab.url);
+  if(yt){items=[{...base,kind:'video',mediaUrl:yt,pageUrl:yt}];}
+ }
  }catch(error){if(!visibleItems.length&&!String(post.text||'').trim())throw error;}
  const unique=new Map([...visibleItems,...items].map(item=>[item.mediaUrl||item.dataUrl,item]));
  items=[...unique.values()].slice(0,25);
- if(post.hasVideo&&items.length&&!items.some(item=>item.kind==='video'))notice='Saved available images. This post did not expose a downloadable video.';
+ if(post.hasVideo&&items.length&&!items.some(item=>item.kind==='video')&&!['youtube.com','reddit.com','facebook.com'].includes(platform))notice='Saved available images. This post did not expose a downloadable video.';
  if(!items.length&&String(post.text||'').trim())return await sendCapture([{kind:'bookmark',pageUrl:source,pageTitle:base.pageTitle,title:base.title,description:String(post.text).trim().slice(0,4000),author:String(post.author||'')}],undefined,tab.id,notice,activityId);
  if(!items.length)throw new Error('This post has no public downloadable media exposed. Play the video and try again, or enable deep scan. Private or protected streams may be unavailable.');
  return await sendCapture(items,undefined,tab.id,notice,activityId);
