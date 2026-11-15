@@ -15,7 +15,8 @@
   try{document.documentElement.setAttribute('data-canvas-quick-save',String(generation));}catch{}
   const current=()=>globalThis.__canvasQuickSaveGeneration===generation;
   const abs=v=>{try{return v?new URL(v,location.href).href:''}catch{return ''}};
-  const direct=u=>{try{const url=new URL(u,location.href);return /^https?:$/.test(url.protocol)?url.href:''}catch{return ''}};
+  // An empty attribute resolves to the page itself, which is never the file.
+  const direct=u=>{try{if(!u) return '';const url=new URL(u,location.href);return /^https?:$/.test(url.protocol)&&url.href!==location.href?url.href:''}catch{return ''}};
   // The page shows a resized copy of the picture. The original file is asked
   // for instead, so what is saved is full quality and not the thumbnail.
   function originalURL(value){
