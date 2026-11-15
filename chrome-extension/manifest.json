@@ -85,6 +85,7 @@
         "https://*/*"
       ],
       "js": [
+        "social-core.js",
         "activity.js",
         "quick-save.js"
       ],

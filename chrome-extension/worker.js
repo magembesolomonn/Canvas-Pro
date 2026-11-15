@@ -157,14 +157,23 @@ async function refreshStalePages(){
 }
 refreshStalePages();
 async function captureContext(info,tab){
- if(info.menuItemId==='save-image'||(info.menuItemId==='video'&&info.srcUrl?.startsWith('blob:')&&CanvasSocialCore.platformFor(info.frameUrl||tab.url))){
+ // A blob: source is a streaming player on any site, not just the supported
+ // social ones. Ask the page to resolve the real file from its own metadata.
+ const blobVideo=info.menuItemId==='video'&&info.srcUrl?.startsWith('blob:');
+ if(info.menuItemId==='save-image'||blobVideo){
   const item=await chrome.tabs.sendMessage(tab.id,{type:'focused-media'},{frameId:info.frameId??0}).catch(()=>null);
+  // "Save image" on a player means its cover, not the video file.
+  if(info.menuItemId==='save-image'&&item?.kind==='video'){
+   if(!item.poster)throw new Error('This player has no separate cover image. Use Download video or open the original page.');
+   const base=await baseFor(tab,info.frameId,item.poster);
+   return sendCapture([{...base,kind:'image',mediaUrl:item.poster,poster:item.poster}],undefined,tab.id);
+  }
   if(item?.mediaUrl||item?.dataUrl)return sendCapture([item],undefined,tab.id);
   if(item?.kind==='video'&&CanvasSocialCore.platformFor(item.pageUrl)==='instagram.com'){
    const resolved=await native({op:'instagram-video',pageUrl:item.pageUrl,poster:item.poster}).catch(()=>null);
    if(resolved?.item?.mediaUrl)return sendCapture([{...item,...resolved.item}],undefined,tab.id);
   }
-  if(item?.kind==='video')throw new Error('This slide does not expose a downloadable video. Try playing it before saving, or use Find videos.');
+  if(item?.kind==='video')throw new Error('This player streams its video and exposes no downloadable file. Save the cover image, or use Find videos.');
   if(info.menuItemId==='save-image'&&info.srcUrl){
    const base=await baseFor(tab,info.frameId,info.srcUrl);
    const kind=info.mediaType==='video'?'video':'image';

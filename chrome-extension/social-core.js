@@ -69,6 +69,78 @@
    }
   }
  }
+ const VIDEO_FILE=/\.(?:mp4|m4v|mov|webm|ogv)(?:[?#]|$)/i;
+ function videoFile(value){
+  const url=direct(value); if(!url)return '';
+  try{return VIDEO_FILE.test(new URL(url).pathname)?url:'';}catch{return '';}
+ }
+ // Streaming players (Media Source Extensions) show a <video> whose source is a
+ // blob: address that nothing outside the page can download. Many of them still
+ // publish the real file in declarative metadata, so read that instead of
+ // guessing. Cosmetic: no site name appears here.
+ function videoObjects(scope){
+  const found=[];
+  for(const script of (scope||document).querySelectorAll('script[type="application/ld+json"]')){
+   const raw=script.textContent||'';
+   if(raw.length>500000)continue;
+   let data;
+   try{data=JSON.parse(raw.replace(/^\/\*\s*<!\[CDATA\[\s*\*\/\s*|\s*\/\*\s*\]\]>\s*\*\/$/g,''));}catch{continue;}
+   const queue=[data];
+   for(let i=0;i<queue.length&&i<20000;i++){
+    const value=queue[i];
+    if(!value||typeof value!=='object')continue;
+    if([].concat(value['@type']||[]).includes('VideoObject'))found.push(value);
+    for(const child of Object.values(value))if(child&&typeof child==='object')queue.push(child);
+   }
+  }
+  return found;
+ }
+ function videoFromObject(value){
+  const content=typeof value.contentUrl==='string'?value.contentUrl:Array.isArray(value.contentUrl)?value.contentUrl[0]:value.contentUrl?.url;
+  const mediaUrl=videoFile(content)||videoFile(typeof value.url==='string'?value.url:value.url?.url);
+  if(!mediaUrl)return null;
+  return {kind:'video',mediaUrl,poster:direct(typeof value.thumbnailUrl==='string'?value.thumbnailUrl:''),
+   width:Number(value.width)||0,height:Number(value.height)||0,title:typeof value.name==='string'?value.name.slice(0,160):''};
+ }
+ // A feed can show dozens of players, so a page-level answer is only trusted
+ // when the pointer's own container identifies exactly one video. With no
+ // container and several videos, saying nothing beats saving the wrong clip.
+ function pageVideoMedia(element){
+  if(element&&element.nodeType===1){
+   let node=element;
+   for(let depth=0;node&&depth<6;depth++,node=node.parentElement){
+    if(node===document.documentElement)break;
+    if(!node.querySelectorAll)continue;
+    const items=videoObjects(node).map(videoFromObject).filter(Boolean);
+    if(items.length===1)return items[0];
+    if(items.length>1)return null;
+   }
+  }
+  const all=videoObjects(document).map(videoFromObject).filter(Boolean);
+  if(all.length===1)return all[0];
+  if(all.length>1)return null;
+  // One player on the page means the player's own metadata is unambiguous.
+  if(element&&document.querySelectorAll('video').length!==1)return null;
+  const meta=name=>document.querySelector(`meta[property="${name}"],meta[name="${name}"]`)?.getAttribute('content')||'';
+  const poster=direct(meta('og:image')||meta('twitter:image'));
+  for(const value of [meta('og:video:secure_url'),meta('og:video:url'),meta('og:video'),meta('twitter:player:stream')]){
+   const mediaUrl=videoFile(value);
+   if(mediaUrl)return {kind:'video',mediaUrl,poster,width:0,height:0,title:''};
+  }
+  for(const link of document.querySelectorAll('link[rel="preload"][as="video"],link[rel="alternate"][type="video/mp4"]')){
+   const mediaUrl=videoFile(link.getAttribute('href'));
+   if(mediaUrl)return {kind:'video',mediaUrl,poster,width:0,height:0,title:''};
+  }
+  // A page can also keep the file in a plain attribute instead of a script.
+  const scope=element?.closest?.('figure,article,[data-testid]')||document;
+  for(const node of scope.querySelectorAll('[src],[data-src],[data-video-url],[data-mp4],[data-file],[href],[content]')){
+   for(const attr of ['src','data-src','data-video-url','data-mp4','data-file','href','content']){
+    const mediaUrl=videoFile(node.getAttribute?.(attr));
+    if(mediaUrl)return {kind:'video',mediaUrl,poster,width:0,height:0,title:''};
+   }
+  }
+  return null;
+ }
  function focusedMedia(event){
   const candidates=new Set();
   const hits=document.elementsFromPoint(event.clientX,event.clientY);
@@ -196,5 +268,5 @@
   for(const image of query('img')){const bounds=image.getBoundingClientRect();if(/avatar|profile|emoji|profile_images/i.test((image.alt||'')+' '+image.src)||bounds.width>0&&bounds.width<70||bounds.height>0&&bounds.height<60||image.naturalWidth&&image.naturalWidth<90||image.naturalHeight&&image.naturalHeight<70)continue;if(posters.has(direct(image.currentSrc||image.src)))continue;addImage(image,{alt:image.alt||'',width:image.naturalWidth,height:image.naturalHeight});}
   return {platform,permalink,title,text,author:base.author,items,hasVideo:hasVideo||items.some(i=>i.kind==='video')};
  }
- const api={platformFor,postPermalink,direct,bestVariant,twitterMedia,collect,postTextOf,focusedMedia,rememberInstagramMedia,originalImage,largestImage};if(typeof module!=='undefined')module.exports=api;else root.CanvasSocialCore=api;
+ const api={platformFor,postPermalink,direct,bestVariant,twitterMedia,collect,postTextOf,focusedMedia,rememberInstagramMedia,originalImage,largestImage,pageVideoMedia};if(typeof module!=='undefined')module.exports=api;else root.CanvasSocialCore=api;
 })(globalThis);

@@ -84,6 +84,24 @@
     }
     return '';
   }
+  // A <video> that plays a blob: address is a streaming player; the page keeps
+  // the real file in its metadata instead. Ask the shared resolver, which knows
+  // how to read VideoObject/og:video without site-specific rules.
+  function pageVideo(el){
+    const core=globalThis.CanvasSocialCore;
+    if(!core?.pageVideoMedia) return null;
+    let resolved;
+    try{resolved=core.pageVideoMedia(el||null);}catch{return null;}
+    if(!resolved?.mediaUrl) return null;
+    return {kind:'video',mediaUrl:resolved.mediaUrl,title:document.title,
+      poster:resolved.poster||originalURL(el?.poster||''),
+      width:resolved.width||el?.videoWidth||0,height:resolved.height||el?.videoHeight||0,
+      ...(el?{element:el}:{})};
+  }
+  function videoItem(el,url){
+    return {kind:'video',mediaUrl:url,title:document.title,poster:originalURL(el.poster||''),
+      width:el.videoWidth||0,height:el.videoHeight||0,element:el};
+  }
   function imageInfo(el){
     const img=el?.closest?.('img')||(el?.tagName==='IMG'?el:null);
     if(img){
@@ -130,14 +148,14 @@
     if(first?.tagName==='IMG'&&imgInfo) return imgInfo;
     if(first?.tagName==='VIDEO'&&videoEl){
       const url=videoURLFound||videoURL(videoEl);
-      if(url) return {kind:'video', mediaUrl:url, title:document.title, poster:originalURL(videoEl.poster||''), width:videoEl.videoWidth||0, height:videoEl.videoHeight||0, element:videoEl};
-      return {kind:'video', missing:true, element:videoEl};
+      if(url) return videoItem(videoEl,url);
+      return pageVideo(videoEl)||{kind:'video', missing:true, element:videoEl};
     }
     if(imgInfo) return imgInfo;
     if(videoEl){
       const url=videoURLFound||videoURL(videoEl);
-      if(url) return {kind:'video', mediaUrl:url, title:document.title, poster:originalURL(videoEl.poster||''), width:videoEl.videoWidth||0, height:videoEl.videoHeight||0, element:videoEl};
-      return {kind:'video', missing:true, element:videoEl};
+      if(url) return videoItem(videoEl,url);
+      return pageVideo(videoEl)||{kind:'video', missing:true, element:videoEl};
     }
     return imgInfo;
   }
@@ -181,6 +199,92 @@
     }catch{}
   }
 
+  // Alt+Right-click on a video opens this instead of saving blind, because a
+  // player can offer more than one thing worth keeping. It is the extension's
+  // own surface: the browser's menu cannot act on a blob: source.
+  let menuHost=null, menuCleanup=null;
+  function closeMenu(){
+    if(!menuHost)return;
+    const host=menuHost, cleanup=menuCleanup;
+    menuHost=null; menuCleanup=null;
+    host.remove();
+    cleanup?.();
+  }
+  function menuButton(label,action,enabled=true){
+    return `<button type="button" role="menuitem" data-action="${action}"${enabled?'':' disabled'}>${label}</button>`;
+  }
+  function showVideoMenu(item,event){
+    closeMenu();
+    const host=document.createElement('div');
+    host.id='__canvas_qs_menu';
+    host.style.cssText='position:fixed;left:0;top:0;z-index:2147483647';
+    host.attachShadow({mode:'open'});
+    const width=232,height=126;
+    const x=Math.max(8,Math.min(event.clientX??8,innerWidth-width-8));
+    const y=Math.max(8,Math.min(event.clientY??8,innerHeight-height-8));
+    const root=host.shadowRoot;
+    // It grows from the pointer, not from its own centre.
+    const originX=Math.max(0,Math.min(width,(event.clientX??x)-x));
+    const originY=Math.max(0,Math.min(height,(event.clientY??y)-y));
+    root.innerHTML=`<style>
+      :host{all:initial}
+      .menu{position:fixed;left:${x}px;top:${y}px;min-width:${width}px;padding:5px;border-radius:12px;
+        background:rgba(28,28,30,.97);border:1px solid rgba(255,255,255,.12);
+        box-shadow:0 18px 44px rgba(0,0,0,.34);backdrop-filter:blur(18px);
+        color:#f5f5f7;font:13px/1.3 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+        transform-origin:${originX}px ${originY}px;animation:menu-in 140ms cubic-bezier(.23,1,.32,1) both}
+      @keyframes menu-in{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+      button{display:block;width:100%;padding:8px 10px;border:0;border-radius:7px;
+        background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
+        transition:background-color 120ms ease,transform 120ms ease}
+      @media (hover:hover) and (pointer:fine){button:hover{background:rgba(255,255,255,.09)}}
+      button:active{transform:scale(.98)}
+      button:disabled{color:rgba(245,245,247,.38);cursor:default}
+      button:focus-visible{outline:2px solid #6aa9ff;outline-offset:1px}
+      @media (prefers-reduced-motion:reduce){.menu{animation-duration:1ms}button{transition-duration:0ms}}
+    </style><div class="menu" role="menu">${menuButton('Save video to Canvas Pro','video',!!item?.mediaUrl)}${menuButton('Save cover image','cover',!!item?.poster)}${menuButton('Open original page','page')}</div>`;
+    document.documentElement.append(host);
+    menuHost=host;
+    const menu=root.querySelector('.menu');
+    menu.addEventListener('click',e=>{
+      const action=e.target.closest('button')?.dataset.action;
+      if(!action)return;
+      closeMenu();
+      if(action==='video')saveItem(item,item.element||null).catch(()=>{});
+      else if(action==='cover')saveItem({kind:'image',mediaUrl:item.poster,title:document.title,poster:item.poster}).catch(()=>{});
+      else window.open(item.pageUrl||location.href,'_blank','noopener');
+    });
+    menu.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
+    const outside=e=>{ if(!host.contains(e.target))closeMenu(); };
+    const onKey=e=>{ if(e.key==='Escape'){e.preventDefault();closeMenu();} };
+    const timer=setTimeout(()=>document.addEventListener('pointerdown',outside,true),0);
+    document.addEventListener('keydown',onKey,true);
+    window.addEventListener('scroll',closeMenu,true);
+    window.addEventListener('resize',closeMenu,true);
+    menuCleanup=()=>{
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown',outside,true);
+      document.removeEventListener('keydown',onKey,true);
+      window.removeEventListener('scroll',closeMenu,true);
+      window.removeEventListener('resize',closeMenu,true);
+    };
+  }
+  function recentVideo(target){
+    const scope=target?.closest?.('video,[class*="video"],[data-testid*="video"],figure,article');
+    let el=scope?.tagName==='VIDEO'?scope:scope?.querySelector?.('video');
+    if(!el&&document.querySelectorAll('video').length===1)el=document.querySelector('video');
+    if(!el)return null;
+    const url=videoURL(el);
+    return (url?videoItem(el,url):null)||pageVideo(el)||{kind:'video',missing:true,element:el};
+  }
+  // The focused media of the last right-click, for the browser's own context
+  // menu entry, which cannot see blob: sources.
+  let lastMedia=null;
+  document.addEventListener('contextmenu',e=>{
+    if(!e.isTrusted)return;
+    lastMedia={url:location.href,at:Date.now(),item:pickMedia(e.target,{x:e.clientX,y:e.clientY})};
+  },true);
+
   // The worker asks the page to show progress; this script is on every page.
   // The card it draws is the single toast for a capture, so this script does
   // not add a second one.
@@ -188,6 +292,21 @@
     if(message?.type!=='capture-activity')return;
     try{ if(typeof canvasCaptureActivity==='function') canvasCaptureActivity(message.job||{},null); }catch{}
     respond({ok:true});
+  });
+  // Supported social hosts keep their own focused-media handler, which knows
+  // about post galleries. Everywhere else this is the only one, and it is what
+  // lets the browser's context menu resolve a streaming video.
+  chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+    if(message?.type!=='focused-media')return;
+    if(globalThis.CanvasSocialCore?.platformFor?.(location.href))return;
+    let item=null;
+    if(lastMedia&&lastMedia.url===location.href&&Date.now()-lastMedia.at<120000){item=lastMedia.item;lastMedia=null;}
+    if(!item&&document.querySelectorAll('video').length===1)item=recentVideo(null);
+    if(!item)return respond(null);
+    // The DOM node is only useful inside this page; the worker needs addresses.
+    const {element,...rest}=item;
+    respond({...rest,pageUrl:rest.pageUrl||location.href,pageTitle:rest.pageTitle||document.title});
+    return true;
   });
 
   async function trySocialSave(target){
@@ -214,7 +333,7 @@
   async function saveItem(item,target){
     if(!canUseRuntime()){ toast('Reload this page to reconnect', false,'','The extension was reloaded'); return; }
     if((item?.missing || item?.kind==='video') && await trySocialSave(target)) return;
-    if(item?.missing){ toast('No downloadable video found', false,'','Use Find videos & media or Deep scan'); return; }
+    if(item?.missing){ toast('This player streams its video', false,'','Save the cover image or open the original page'); return; }
     if(!item?.mediaUrl) return;
     const thumbnail=await makeThumbnail(item);
     try{
@@ -237,25 +356,31 @@
     if(point===lastPoint && now-lastHandled<800) return true; // one gesture, one save
     lastPoint=point; lastHandled=now;
     if(!canUseRuntime()){ toast('Reload this page to reconnect', false,'','The extension was reloaded'); e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.(); return true; }
-    const item=pickMedia(e.target,{x:e.clientX??0,y:e.clientY??0},true);
+    const at={x:e.clientX??0,y:e.clientY??0},social=!!globalThis.CanvasSocialCore?.platformFor?.(location.href);
+    // The pointer may land on the card around a player rather than on the
+    // player itself. Only for the Alt gesture: a drag must not pick the page's
+    // only video just because it happens to exist.
+    const item=pickMedia(e.target,at,true)||(social?null:recentVideo(e.target));
     if(item){
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
+      // Right-click offers a choice; a left-click saves what is under it.
+      if(e.type==='contextmenu'&&item.kind==='video'){ showVideoMenu(item,e); return true; }
       await saveItem(item, e.target);
       return true;
     }
-    if(globalThis.CanvasSocialCore?.platformFor?.(location.href)){
+    if(social){
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
       await trySocialSave(e.target);
       return true;
     }
-    const broad=pickMedia(e.target,{x:e.clientX??0,y:e.clientY??0},false);
+    const broad=pickMedia(e.target,at,false);
     if(broad?.mediaUrl){ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.(); await saveItem(broad,e.target); return true; }
     return false;
   }
   const guard=e=>{ if(!current()) return; quickSaveFromEvent(e).catch(()=>{}); };
+  // A right-click reaches us through contextmenu; listening to the mouse-down
+  // as well would save before the menu could be shown.
   window.addEventListener('contextmenu',guard,true);
-  window.addEventListener('mousedown',e=>{ if(e.altKey && e.button===2) guard(e); },true);
-  window.addEventListener('auxclick',e=>{ if(e.altKey && e.button===2) guard(e); },true);
   window.addEventListener('click',e=>{ if(e.altKey && e.button===0) guard(e); },true);
 
   // Drag and drop saver overlay
