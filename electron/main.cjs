@@ -13,6 +13,7 @@ const { clipboardData } = require('./clipboard-data.cjs');
 const crypto=require('node:crypto');
 const {CanvasStore,normalize:normalizeCanvasItem}=require('./canvas-store.cjs');
 const {publicFetch}=require('./public-fetch.cjs');
+const {previewFetch}=require('./browser-fetch.cjs');
 const {Bookmarks}=require('./bookmarks.cjs');
 const {resolveSocialVideo}=require('./social-video.cjs');
 const {Readable,Transform}=require('node:stream');
@@ -374,7 +375,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('library-location',event=>{trusted(event);return ({root:library.root,name:path.basename(library.root).replace(/\.canvaslibrary$/i,''),recent:locations.read().recent||[]});});
   ipcMain.handle('library-switch',(event,mode)=>{trusted(event);if(!['new','open'].includes(mode))throw Error('Invalid library action.');return changeLibrary(mode);});
   canvasStore=new CanvasStore(library);if(process.env.ASSET_TEST_MODE)global.canvasTestStore=canvasStore;
-  bookmarks=new Bookmarks({library,fetcher:process.env.ASSET_TEST_MODE?(url,options)=>net.fetch(url,options):publicFetch,onUpdate:(id,info)=>{if(win&&!win.isDestroyed())win.webContents.send('link-info-changed',{id,info});}});
+  // Chromium's stack is what gets past Cloudflare's TLS fingerprint checks; the
+  // guarded Node fetcher stays as a fallback inside previewFetch.
+  bookmarks=new Bookmarks({library,fetcher:process.env.ASSET_TEST_MODE?(url,options)=>net.fetch(url,options):previewFetch,onUpdate:(id,info)=>{if(win&&!win.isDestroyed())win.webContents.send('link-info-changed',{id,info});}});
   mediaCache = new MediaCache(library,path.join(__dirname,'../bin/media-tool'));
   importQueue=new ImportQueue({library,onChange:jobs=>{
     if(win&&!win.isDestroyed())win.webContents.send('import-state',jobs);
