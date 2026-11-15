@@ -266,11 +266,12 @@ function inspectorPreview(a){
  frame.title='Double-click to preview';frame.ondblclick=()=>openPreview();
  return frame;
 }
-function stopHover(){if(hoverPlayer){hoverPlayer.dispose();hoverPlayer=null;}}
-function unmount(id){if(hoverPlayer?.id===id)stopHover();cardCleanup.get(id)?.();cardCleanup.delete(id);const card=mounted.get(id);if(card)SmartCards.release(card);card?.remove();mounted.delete(id);}
+let hoverIntent=null;
+function stopHover(){if(hoverIntent){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer){hoverPlayer.dispose();hoverPlayer=null;}}
+function unmount(id){if(hoverIntent?.id===id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===id)stopHover();cardCleanup.get(id)?.();cardCleanup.delete(id);const card=mounted.get(id);if(card)SmartCards.release(card);card?.remove();mounted.delete(id);}
 function makeCard(a){const card=el('article','card');card.dataset.id=a.id;card.setAttribute('role','option');card.setAttribute('aria-label',a.name);card.draggable=true;card.title='Drag out to Finder · Option-drag to a Canvas';card.onpointerdown=e=>{if(e.button===0&&e.pointerType!=='touch')api.prepareDrag(selection.ids.has(a.id)?selection.values():[a.id]);};card.ondragstart=e=>{stopHover();const ids=selection.ids.has(a.id)?selection.values():[a.id];if(e.altKey){e.dataTransfer.setData('application/x-canvaspro-assets',JSON.stringify(ids));e.dataTransfer.effectAllowed='copy';}else{e.preventDefault();safe(()=>api.startDrag(ids));}};card.ondragend=()=>CanvasWorkspace.clearDrag();const surface=el('div','card-surface');const type=kind(a);if(type==='audio')cardCleanup.set(a.id,audioTile(a,surface));else surface.append(type==='link'?bookmarkVisual(a):SmartCards.fileVisual(a)||thumb(a,'',true));
 if(!a.trash)surface.append(favoriteButton(a));if(type==='video'||type==='audio'){const duration=el('span','duration');surface.append(duration);getMediaInfo(a).then(info=>{if(info.duration)duration.textContent=timecode(info.duration);});}
-card.onpointerenter=e=>{if(type!=='video'&&type!=='audio')return;if(e.pointerType==='touch'||!$('#preview').hidden||selection.ids.size>1)return;stopHover();const player=createPlayer(a,{compact:true,muted:type==='video'});player.id=a.id;hoverPlayer=player;surface.append(player.element);};card.onpointerleave=()=>{if(hoverPlayer?.id===a.id)stopHover();};
+card.onpointerenter=e=>{if(type!=='video'&&type!=='audio')return;if(e.pointerType==='touch'||!$('#preview').hidden||selection.ids.size>1)return;if(hoverIntent?.id===a.id)return;stopHover();hoverIntent={id:a.id,timer:setTimeout(()=>{if(hoverIntent?.id!==a.id||!card.isConnected||!$('#preview').hidden||selection.ids.size>1)return;hoverIntent=null;const player=createPlayer(a,{compact:true,muted:type==='video'});player.id=a.id;hoverPlayer=player;surface.append(player.element);},180)};};card.onpointerleave=()=>{if(hoverIntent?.id===a.id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===a.id)stopHover();};
 const meta=el('div','card-meta'),details=el('div','card-details');details.append(el('span','',a.tags.length?a.tags.length+' tags':''));meta.append(el('span','card-name',a.name),details);card.append(surface,meta);card._parts={
  name:meta.firstChild,detail:details.lastChild,star:surface.querySelector('.favorite-toggle'),
  visual:type==='link'?surface.querySelector('.link-visual'):null
@@ -296,8 +297,8 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='notes')re
   pendingGalleryPosition=null;
  }
  if(pagedCatalog&&gallery.scrollTop+gallery.clientHeight>=layout.height-Math.max(200, gallery.clientHeight * 0.15)&&assets.length<catalogTotal)safe(()=>loadLibraryPage({append:true}));
- const indices=AssetLayout.visibleIndices(layout,gallery.scrollTop,gallery.clientHeight),ids=new Set(indices.map(i=>visible[i].id));
- publishVisibleAssets([...ids]);
+ const indices=AssetLayout.visibleIndices(layout,gallery.scrollTop,gallery.clientHeight),visibleList=indices.map(i=>visible[i].id),ids=new Set(visibleList);
+ publishVisibleAssets(visibleList);
  for(const id of mounted.keys())if(!ids.has(id))unmount(id);
  for(const i of indices){
   const a=visible[i],position=layout.positions[i];
