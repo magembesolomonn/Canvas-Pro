@@ -4543,9 +4543,14 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
   padding: 6px 4px;
   border-radius: 6px;
   cursor: pointer;
+  /* Ticking off ingredients is a repeated, low-stakes action: keep the
+     response instant and only animate the properties that read as feedback. */
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
-.recipe-check:hover {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+@media (hover: hover) and (pointer: fine) {
+  .recipe-check:hover {
+    background: color-mix(in srgb, var(--text) 5%, transparent);
+  }
 }
 .recipe-check input {
   position: absolute;
@@ -4561,6 +4566,11 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
   margin-top: 1px;
   border: 1px solid var(--line);
   border-radius: 4px;
+  transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), transform var(--duration-instant) var(--ease-out);
+}
+/* Press should register before the state change lands. */
+.recipe-check:active .recipe-check-mark {
+  transform: scale(0.9);
 }
 .recipe-check input:focus-visible + .recipe-check-mark {
   outline: 2px solid var(--text);
@@ -4570,7 +4580,7 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
   background: var(--text);
   border-color: var(--text);
 }
-.recipe-check.is-checked .recipe-check-mark::after {
+.recipe-check-mark::after {
   content: '';
   position: absolute;
   left: 4px;
@@ -4579,7 +4589,25 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
   height: 9px;
   border: solid var(--panel);
   border-width: 0 1.5px 1.5px 0;
-  transform: rotate(45deg);
+  /* A check that pops in from 0 looks like it teleports. 0.85 + opacity reads
+     as one object changing state. */
+  transform: rotate(45deg) scale(0.85);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+.recipe-check.is-checked .recipe-check-mark::after {
+  opacity: 1;
+  transform: rotate(45deg) scale(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .recipe-check,
+  .recipe-check-mark,
+  .recipe-check-mark::after {
+    transition-duration: 0ms;
+  }
+  .recipe-check:active .recipe-check-mark {
+    transform: none;
+  }
 }
 .recipe-check-text {
   font-size: 13px;
