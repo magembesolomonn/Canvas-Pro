@@ -42,6 +42,7 @@ function applyBookmarkInfo(id,info){
  const a=assetById.get(id);
  if(!a||a.url&&info.url!==a.url)return;
  const previous=a.captureMetadata?.linkPreview;
+ const versionOnly=(previous?.url===info.url&&previous.updatedAt>=info.updatedAt&&a.name===(info.name||a.name)&&(info.extractorVersion||0)>(previous.extractorVersion||0));
  if(previous?.url===info.url&&previous.updatedAt>=info.updatedAt&&a.name===(info.name||a.name)&&(info.extractorVersion||0)<=(previous.extractorVersion||0))return;
  const ratio=assetRatio(a),social=SmartCards.isSocialCard(a);
  if(!a.url)a.url=info.url;
@@ -49,6 +50,10 @@ function applyBookmarkInfo(id,info){
  if(info.name)a.name=info.name;
  if(info.tags)a.smart={...a.smart,tags:[...new Set([...(a.smart?.tags||[]),...info.tags])]};
  a.searchText=SmartCards.enrichSearch(a);
+ // A newer extractor version can arrive for an unchanged, already-cached
+ // preview (no refetch). Updating metadata is enough; avoid layout/paint churn
+ // while scrolling through many saved links.
+ if(versionOnly)return;
  if(ratio!==assetRatio(a)||social!==SmartCards.isSocialCard(a)){layoutDirty=true;scheduleGallery();}
  const card=mounted.get(id);
  if(card)card._parts.name.textContent=info.title||a.name.replace(/\.(url|webloc)$/i,'');

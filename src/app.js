@@ -147,24 +147,42 @@ async function loadLibraryPage({append=false,reload=false}={}){
  request.promise=(async()=>{
   const data=await api.libraryPage({...query,offset,limit:append?catalogPageSize:Math.min(500,target),navigation:reload});
   if(generation!==catalogGeneration||!pagedCatalog)return;
-  let rows=data.assets;
-  while(!append&&rows.length<Math.min(target,data.total)){
-   const next=await api.libraryPage({...query,offset:rows.length,limit:Math.min(500,target-rows.length)});
-   if(generation!==catalogGeneration||!pagedCatalog)return;
-   if(!next.assets.length)break;
-   rows=rows.concat(next.assets);
-  }
-  if(data.navigation)applyCatalogNavigation(data);
-  const prepared=storeCatalogRows(rows);
+  let rows=data.assets||[],serverTotal=data.total;
   if(append){
-   const added=prepared.filter(asset=>!assetById.has(asset.id));
-   for(const asset of added)assetById.set(asset.id,asset);
-   assets=assets.concat(added);
-   if(!added.length)catalogTotal=assets.length;
+   let added=storeCatalogRows(rows).filter(asset=>!assetById.has(asset.id));
+   let nextOffset=offset+rows.length;
+   // Offset pages can shift and return rows already loaded; skip duplicate
+   // windows instead of truncating the catalog and hiding later items.
+   while(!added.length&&rows.length&&serverTotal!=null&&nextOffset<serverTotal){
+    const next=await api.libraryPage({...query,offset:nextOffset,limit:catalogPageSize});
+    if(generation!==catalogGeneration||!pagedCatalog)return;
+    serverTotal=next.total??serverTotal;
+    rows=next.assets||[];
+    nextOffset+=rows.length;
+    added=storeCatalogRows(rows).filter(asset=>!assetById.has(asset.id));
+    if(!rows.length)break;
+   }
+   if(data.navigation)applyCatalogNavigation(data);
+   if(added.length){
+    for(const asset of added)assetById.set(asset.id,asset);
+    assets=assets.concat(added);
+   }
+   if(serverTotal!=null)catalogTotal=serverTotal;
+   if(!added.length&&!rows.length&&serverTotal!=null)catalogTotal=assets.length;
   }else{
+   const limitTarget=Math.min(target,serverTotal??target);
+   while(rows.length<limitTarget){
+    const next=await api.libraryPage({...query,offset:rows.length,limit:Math.min(500,limitTarget-rows.length)});
+    if(generation!==catalogGeneration||!pagedCatalog)return;
+    serverTotal=next.total??serverTotal;
+    if(!next.assets?.length)break;
+    rows=rows.concat(next.assets);
+   }
+   if(data.navigation)applyCatalogNavigation(data);
+   const prepared=storeCatalogRows(rows);
    assets=prepared;assetById=new Map(assets.map(asset=>[asset.id,asset]));
    for(const id of linkRequests.keys())if(!assetById.has(id))linkRequests.delete(id);
-   catalogTotal=data.total;catalogKey=key;
+   catalogTotal=serverTotal;catalogKey=key;
   }
   const focused=document.activeElement;
   render({anchor,preserveInspector:append||$('#inspector').contains(focused)&&focused.matches('input,textarea,select')});
