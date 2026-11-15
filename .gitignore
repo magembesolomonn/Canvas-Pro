@@ -13,3 +13,4 @@ electron/rss-engine.cjs
 /audits/
 /Canvas Pro Capture.zip
 /skills-lock.json
+tests/regressions/evidence/

@@ -46,18 +46,26 @@ function createOriginalsWatch({ library, onChange = () => {}, debounce = 90 }) {
   }
 
   // A full pass is used at startup, after sleep and when the window returns
-  // to the front. It is cheap: one stat per asset and no hashing.
+  // to the front. It is one stat per asset and no hashing, but it runs
+  // asynchronously in chunks so startup and focus stay responsive.
   async function scan() {
     if (closed) return [];
     let rows;
     try { rows = library.db.prepare('SELECT id,stored FROM assets').all(); }
     catch { return []; }
     const changed = [];
-    for (const row of rows) {
+    const batchSize = 250;
+    for (let i = 0; i < rows.length; i += batchSize) {
       if (closed) break;
-      if (library.deleting.has(row.id)) continue;
-      const exists = fs.existsSync(originalPath(row.stored));
-      if (exists ? library.markPresent(row.id) : library.markMissing(row.id)) changed.push(row.id);
+      const batch = rows.slice(i, i + batchSize);
+      await Promise.all(batch.map(async row => {
+        if (closed || library.deleting.has(row.id)) return;
+        let exists = false;
+        try { await fs.promises.access(originalPath(row.stored), fs.constants.F_OK); exists = true; }
+        catch { exists = false; }
+        if (exists ? library.markPresent(row.id) : library.markMissing(row.id)) changed.push(row.id);
+      }));
+      if (i + batchSize < rows.length) await new Promise(resolve => setImmediate(resolve));
     }
     report(changed);
     return changed;

@@ -20,5 +20,18 @@ execFileSync('/usr/bin/codesign',['--force','--deep','--sign','-',bundle],{stdio
 execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',bundle],{stdio:'inherit'});
 }catch(e){if(hadIcon)fs.copyFileSync(path.join(backup,'AssetLibrary.icns'),priorIcon);else fs.rmSync(priorIcon,{force:true});fs.renameSync(current,path.join(backup,'failed-update'));fs.renameSync(path.join(backup,'app'),current);fs.copyFileSync(path.join(backup,'Info.plist'),path.join(contents,'Info.plist'));fs.cpSync(path.join(backup,'_CodeSignature'),path.join(contents,'_CodeSignature'),{recursive:true});throw e;}
 const renamed=path.join(path.dirname(bundle),'Canvas Pro.app');if(renamed!==bundle){if(fs.existsSync(renamed))throw new Error('Canvas Pro.app already exists; updated app remains at '+bundle);fs.renameSync(bundle,renamed);bundle=renamed;}
+function pruneBackups(updatesDir, keep = 3) {
+  try {
+    const entries = fs.readdirSync(updatesDir, { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => ({ name: e.name, path: path.join(updatesDir, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    while (entries.length > keep) {
+      const oldest = entries.shift();
+      fs.rmSync(oldest.path, { recursive: true, force: true });
+    }
+  } catch {}
+}
 if(bundle.startsWith('/Applications/'))execFileSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',['-f',bundle]);
+pruneBackups(path.join(root, '.updates'), 3);
 console.log('Updated '+bundle+'\nPrevious app code: '+backup+'\nQuit and reopen the app to load the update. The library was not changed.');

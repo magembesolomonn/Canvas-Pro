@@ -40,11 +40,11 @@ function normalise(values){
   length=Math.sqrt(length)||1;
   return values.map(v=>v/length);
 }
-function embedText(text){
+async function embedText(text){
   const value=String(text||'').trim();
   if(!value)return null;
   try{
-    const stdout=execFileSync(textTool,['embed',value.slice(0,4000)],{encoding:'utf8',timeout:15000,maxBuffer:1024*1024});
+    const {stdout}=await execute(textTool,['embed',value.slice(0,4000)],{encoding:'utf8',timeout:15000,maxBuffer:1024*1024});
     const values=JSON.parse(stdout);
     if(!Array.isArray(values)||!values.length)return null;
     textDimensions=values.length;
@@ -56,11 +56,11 @@ function embedText(text){
 }
 // Several texts in one call: a document is a dozen pieces, and a dozen
 // processes for it is a dozen times the work.
-function embedTexts(texts){
+async function embedTexts(texts){
   const lines=texts.map(text=>String(text||'').replace(/\s+/g,' ').trim()).filter(Boolean);
   if(!lines.length)return [];
   try{
-    const stdout=execFileSync(textTool,['embed-many'],{input:lines.join('\n'),encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
+    const {stdout}=await execute(textTool,['embed-many'],{input:lines.join('\n'),encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
     const values=JSON.parse(stdout);
     if(!Array.isArray(values))return [];
     return values.filter(Array.isArray).map(normalise);
@@ -146,7 +146,7 @@ class SmartIndex{
      let textVector=null;
      if(!error&&extracted){
       const chunks=textChunks(extracted);
-      const vectors=embedTexts(chunks);
+      const vectors=await embedTexts(chunks);
       if(vectors.length){
        textVector=vectors[0];
        this.putChunks(id,vectors);
@@ -222,21 +222,31 @@ class SmartIndex{
    // macOS embedded. This is what makes a whole sentence findable in a file.
    const understood=await this.understand(query);
    if(understood){
-     const rows=this.db.prepare('SELECT id,vector FROM asset_chunks WHERE model=?').all(TEXT_MODEL);
-     for(const row of rows){
-       const bytes=row.vector;
-       if(bytes.byteLength!==2048)continue;
-       const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-       let dot=0,norm=0;
-       for(let i=0;i<512;i++){
-         const v=view.getFloat32(i*4,true);
-         dot+=v*understood[i];norm+=v*v;
+     const batchSize=400;
+     const lastRow=this.db.prepare('SELECT MAX(rowid) AS id FROM asset_chunks WHERE model=?').get(TEXT_MODEL).id;
+     const select=this.db.prepare(`SELECT rowid AS cursor,id,vector FROM asset_chunks
+       WHERE rowid>? AND rowid<=? AND model=? ORDER BY rowid LIMIT ?`);
+     let cursor=0;
+     while(!this.closed&&cursor<lastRow){
+       const rows=select.all(cursor,lastRow,TEXT_MODEL,batchSize);
+       for(const row of rows){
+         const bytes=row.vector;
+         if(bytes.byteLength!==2048)continue;
+         const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+         let dot=0,norm=0;
+         for(let i=0;i<512;i++){
+           const v=view.getFloat32(i*4,true);
+           dot+=v*understood[i];norm+=v*v;
+         }
+         const similarity=dot/Math.sqrt(norm||1);
+         if(similarity<.25)continue;
+         const current=scores.get(row.id)||0;
+         // The best piece of a file is what matches, not the sum of them.
+         scores.set(row.id,Math.max(current,similarity));
        }
-       const similarity=dot/Math.sqrt(norm||1);
-       if(similarity<.25)continue;
-       const current=scores.get(row.id)||0;
-       // The best piece of a file is what matches, not the sum of them.
-       scores.set(row.id,Math.max(current,similarity));
+       if(rows.length<batchSize)break;
+       cursor=rows.at(-1).cursor;
+       await new Promise(resolve=>setImmediate(resolve));
      }
    }
    return [...scores].sort((a,b)=>b[1]-a[1]).slice(0,1500).map(([id])=>id);
@@ -247,18 +257,34 @@ class SmartIndex{
  async understand(query){
    const count=this.db.prepare('SELECT COUNT(*) n FROM asset_chunks WHERE model=?').get(TEXT_MODEL).n;
    if(!count)return null;
-   return embedText(query);
+   return await embedText(query);
  }
  // A caption is one sentence about a picture. It is stored beside the rest
  // of what is known about the file, so its words can be found by a search.
  caption(id,text){
   const value=String(text||'').trim().slice(0,400);
   if(!value)return null;
-  const summary={...(this.info(id)||{}),caption:value};
-  // The version belongs to the index: a caption must not mark a file as
-  // analysed, or the palette and the recognised text would never be read.
-  this.put(id,{summary:{caption:value}});
-  return summary;
+  let renamed='';
+  try{
+   const a=this.library.asset(id);
+   const summary={...(this.info(id)||{}),caption:value};
+   // Use the description model output to give meaningless/generic names a
+   // human-readable title (without touching intentional names).
+   if(meaninglessName(a.name)){
+    const proposed=proposedName(a,value,[]);
+    if(proposed&&proposed!==a.name&&proposed.length<=120){
+     summary.originalName=summary.originalName||a.name;
+     try{this.library.update(id,{name:proposed});renamed=proposed;}catch{}
+    }
+   }
+   this.put(id,{summary});
+   if(renamed)this.onUpdate({id,smart:this.indexText(id),name:renamed});
+   return this.info(id)||summary;
+  }catch{
+   const summary={...(this.info(id)||{}),caption:value};
+   this.put(id,{summary:{caption:value}});
+   return summary;
+  }
  }
  deferVisual(id,now=Date.now()){
    const previous=this.info(id)?.visualAttempts||0;

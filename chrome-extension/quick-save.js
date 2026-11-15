@@ -301,18 +301,19 @@
   // Supported social hosts keep their own focused-media handler, which knows
   // about post galleries. Everywhere else this is the only one, and it is what
   // lets the browser's context menu resolve a streaming video.
-  chrome.runtime.onMessage.addListener((message,sender,respond)=>{
-    if(message?.type!=='focused-media')return;
-    if(globalThis.CanvasSocialCore?.platformFor?.(location.href))return;
-    let item=null;
-    if(lastMedia&&lastMedia.url===location.href&&Date.now()-lastMedia.at<120000){item=lastMedia.item;lastMedia=null;}
-    if(!item&&document.querySelectorAll('video').length===1)item=recentVideo(null);
-    if(!item)return respond(null);
-    // The DOM node is only useful inside this page; the worker needs addresses.
-    const {element,...rest}=item;
-    respond({...rest,pageUrl:rest.pageUrl||location.href,pageTitle:rest.pageTitle||document.title});
-    return true;
-  });
+  if(!globalThis.CanvasSocialCore?.platformFor?.(location.href)){
+    chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+      if(message?.type!=='focused-media')return;
+      let item=null;
+      if(lastMedia&&lastMedia.url===location.href&&Date.now()-lastMedia.at<120000){item=lastMedia.item;lastMedia=null;}
+      if(!item&&document.querySelectorAll('video').length===1)item=recentVideo(null);
+      if(!item)return respond(null);
+      // The DOM node is only useful inside this page; the worker needs addresses.
+      const {element,...rest}=item;
+      respond({...rest,pageUrl:rest.pageUrl||location.href,pageTitle:rest.pageTitle||document.title});
+      return true;
+    });
+  }
 
   async function trySocialSave(target){
     const core=globalThis.CanvasSocialCore; if(!core) return false;

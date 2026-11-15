@@ -105,35 +105,16 @@ const SmartSearch=(()=>{
  function stop(){resetVisualSearch();enabled=false;localStorage.setItem('local-ai-enabled','false');modelReady=false;workChanged=true;clearTimeout(indexTimer);clearTimeout(workerIdleTimer);for(const item of pending.values())item.reject(Error('Visual search paused'));pending.clear();worker?.terminate();worker=null;updateVisualButton();render();updateStatus('Visual search off · text and automatic tags remain searchable');}
  function updateVisualButton(){
    const button=$('#visual-search');
-   button.hidden=!enabled||!modelReady||!$('#search').value.trim();
-   button.setAttribute('aria-pressed',String(visualMode));
-   button.setAttribute('aria-busy',String(!!visualQuery));
+   if(!button)return;
+   button.hidden=true;
+   button.setAttribute('aria-pressed','false');
+   button.setAttribute('aria-busy','false');
  }
  function resetVisualSearch(){
    visualVersion++;
    visualMode=false;
    visualMatches=null;
    visualQuery='';
- }
- // The model on this Mac reads the words as well as the files: the same
- // search also returns the pictures that show what you asked for.
- async function semanticSearch(query,version){
-  const current=()=>version===queryVersion&&query===$('#search').value.trim();
-  visualMode=true;visualQuery='Looking for images that match…';
-  updateVisualButton();updateActivityLabel();
-  try{
-   const {vector}=await call('text',{text:query});
-   if(!current())return;
-   const ids=await api.smartSearch(query,vector);
-   if(!current())return;
-   visualMatches={query:query.toLowerCase(),ids:new Set(ids)};
-   visualQuery=query.toLowerCase();
-   render();
-  }catch(error){
-   if(current()){visualMode=false;visualMatches=null;updateStatus(error.message);render();}
-  }finally{
-   if(current()){updateVisualButton();updateActivityLabel();}
-  }
  }
  function schedule(){
   clearTimeout(queryTimer);
@@ -142,43 +123,22 @@ const SmartSearch=(()=>{
   const version=++queryVersion;
   matches=null;matchedQuery='';
   updateVisualButton();updateActivityLabel();
-  if(!query)return;
+  if(!query){render();return;}
   queryTimer=setTimeout(async()=>{
    try{
+    // Keep search predictable: lexical/FTS (and indexed text/description fields)
+    // drive typed results. Automatic visual-vector merging is disabled because it
+    // can surface unrelated matches and hide what the user typed.
     const lexical=await api.smartSearch(query);
     if(version!==queryVersion||query!==$('#search').value.trim())return;
     matches=new Set(lexical);matchedQuery=query;
-    if(matches.size)render();
-    // The local model waits a moment, so typing stays quick.
-    if(enabled&&modelReady)setTimeout(()=>{if(version===queryVersion)semanticSearch(query,version);},180);
+    render();
    }catch(error){
     if(version===queryVersion)updateStatus(error.message);
    }
   },90);
  }
- async function toggleVisualSearch(){
-   const query=$('#search').value.trim();
-   if(!enabled||!modelReady||!query)return;
-   if(visualMode){
-     resetVisualSearch();updateVisualButton();updateActivityLabel();render();return;
-   }
-   const version=++visualVersion;
-   const current=()=>version===visualVersion&&query===$('#search').value.trim();
-   visualMode=true;visualQuery='Visual results loading…';
-   updateVisualButton();updateActivityLabel();
-   try{
-     const {vector}=await call('text',{text:query});
-     if(!current())return;
-     const ids=await api.smartSearch(query,vector);
-     if(!current())return;
-     visualMatches={query:query.toLowerCase(),ids:new Set(ids)};
-     render();
-   }catch(error){
-     if(current()){visualMode=false;notify(error.message);}
-   }finally{
-     if(current()){visualQuery='';updateVisualButton();updateActivityLabel();}
-   }
- }
+ async function toggleVisualSearch(){ return; }
  function includes(a,query){
    return a.searchText.includes(query)||(matchedQuery.toLowerCase()===query&&matches?.has(a.id))||
      (visualMatches?.query===query&&visualMatches.ids.has(a.id));
@@ -199,7 +159,8 @@ const SmartSearch=(()=>{
    button.title=remaining+' files left for local analysis'+(modelReady?' · '+state.visualRemaining+' left for visual search':'');
  }
  function init(){
- const visualButton=$('#visual-search');visualButton.append(glyph('sparkles'));visualButton.onclick=toggleVisualSearch;
+ const visualButton=$('#visual-search');
+ if(visualButton){visualButton.hidden=true;visualButton.onclick=null;}
  const box=el('section','smart-settings');
  const progress=el('p','hint');progress.id='smart-index-progress';
  const modelStatus=el('p','hint');modelStatus.id='smart-search-status';
@@ -344,17 +305,30 @@ const SmartSearch=(()=>{
  // with the words, and the closest ones are offered. Nothing leaves the Mac.
  async function suggestTags(asset,onTags){
   if(!enabled||!modelReady){onTags([],'Turn on local intelligence in Settings → Experimental to get tag suggestions.');return;}
-  const {vector}=await call('image',{assetId:asset.id});
-  // The words the caption used are the best guesses the model has made about
-  // this picture, so they are the first candidates.
-  const described=String(asset.smart?.caption||'').toLowerCase().match(/[a-z]{3,}/g)?.slice(0,14)||[];
-  const candidates=[...new Set([...described,...libraryTags(),...TAG_VOCABULARY])].filter(tag=>tag&&tag.length<=40).slice(0,180);
-  const vectors=await call('texts',{texts:candidates});
-  const scored=candidates.map((tag,index)=>({tag,score:similarity(vector,vectors?.[index])}))
-   .filter(item=>item.score>=0.2)
-   .sort((a,b)=>b.score-a.score)
-   .slice(0,10);
-  onTags(scored.map(item=>item.tag));
+  try{
+   const {vector}=await call('image',{assetId:asset.id});
+   if(!vector){onTags([],'A preview is not available for this file yet.');return;}
+   // The words the caption used are the best guesses the model has made about
+   // this picture, so they are the first candidates.
+   const described=String(asset.smart?.caption||'').toLowerCase().match(/[a-z]{3,}/g)?.slice(0,14)||[];
+   const candidates=[...new Set([...described,...libraryTags(),...TAG_VOCABULARY])].filter(tag=>tag&&tag.length<=40).slice(0,80);
+   // Compare with text embeddings in small batches so the worker stays responsive.
+   const vectors=[];
+   const batch=8;
+   for(let i=0;i<candidates.length;i+=batch){
+    const slice=candidates.slice(i,i+batch);
+    const part=await Promise.all(slice.map(text=>call('text',{text}).then(r=>r?.vector||null).catch(()=>null)));
+    vectors.push(...part);
+   }
+   const scored=candidates.map((tag,index)=>({tag,score:similarity(vector,vectors[index])}))
+    .filter(item=>item.score>=0.2)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,10);
+   onTags(scored.map(item=>item.tag));
+  }catch(error){
+   console.error('Tag suggestions failed',error);
+   onTags([],'Could not suggest tags for this file yet.');
+  }
  }
  return{init,schedule,includes,call,start,resultIds,setEnabled,ensureVisualModel,suggestTags,describe,get enabled(){return enabled;},get visualModelReady(){return modelReady;}};
 })();

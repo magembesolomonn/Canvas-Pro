@@ -105,7 +105,11 @@ class YtDlp {
   async ensureFFmpeg(signal){
     const system=findSystemFFmpeg();
     if(system) return system;
-    try{await fs.promises.access(this.ffmpeg,fs.constants.X_OK); if(canRun(this.ffmpeg,['-version'])) return this.ffmpeg;}catch{}
+    try{
+      await fs.promises.access(this.ffmpeg,fs.constants.X_OK);
+      if(canRun(this.ffmpeg,['-version'])) return this.ffmpeg;
+      await fs.promises.unlink(this.ffmpeg).catch(()=>{});
+    }catch{}
     if(this.installingFFmpeg) return this.installingFFmpeg;
     this.installingFFmpeg=(async()=>{
       await fs.promises.mkdir(this.dir,{recursive:true});

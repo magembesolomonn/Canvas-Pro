@@ -1,4 +1,6 @@
 (()=>{
+ if(globalThis.__canvasSocialInstalled)return;
+ globalThis.__canvasSocialInstalled=true;
  const platform=CanvasSocialCore.platformFor(location.href);
  if(platform==='instagram.com'){
   window.addEventListener('canvas-instagram-media',event=>{

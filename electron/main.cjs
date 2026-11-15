@@ -44,7 +44,7 @@ if (process.env.AGAGWU_DATA_DIR) {
   app.setPath('userData', process.env.AGAGWU_DATA_DIR);
 }
 if(!process.env.ASSET_TEST_MODE&&!app.requestSingleInstanceLock()){app.quit();return;}
-let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,originalsWatch,updater;
+let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,originalsWatch,updater,videoDownloader;
 let notesStore;
 const getNotesStore=()=>notesStore??=new (require('./notes-store.cjs').NotesStore)(library.db);
 let pendingLibrarySwitch=null;
@@ -249,7 +249,33 @@ async function importSocialMediaURL(value,folder){
   if(!results.ids.length && results.errors.length) return null; // fall back to bookmark
   return results.ids.length?results:null;
 }
+async function importExtractableVideoURL(value,folder){
+  if(!videoDownloader) return null;
+  const {extractableVideoURL,isExtractableVideo}=require('./yt-dlp.cjs');
+  const raw=webURL(value);
+  const target=extractableVideoURL(raw)|| (isExtractableVideo(raw)?raw:'');
+  if(!target) return null;
+  const tempDir=await fs.promises.mkdtemp(path.join(app.getPath('temp'),'canvas-video-'));
+  try{
+    const file=await videoDownloader.download(target,tempDir,{title:'Video'});
+    const destination=folder||null;
+    const result=await library.importFile(file,destination);
+    const id=result.imported||result.duplicate;
+    if(id){
+      try{library.setCaptureMetadata(id,{kind:'video',mediaUrl:target,pageUrl:raw,sourceUrl:raw,title:path.basename(file),capturedAt:new Date().toISOString()});}catch{}
+      try{if(!library.asset(id).url)library.update(id,{url:raw});}catch{}
+    }
+    return {imported:result.imported?1:0,duplicates:result.duplicate?1:0,errors:[],skipped:0,ids:id?[id]:[]};
+  }finally{await fs.promises.rm(tempDir,{recursive:true,force:true});}
+}
 async function importURL(value,folder){
+  try{
+    const video=await importExtractableVideoURL(value,folder);
+    if(video) return video;
+  }catch(e){
+    // Fall through to other handlers; a bad/unsupported extractor result should
+    // not prevent saving the link or trying other resolvers.
+  }
   const social=await importSocialMediaURL(value,folder).catch(()=>null);
   if(social) return social;
   return bookmarks.save(value,folder);
@@ -301,23 +327,31 @@ nativeTheme.on('updated',()=>applyAppearanceWindow());
 // remembered here and handed to the view once it is ready, so a file saved
 // from the browser shows up straight away instead of after a restart.
 const pendingLibraryChanges=new Set();
+let pendingLibraryRefreshAll=false;
 let lastCaptureAt=0;
 function notifyLibraryChanged(ids){
   lastCaptureAt=Date.now();
   if(!Array.isArray(ids)){
+    pendingLibraryRefreshAll=true;
+    pendingLibraryChanges.clear();
     if(win&&!win.isDestroyed()&&!win.webContents.isLoading())win.webContents.send('library-changed');
     return;
   }
-  for(const id of ids)pendingLibraryChanges.add(id);
+  if(!pendingLibraryRefreshAll){
+    for(const id of ids)pendingLibraryChanges.add(id);
+    if(pendingLibraryChanges.size>4000){pendingLibraryRefreshAll=true;pendingLibraryChanges.clear();}
+  }
   // The change is only remembered while the view cannot receive it. Once it
   // has been handed over, it must not be replayed later.
   if(win&&!win.isDestroyed()&&!win.webContents.isLoading()){
-    win.webContents.send('library-changed',ids);
-    for(const id of ids)pendingLibraryChanges.delete(id);
+    if(pendingLibraryRefreshAll){pendingLibraryRefreshAll=false;pendingLibraryChanges.clear();win.webContents.send('library-changed');}
+    else{win.webContents.send('library-changed',ids);for(const id of ids)pendingLibraryChanges.delete(id);}
   }
 }
 function flushLibraryChanges(){
-  if(!win||win.isDestroyed()||!pendingLibraryChanges.size)return;
+  if(!win||win.isDestroyed())return;
+  if(pendingLibraryRefreshAll){pendingLibraryRefreshAll=false;pendingLibraryChanges.clear();win.webContents.send('library-changed');return;}
+  if(!pendingLibraryChanges.size)return;
   const ids=[...pendingLibraryChanges];pendingLibraryChanges.clear();
   win.webContents.send('library-changed',ids);
 }
@@ -928,8 +962,8 @@ app.whenReady().then(async () => {
   });
   powerMonitor.on('resume',()=>originalsWatch.scan());
   const bridgeDirectory=(process.env.ASSET_TEST_MODE||process.env.CANVAS_PROTOTYPE)?path.join(app.getPath('userData'),'Bridge'):path.join(app.getPath('appData'),'Canvas Pro/Bridge');
-  const ytDlp=new YtDlp({root:app.getPath('userData'),fetcher:(url,options)=>net.fetch(url,options)});
-  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);},videoDownloader:ytDlp});
+  videoDownloader=new YtDlp({root:app.getPath('userData'),fetcher:(url,options)=>net.fetch(url,options)});
+  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);},videoDownloader});
   try{await captureBridge.start();}catch(e){console.error('Browser capture bridge:',e.message);}
   setImmediate(()=>{
     try{
