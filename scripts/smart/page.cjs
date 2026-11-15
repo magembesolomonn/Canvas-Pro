@@ -3,6 +3,86 @@ const {parseHTML}=require('linkedom');
 const {Readability}=require('@mozilla/readability');
 const text=value=>typeof value==='string'?value.replace(/\s+/g,' ').trim().slice(0,4000):'';
 const name=value=>typeof value==='string'?text(value):Array.isArray(value)?value.map(name).filter(Boolean).join(', '):text(value?.name||'');
+// Recipe JSON-LD nests steps inside HowToSection and writes ingredients as
+// either strings or objects. A flat map loses the nested ones, so both shapes
+// are walked in document order. Newline-joined blobs are split only on lines,
+// where the separation is unambiguous.
+function recipeValues(value){
+  const out=[];
+  const add=item=>{
+    if(item==null)return;
+    if(Array.isArray(item)){for(const child of item)add(child);return;}
+    if(typeof item==='string'){
+      for(const line of item.split(/\r?\n/)){const value=text(line);if(value)out.push(value);}
+      return;
+    }
+    if(typeof item==='object'){
+      const steps=item.itemListElement||item.steps;
+      if(Array.isArray(steps)){add(steps);return;}
+      if(typeof item.text==='string'||typeof item.name==='string')add(item.text??item.name);
+    }
+  };
+  add(value);
+  return out;
+}
+// Schema durations are ISO 8601, but recipe microdata often prints "45 mins".
+// Both are normalised to ISO so the card has one formatter.
+function isoDuration(value){
+  const raw=text(value);
+  if(!raw)return '';
+  if(/^P/i.test(raw))return raw;
+  const clock=raw.match(/^(\d+):(\d{1,2})$/);
+  if(clock)return 'PT'+clock[1]+'H'+clock[2]+'M';
+  const hours=raw.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i)?.[1];
+  const minutes=raw.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b/i)?.[1];
+  if(!hours&&!minutes)return '';
+  return 'PT'+(hours?Math.round(Number(hours))+'H':'')+(minutes?Math.round(Number(minutes))+'M':'');
+}
+const ingredientSelectors=['[itemprop="recipeIngredient"]','[itemprop="ingredients"]','.wprm-recipe-ingredient','.tasty-recipes-ingredient','.recipe-ingredients li','#recipe-ingredients li','[class*="recipe-ingredient"]','[class*="ingredients"] li'];
+const methodSelectors=['[itemprop="recipeInstructions"]','.recipe-instructions','[class*="recipe-instructions"]','.recipe-method','[class*="recipe-method"]','[class*="instructions"]'];
+function domRecipe(document,resolve){
+  const selector=ingredientSelectors.join(',');
+  // A wrapper like .recipe-ingredients also matches the class rule; its text
+  // would swallow every ingredient into one line. Keep only leaf entries.
+  const roots=[...new Set([...document.querySelectorAll(selector)])].filter(node=>!node.querySelector(selector));
+  const ingredients=[];
+  for(const node of roots){
+    const value=text(node.getAttribute('content')||node.textContent).replace(/^[\s•·*☐☑✓-]+/,'').slice(0,300);
+    if(value&&!ingredients.includes(value))ingredients.push(value);
+    if(ingredients.length>=100)break;
+  }
+  const methods=[...new Set([...document.querySelectorAll(methodSelectors.join(','))])];
+  const instructions=[];
+  for(const method of methods){
+    const steps=[...method.querySelectorAll('li,[itemprop="text"],p')];
+    for(const step of steps){
+      // A nested paragraph inside a step is the same step, not another one.
+      if(step.querySelector('li,[itemprop="text"],p'))continue;
+      const value=text(step.getAttribute('content')||step.textContent)
+        .replace(/^\s*(?:step\s*)?\d+\s*[.):-]\s*/i,'')
+        .slice(0,2000);
+      if(value&&!instructions.includes(value))instructions.push(value);
+      if(instructions.length>=100)break;
+    }
+    if(instructions.length>=100)break;
+  }
+  if(!ingredients.length&&!instructions.length)return null;
+  const item=(prop)=>document.querySelector(`[itemprop="${prop}"]`);
+  const attr=(prop)=>item(prop)?.getAttribute('content')||item(prop)?.getAttribute('datetime')||item(prop)?.textContent||'';
+  const heading=document.querySelector('h1')||item('name');
+  const title=text(heading?.textContent)||text(document.title).replace(/\s*\|\s*[^|]+$/,'');
+  const image=document.querySelector('img[itemprop="image"],picture img[itemprop="image"]');
+  const yieldText=text(attr('recipeYield')||document.querySelector('[class*="yield"]')?.textContent);
+  const servings=yieldText.match(/\d+(?:\s*(?:to|-)\s*\d+)?/)?.[0]||'';
+  return {
+    title,ingredients,instructions,
+    description:text(attr('description')||document.querySelector('[itemprop="description"]')?.textContent).slice(0,1500),
+    imageURL:resolve(image?.getAttribute('src')||image?.getAttribute('data-src')),
+    servings,
+    prepTime:isoDuration(attr('totalTime')||attr('cookTime')||attr('prepTime')||[...document.querySelectorAll('time[datetime]')].map(node=>node.getAttribute('datetime')).find(Boolean)),
+    rating:attr('ratingValue'),ratingScale:attr('bestRating')
+  };
+}
 function editorialOnly(root){
  const advertising=/(?:^|[\s_-])(?:ad|ads|advert|advertisement|adslot|adunit|ad-container|ad-wrapper|sponsored-content|promoted-content)(?:$|[\s_-])/i;
  for(const node of root.querySelectorAll('[class],[id],[aria-label],[data-ad-slot],[data-ad-unit],[data-ad-client],[data-testid]')){
@@ -72,7 +152,15 @@ function readerBlocks(root,resolve){
  for(const child of root.children)walk(child);
  return blocks;
 }
-function analyzePage(html,url){const {document}=parseHTML(html);Object.defineProperty(document,'documentURI',{value:url,configurable:true});Object.defineProperty(document,'baseURI',{value:url,configurable:true});
+function analyzePage(html,url){
+ // An anti-bot interstitial is tiny and full of block copy. Parsing it would
+ // produce a one-word title and then look like a real (empty) page. Say what
+ // happened instead so the card can offer a retry.
+ if(typeof html==='string'&&html.length<2048&&/(?:access denied|just a moment|attention required|enable javascript|captcha)/i.test(html)){
+  let site='';try{site=new URL(url).hostname.replace(/^www\./,'');}catch{}
+  return {type:'webpage',title:'',description:'',imageURL:'',author:'',site,details:{},tags:[],state:'fallback',error:'site blocked automatic preview',trace:html.slice(0,200)};
+ }
+ const {document}=parseHTML(html);Object.defineProperty(document,'documentURI',{value:url,configurable:true});Object.defineProperty(document,'baseURI',{value:url,configurable:true});
  const meta={};for(const node of document.querySelectorAll('meta[property],meta[name]')){const key=(node.getAttribute('property')||node.getAttribute('name')||'').toLowerCase();if(!meta[key])meta[key]=text(node.getAttribute('content')||'');}
  const resolve=value=>{if(Array.isArray(value))value=value[0];if(value&&typeof value==='object')value=value.contentUrl||value.url||value['@id'];if(typeof value!=='string'||!value.trim())return '';try{const u=new URL(value,url);return /^https?:$/.test(u.protocol)&&!u.username&&!u.password?u.href:'';}catch{return '';}};
  const objects=[];function visit(obj,depth=0){if(depth>5||objects.length>200||!obj||typeof obj!=='object')return;if(Array.isArray(obj)){for(const item of obj)visit(item,depth+1);return;}if(obj['@type'])objects.push(obj);if(obj['@graph'])visit(obj['@graph'],depth+1);if(obj.mainEntity)visit(obj.mainEntity,depth+1);}
@@ -85,7 +173,11 @@ function analyzePage(html,url){const {document}=parseHTML(html);Object.definePro
  const ogBook=/^(?:books?)(?:\.|$)/i.test(meta['og:type']||'')||meta['book:isbn']||meta['books:isbn'];
  const isBook=o=>[].concat(o['@type']).includes('Book');
  const isFilm=o=>[].concat(o['@type']).some(t=>['Movie','TVSeries','TVEpisode'].includes(t));
- const obj=objects.find(isBook)||(['movie','series'].includes(platform)&&objects.find(isFilm))||objects.find(o=>[].concat(o['@type']).some(t=>typeMap[t]))||{},schemaType=[].concat(obj['@type']||'').find(t=>typeMap[t]);
+ // A recipe page often carries WebPage/Article objects alongside the Recipe.
+ // The one with actual ingredients or steps is the card the reader wants.
+ const isRecipe=o=>[].concat(o['@type']).includes('Recipe');
+ const recipeObject=objects.find(o=>isRecipe(o)&&(recipeValues(o.recipeIngredient).length||recipeValues(o.recipeInstructions).length));
+ const obj=objects.find(isBook)||(['movie','series'].includes(platform)&&objects.find(isFilm))||recipeObject||objects.find(o=>[].concat(o['@type']).some(t=>typeMap[t]))||{},schemaType=[].concat(obj['@type']||'').find(t=>typeMap[t]);
  let type=typeMap[schemaType]||platform;
  if(platform==='book'||amazonBook||ogBook||type==='product'&&/\bbooks?\b/i.test(name(obj.category)))type='book';
  if(type==='webpage'&&/article/i.test(meta['og:type']||''))type='article';
@@ -117,7 +209,52 @@ function analyzePage(html,url){const {document}=parseHTML(html);Object.definePro
    result.postImageURLs=[resolve(media?.getAttribute('data-src')||media?.getAttribute('src')),...[].concat(obj.image||[]).map(resolve)].filter(Boolean);
  }
  const d=result.details;for(const [k,v]of Object.entries({artist:name(obj.byArtist||obj.inAlbum?.byArtist),album:name(obj.inAlbum),isbn:obj.isbn||meta['books:isbn']||meta['book:isbn'],runtime:obj.duration||obj.timeRequired,year:String(obj.datePublished||obj.dateCreated||'').match(/^\d{4}/)?.[0]||((['movie','series'].includes(platform))?(meta['og:title']||'').match(/\((\d{4})\)/)?.[1]:undefined),contentRating:obj.contentRating,genre:name(obj.genre),director:name(obj.director),rating:obj.aggregateRating?.ratingValue,ratingScale:obj.aggregateRating?.bestRating,author:result.author,brand:name(obj.brand),price:obj.offers?.price||obj.offers?.lowPrice||meta['product:price:amount'],currency:obj.offers?.priceCurrency||meta['product:price:currency'],servings:name(obj.recipeYield),prepTime:obj.totalTime||obj.cookTime,tracks:obj.numTracks||obj.numTracks?.value})){if(v!==undefined&&v!==null&&String(v).length)d[k]=text(String(v)).slice(0,300);}
- if(type==='recipe'){d.ingredients=[].concat(obj.recipeIngredient||[]).map(text).filter(Boolean).slice(0,100);d.instructions=[].concat(obj.recipeInstructions||[]).flatMap(step=>step.itemListElement||step).map(step=>text(step.text||step)).filter(Boolean).slice(0,100);}
+ if(type==='recipe'){
+  let ingredients=recipeValues(obj.recipeIngredient).slice(0,100);
+  let instructions=recipeValues(obj.recipeInstructions).slice(0,100);
+  // Some sites publish Recipe metadata without the actual lists, or publish
+  // one half only. The visible microdata fills the gap.
+  const fallback=ingredients.length&&instructions.length?null:domRecipe(document,resolve);
+  if(fallback){
+   if(!ingredients.length)ingredients=fallback.ingredients;
+   if(!instructions.length)instructions=fallback.instructions;
+   if(fallback.title&&(!result.title||result.title===result.site))result.title=fallback.title;
+   if(fallback.description&&!result.description)result.description=fallback.description;
+   if(fallback.imageURL&&!result.imageURL)result.imageURL=fallback.imageURL;
+   if(fallback.servings&&!d.servings)d.servings=fallback.servings;
+   if(fallback.prepTime&&!d.prepTime)d.prepTime=fallback.prepTime;
+   if(fallback.rating&&!d.rating)d.rating=fallback.rating;
+   if(fallback.ratingScale&&!d.ratingScale)d.ratingScale=fallback.ratingScale;
+  }
+  d.ingredients=ingredients;
+  d.instructions=instructions;
+ }else if(!['book','movie','series'].includes(type)){
+  // The rest of the recipe web: no Recipe JSON-LD, but markup with recipe
+  // microdata. Only a page that actually yields a list becomes a recipe card;
+  // a page that merely says "recipe" stays an article.
+  const structured=document.querySelector('[itemtype*="schema.org/Recipe"]');
+  const hasIngredients=document.querySelector(ingredientSelectors.join(','));
+  const hasMethod=document.querySelector(methodSelectors.join(','));
+  if(structured||(document.querySelector('h1')&&hasIngredients&&hasMethod)){
+   const fallback=domRecipe(document,resolve);
+   if(fallback){
+    type='recipe';
+    // The page's own headline beats a <title> suffix like " | Site".
+    if(fallback.title)result.title=fallback.title;
+    if(!result.description)result.description=fallback.description;
+    if(!result.imageURL)result.imageURL=fallback.imageURL;
+    if(fallback.servings)d.servings=fallback.servings;
+    if(fallback.prepTime)d.prepTime=fallback.prepTime;
+    if(fallback.rating)d.rating=fallback.rating;
+    if(fallback.ratingScale)d.ratingScale=fallback.ratingScale;
+    d.ingredients=fallback.ingredients;
+    d.instructions=fallback.instructions;
+   }
+  }
+ }
+ // The DOM fallback can promote a page to a recipe after the result object was
+ // built from the JSON-LD type.
+ result.type=type;
  const categories={movie:['movie','film','cinema'],series:['series','tv show','television'],book:['book','reading'],album:['album','music'],song:['song','music','track'],playlist:['playlist','music'],article:['article','reading'],recipe:['recipe','food','cooking'],product:['product','shopping'],social:['social','post'],video:['video']};result.tags=[...new Set([...(categories[type]||[]),...name(obj.genre).split(',').map(t=>t.trim().toLowerCase()).filter(Boolean)])];
  let article,readerRoot;
  // Shopping lookbooks use a feature grid whose lead and product grouping Readability strips.
