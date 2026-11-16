@@ -1,6 +1,8 @@
 const fs=require('node:fs'),path=require('node:path');
 const {embedURL,webURL}=require('./bookmarks.cjs');
 
+function hostOf(value){try{return new URL(value).hostname.toLowerCase().replace(/^www\./,'');}catch{return '';}}
+
 class WebPreview{
   constructor({electron,window,library,onSaved,resolveLink}){
     Object.assign(this,{electron,window,library,onSaved,resolveLink});
@@ -46,6 +48,7 @@ class WebPreview{
     if(!['url','webloc'].includes(a.ext)&&!a.url)throw new Error('Select a saved web source.');
     const source=this.resolveLink?await this.resolveLink(id):webURL(a.url);
     const target=embedURL(source);
+    this.allowedHosts=new Set([hostOf(source),hostOf(target)].filter(Boolean));
     if(this.closed||generation!==this.generation)return {cancelled:true};
     this.pendingToken=null;
     this.detach();
@@ -68,8 +71,9 @@ class WebPreview{
         contents.session.on('will-download',this.downloadHandler);
       }
       contents.setWindowOpenHandler(()=>({action:'deny'}));
-      contents.on('will-navigate',(event,url)=>{try{webURL(url);}catch{event.preventDefault();}});
-      contents.on('will-redirect',(event,url)=>{try{webURL(url);}catch{event.preventDefault();}});
+      const allowNavigation=(event,url)=>{try{if(this.allowedHosts?.has(hostOf(url)))return;}catch{}event.preventDefault();};
+      contents.on('will-navigate',allowNavigation);
+      contents.on('will-redirect',allowNavigation);
       for(const name of ['did-start-loading','did-stop-loading','did-navigate','did-navigate-in-page'])
         contents.on(name,()=>{if(this.view?.webContents===contents)this.status(name==='did-start-loading'?{resetError:true}:{});});
       contents.on('did-fail-load',(_event,code,description,_url,main)=>{

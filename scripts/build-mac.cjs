@@ -8,6 +8,7 @@ if (!fs.existsSync(runtime)) throw new Error('Run npm install and node node_modu
 const output = path.join(root, 'dist/Canvas Pro.app');
 if (fs.existsSync(output)) throw new Error('The app already exists in dist. Move it aside before rebuilding.');
 fs.mkdirSync(path.dirname(output), { recursive: true });
+execFileSync(process.execPath, [path.join(root, 'scripts/set-fuses.cjs')], { stdio: 'inherit' });
 execFileSync('/usr/bin/ditto', [runtime, output]);
 const resources = path.join(output, 'Contents/Resources');
 fs.rmSync(path.join(resources, 'default_app.asar'), { force: true });

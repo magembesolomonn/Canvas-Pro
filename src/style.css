@@ -2581,16 +2581,6 @@ body.light-mode .settings-search input:focus-visible {
 .settings-button:hover {
   background: #ffffff1c;
 }
-.settings-button-primary {
-  border-color: transparent;
-  background: var(--text);
-  color: var(--bg-primary);
-}
-.settings-button-primary:hover {
-  background: var(--text);
-  color: var(--bg-primary);
-  filter: brightness(1.08);
-}
 .settings-keys {
   flex: none;
   padding: 2px 7px;
@@ -2790,8 +2780,11 @@ body.light-mode .settings-button {
 body.light-mode .settings-button:hover {
   background: #f0f0f2;
 }
+/* The update action wears the same quiet fill as every other Settings button
+   in dark mode; light mode lifts it to a filled primary pill. */
 body.light-mode .settings-button-primary,
 body.light-mode .settings-button-primary:hover {
+  border-color: transparent;
   background: var(--text);
   color: var(--bg-primary);
   filter: brightness(1.08);
@@ -6829,3 +6822,15 @@ body.light-mode #settings-update-progress::-webkit-progress-value {
   background: var(--accent);
 }
 
+
+/* Motion and contrast preferences apply everywhere, including islands,
+   toasts, the sidebar and canvas controls, not only the preview. */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+@media (prefers-contrast: more){
+  :root{--line:#ffffff66;--line-field:#ffffff80;--fill-hover:#ffffff1f;--fill-active:#ffffff33;--focus:#ffffff;--muted:#c8c8c8;--section-ink:#c8c8c8}
+  body.light-mode{--line:#8a8a8a;--line-field:#8a8a8a;--fill-hover:#0000001f;--fill-active:#00000033;--focus:#000000;--muted:#3f3f3f;--section-ink:#3f3f3f}
+}
+.skip-link{position:fixed;top:8px;left:8px;z-index:10000;padding:8px 12px;border-radius:6px;background:var(--surface-menu);color:var(--text);transform:translateY(-200%)}
+.skip-link:focus{transform:none;outline:1px solid var(--focus)}

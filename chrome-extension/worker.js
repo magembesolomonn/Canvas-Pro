@@ -8,6 +8,16 @@ function native(message){return new Promise((resolve,reject)=>chrome.runtime.sen
  return reject(new Error(message));
 }if(!response?.ok)return reject(new Error(response?.error||'Canvas Pro did not respond.'));resolve(response);}));}
 async function badge(text,error=false){await chrome.action.setBadgeText({text});await chrome.action.setBadgeBackgroundColor({color:error?'#a24949':'#3478d5'});}
+// Remember only the tabs the person has actually used for capture. Worker
+// wake-ups then re-inject those tabs instead of every open web page.
+async function rememberTab(tabId){
+  if(!Number.isInteger(tabId))return;
+  try{
+    const key='usedTabs',all=(await chrome.storage.session.get(key))[key]||[];
+    if(all.includes(tabId))return;
+    await chrome.storage.session.set({[key]:[...all,tabId].slice(-200)});
+  }catch{}
+}
 async function progress(value,tabId){
  await chrome.storage.session.set({lastCapture:value});
  for(const id of new Set((Array.isArray(tabId)?tabId:[tabId]).filter(Boolean))){
@@ -61,13 +71,15 @@ async function captureThumbnail(item){
 }
 async function sendCapture(items,folder,tabId,notice='',activityId){
  if(!items?.length)throw new Error('No items selected.');
+  await rememberTab(tabId);
  const id=activityId||crypto.randomUUID(),title=items.length===1?items[0].title:items.length+' captures';
  const previews=await Promise.all(items.map(async item=>{const thumb=await captureThumbnail(item);return {title:item.title,kind:item.kind,thumbnail:thumb.url||'',thumbnailData:thumb.data||'',mediaUrl:item.kind==='image'?item.mediaUrl:'',poster:item.poster||''};}));
  let latest={id,title,kind:items[0].kind,state:'queued',total:items.length,done:0,notice,items:previews};
  await progress(latest,tabId);await badge('…');
  try{const options=await chrome.storage.local.get('folder');const result=await native({op:'capture',items,folder:folder??options.folder??''});
  if(!result?.jobId)throw new Error('Canvas Pro did not accept the capture.');
- for(let attempt=0;attempt<1200;attempt++){const {job}=await native({op:'status',jobId:result.jobId});latest={...job,id,title,kind:items[0].kind,notice,items:previews.map((item,index)=>({...item,state:job.results?.[index]?.state||(index===(job.done||0)?job.phase||'saving':'queued'),error:job.results?.[index]?.error||''}))};await progress(latest,tabId);if(['complete','failed'].includes(job.state)){await badge(job.errors.length?'!':String(job.imported+job.duplicates),!!job.errors.length);return job;}await new Promise(resolve=>setTimeout(resolve,500));}
+ let pollDelay=250;
+  for(let attempt=0;attempt<1200;attempt++){const {job}=await native({op:'status',jobId:result.jobId});latest={...job,id,title,kind:items[0].kind,notice,items:previews.map((item,index)=>({...item,state:job.results?.[index]?.state||(index===(job.done||0)?job.phase||'saving':'queued'),error:job.results?.[index]?.error||''}))};await progress(latest,tabId);if(['complete','failed'].includes(job.state)){await badge(job.errors.length?'!':String(job.imported+job.duplicates),!!job.errors.length);return job;}await new Promise(resolve=>setTimeout(resolve,pollDelay));pollDelay=Math.min(2000,Math.round(pollDelay*1.15));}
  throw new Error('Capture is taking longer than expected. Check Canvas Pro.');
  }catch(error){await badge('!',true);await progress({...latest,state:'failed',errors:[error.message]},tabId);throw error;}
 }
@@ -114,6 +126,7 @@ async function fullPage(tab){
   }
   if(!canvas)throw new Error('Could not capture this page.');
   const buffer=new Uint8Array(await (await canvas.convertToBlob({type:'image/png'})).arrayBuffer());
+   canvas=null;ctx=null;
   let binary='';for(let i=0;i<buffer.length;i+=32768)binary+=String.fromCharCode(...buffer.subarray(i,i+32768));
   return sendCapture([{kind:'screenshot',title:(tab.title||'Web page')+' full page',pageTitle:tab.title,pageUrl:tab.url,dataUrl:'data:image/png;base64,'+btoa(binary),width:canvas.width,height:canvas.height}],undefined,tab.id);
 }
@@ -136,8 +149,10 @@ async function reinjectInto(tabId){
  try{await chrome.scripting.executeScript({target:{tabId},files:PAGE_SCRIPTS});return true;}catch{return false;}
 }
 async function reinjectQuickSave(){
- let tabs=[];try{tabs=await chrome.tabs.query({});}catch{return;}
- for(const tab of tabs){
+ let ids=[];try{ids=(await chrome.storage.session.get('usedTabs')).usedTabs||[];}catch{return;}
+ if(!ids.length)return;
+ for(const tabId of ids){
+  let tab;try{tab=await chrome.tabs.get(tabId);}catch{continue;}
   const url=String(tab?.url||tab?.pendingUrl||'');
   if(!/^https?:\/\//i.test(url))continue;
   if(/^https?:\/\/(?:[a-z0-9-]+\.)*(?:chrome|edge|devtools|chrome-extension|about|view-source)\b/i.test(url))continue;

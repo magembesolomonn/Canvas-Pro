@@ -22,7 +22,7 @@ function assertPublicHost(host){
   return new Promise((resolve,reject)=>{
     dns.lookup(host,{all:true},(error,addresses)=>{
       if(error)return reject(error);
-      if(!(addresses||[]).some(entry=>isPublicAddress(entry.address)))return reject(new Error('Automatic previews require a public address.'));
+      if(!(addresses||[]).length||!(addresses||[]).every(entry=>isPublicAddress(entry.address)))return reject(new Error('Automatic previews require a public address.'));
       resolve();
     });
   });

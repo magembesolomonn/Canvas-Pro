@@ -1,6 +1,6 @@
 {
   "name": "canvas-pro",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "private": true,
   "description": "A native Mac library and browser capture companion",
   "main": "electron/main.cjs",
@@ -8,6 +8,7 @@
     "start": "electron .",
     "test": "node --test tests/*.test.cjs",
     "check": "node scripts/check.cjs",
+    "build:fuses": "node scripts/set-fuses.cjs",
     "build:mac": "npm run build:native && node scripts/build-mac.cjs",
     "update:mac": "node scripts/update-mac.cjs",
     "build:native": "node scripts/build-native.cjs",
@@ -15,6 +16,8 @@
     "test:integration": "electron tests/smoke-electron.cjs && electron tests/paste-smoke-electron.cjs",
     "build:icon": "node scripts/build-icon.cjs",
     "install:extension": "node scripts/install-extension-bridge.cjs",
+    "generate:update-key": "node scripts/generate-update-key.cjs",
+    "sign:update": "node scripts/sign-update.cjs",
     "test:browser": "node tests/browser-extension.cjs",
     "test:trash": "electron tests/context-trash-electron.cjs",
     "build:viewers": "node scripts/build-viewers.cjs",
@@ -44,6 +47,7 @@
     "shot": "electron tests/library-shot-electron.cjs"
   },
   "devDependencies": {
+    "@electron/fuses": "^2.1.3",
     "@huggingface/transformers": "^3.8.1",
     "@jspawn/ghostscript-wasm": "^0.0.2",
     "@mozilla/readability": "^0.6.0",

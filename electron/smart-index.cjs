@@ -73,10 +73,28 @@ const visualRetryDelays=[1,5,30,60].map(minutes=>minutes*60000);
 const colors={red:[210,55,55],orange:[225,135,40],yellow:[220,205,60],green:[65,150,75],blue:[50,110,200],purple:[135,75,175],pink:[215,125,165],brown:[125,90,55],black:[25,25,25],white:[235,235,235],grey:[135,135,135]};
 function palette(image){if(!image||image.isEmpty())return [];const {width,height}=image.getSize(),scale=Math.min(1,64/Math.max(width,height));const tiny=scale===1?image:image.resize({width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))});const bytes=tiny.toBitmap(),bins=new Map();for(let i=0;i<bytes.length;i+=4){if(bytes[i+3]<128)continue;const b=bytes[i],g=bytes[i+1],r=bytes[i+2],key=(r>>5)*64+(g>>5)*8+(b>>5),bin=bins.get(key)||[0,0,0,0];bin[0]+=r;bin[1]+=g;bin[2]+=b;bin[3]++;bins.set(key,bin);}const chosen=[];for(const bin of [...bins.values()].sort((a,b)=>b[3]-a[3])){const rgb=bin.slice(0,3).map(v=>Math.round(v/bin[3]));if(chosen.some(c=>c.rgb.reduce((n,v,i)=>n+(v-rgb[i])**2,0)<1800))continue;const hex='#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join('');let color='grey',distance=Infinity;for(const [name,value]of Object.entries(colors)){const d=value.reduce((n,v,i)=>n+(v-rgb[i])**2,0);if(d<distance){distance=d;color=name;}}chosen.push({hex,name:color,rgb});if(chosen.length===6)break;}return chosen.map(({hex,name})=>({hex,name}));}
 class SmartIndex{
- constructor({library,thumbnail,nativeImage,onUpdate=()=>{},onWork=()=>{},delay=()=>650,testMode=false}){Object.assign(this,{library,thumbnail,nativeImage,onUpdate,onWork,delay});this.db=library.db;this.closed=false;this.paused=testMode;this.powerPause=null;this.queue=new Set();this.db.exec(`CREATE TABLE IF NOT EXISTS asset_analysis(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,summary TEXT NOT NULL DEFAULT '{}',text TEXT NOT NULL DEFAULT '',vector BLOB,model TEXT,version INTEGER NOT NULL DEFAULT 0);
+ constructor({library,thumbnail,nativeImage,onUpdate=()=>{},onWork=()=>{},delay=()=>650,testMode=false}){Object.assign(this,{library,thumbnail,nativeImage,onUpdate,onWork,delay});this.db=library.db;this.closed=false;this.paused=testMode;this.powerPause=null;this.queue=new Set();this.textQueue=new Set();this.stateCache=null;this.db.exec(`CREATE TABLE IF NOT EXISTS asset_analysis(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,summary TEXT NOT NULL DEFAULT '{}',text TEXT NOT NULL DEFAULT '',vector BLOB,model TEXT,version INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS asset_chunks(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,chunk INTEGER NOT NULL,vector BLOB NOT NULL,model TEXT NOT NULL);CREATE VIRTUAL TABLE IF NOT EXISTS smart_fts USING fts5(id UNINDEXED,body,tokenize='unicode61');CREATE TRIGGER IF NOT EXISTS smart_delete AFTER DELETE ON assets BEGIN DELETE FROM smart_fts WHERE id=old.id;END;`);this.db.prepare("UPDATE asset_analysis SET summary=json_set(summary,'$.visualRetry',MIN(json_extract(summary,'$.visualRetry'),?), '$.visualAttempts',1) WHERE json_extract(summary,'$.visualRetry') IS NOT NULL AND json_extract(summary,'$.visualAttempts') IS NULL").run(Date.now()+visualRetryDelays[0]);library.onAssetChanged=id=>this.changed(id);this.timer=setTimeout(()=>this.pump(),1500);this.timer.unref();}
  info(id){const row=this.db.prepare('SELECT summary FROM asset_analysis WHERE id=?').get(id);return row?JSON.parse(row.summary):null;}
- changed(id){if(this.closed)return;try{const smart=this.indexText(id);this.onUpdate({id,smart});if(this.info(id)?.state!=='indexed'||(['url','webloc'].includes(this.library.asset(id).ext)&&!this.info(id)?.palette?.length)){if(this.queue.size<2000)this.queue.add(id);}}catch{}this.schedule();this.onWork();}
+ changed(id){
+  if(this.closed)return;
+  try{
+   if(this.textQueue.size<2000)this.textQueue.add(id);
+   if(this.info(id)?.state!=='indexed'||(['url','webloc'].includes(this.library.asset(id).ext)&&!this.info(id)?.palette?.length)){
+    if(this.queue.size<2000)this.queue.add(id);
+   }
+  }catch{}
+  this.schedule();this.onWork();
+ }
+ // Coalesce bookkeeping for many changed assets into one transaction.
+ flushTextQueue(){
+  if(!this.textQueue.size)return;
+  const ids=[...this.textQueue].slice(0,50);
+  for(const id of ids)this.textQueue.delete(id);
+  this.db.exec('BEGIN');
+  try{for(const id of ids){try{const smart=this.indexText(id);this.onUpdate({id,smart});}catch{}}this.db.exec('COMMIT');}
+  catch(e){this.db.exec('ROLLBACK');throw e;}
+ }
  indexText(id){const a=this.library.asset(id),analysis=this.db.prepare('SELECT summary,text FROM asset_analysis WHERE id=?').get(id),meta=this.db.prepare('SELECT json FROM capture_metadata WHERE id=?').get(id),m=meta?JSON.parse(meta.json):{},info=m.linkPreview||{},tags=[...new Set([...(analysis?JSON.parse(analysis.summary).tags||[]:[]),...(info.tags||[]),...(m.kind==='content'?[m.selection?'quote':'note','text']:[])])];const summary={...(analysis?JSON.parse(analysis.summary):{}),tags};this.db.prepare("INSERT INTO asset_analysis(id,summary) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET summary=excluded.summary").run(id,JSON.stringify(summary));let articleText='';if(info.article){try{articleText=JSON.parse(fs.readFileSync(path.join(this.library.root,'thumbnails',id+'.reader.json'),'utf8')).blocks.map(b=>b.text).join(' ').slice(0,50000);}catch{}}const body=[articleText,a.name,summary.originalName||'',summary.caption||'',a.notes,a.url,a.tags,a.folders,m.pageTitle,m.author,m.description,m.textExcerpt,info.title,info.description,JSON.stringify(info.details||{}),...tags,...moodWords(summary.palette),analysis?.text||''].filter(Boolean).join(' ').slice(0,120000);this.db.exec('SAVEPOINT smart_text');try{this.db.prepare('DELETE FROM smart_fts WHERE id=?').run(id);this.db.prepare('INSERT INTO smart_fts(id,body) VALUES(?,?)').run(id,body);this.db.exec('RELEASE smart_text');}catch(e){this.db.exec('ROLLBACK TO smart_text; RELEASE smart_text');throw e;}return summary;}
  put(id,patch){
    if(this.library.deleting.has(id))return;
@@ -100,8 +118,8 @@ class SmartIndex{
    this.onUpdate({id,smart:result});
    return result;
  }
- state(){const total=this.db.prepare('SELECT COUNT(*) n FROM assets WHERE trash=0').get().n,indexed=this.db.prepare('SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE s.version=1 AND a.trash=0').get().n,visual=this.db.prepare('SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE s.model=? AND s.vector IS NOT NULL AND a.trash=0').get(MODEL).n;const visualRemaining=this.db.prepare(`SELECT COUNT(*) n FROM assets a LEFT JOIN asset_analysis s ON s.id=a.id
-     WHERE a.trash=0 AND (s.vector IS NULL OR s.model IS NOT ?) AND a.ext IN (${VISUAL_EXTENSIONS})`).get(MODEL).n;const failed=this.db.prepare("SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE a.trash=0 AND json_extract(s.summary,'$.state')='unavailable'").get().n;return {total,indexed,visual,visualRemaining,failed,paused:this.paused,powerPause:this.powerPause,running:!!this.active};}
+ state(){if(this.stateCache&&this.stateCache.expires>Date.now())return this.stateCache.value;const total=this.db.prepare('SELECT COUNT(*) n FROM assets WHERE trash=0').get().n,indexed=this.db.prepare('SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE s.version=1 AND a.trash=0').get().n,visual=this.db.prepare('SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE s.model=? AND s.vector IS NOT NULL AND a.trash=0').get(MODEL).n;const visualRemaining=this.db.prepare(`SELECT COUNT(*) n FROM assets a LEFT JOIN asset_analysis s ON s.id=a.id
+     WHERE a.trash=0 AND (s.vector IS NULL OR s.model IS NOT ?) AND a.ext IN (${VISUAL_EXTENSIONS})`).get(MODEL).n;const failed=this.db.prepare("SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE a.trash=0 AND json_extract(s.summary,'$.state')='unavailable'").get().n;const value={total,indexed,visual,visualRemaining,failed,paused:this.paused,powerPause:this.powerPause,running:!!this.active};this.stateCache={expires:Date.now()+500,value};return value;}
  pause(value){this.paused=!!value;if(this.paused)this.activeController?.abort();this.schedule();this.onWork();return this.state();}
  setPowerPause(reason){
    if(this.powerPause===reason)return;
@@ -111,7 +129,7 @@ class SmartIndex{
    this.onWork();
  }
  schedule(){clearTimeout(this.timer);if(!this.closed&&!this.paused&&!this.powerPause)this.timer=setTimeout(()=>this.pump(),this.delay());}
- async pump(){if(this.closed||this.paused||this.powerPause||this.active)return;let id=this.queue.values().next().value;if(id)this.queue.delete(id);else id=this.db.prepare('SELECT a.id FROM assets a LEFT JOIN asset_analysis s ON s.id=a.id WHERE a.trash=0 AND COALESCE(s.version,0)<1 LIMIT 1').get()?.id;if(!id)return;const controller=this.activeController=new AbortController();this.active=this.analyze(id,controller.signal);try{await this.active;}finally{if(controller.signal.aborted&&!this.closed&&this.queue.size<2000)this.queue.add(id);this.activeController=null;this.active=null;this.schedule();}}
+ async pump(){if(this.closed||this.paused||this.powerPause||this.active)return;this.flushTextQueue();let id=this.queue.values().next().value;if(id)this.queue.delete(id);else id=this.db.prepare('SELECT a.id FROM assets a LEFT JOIN asset_analysis s ON s.id=a.id WHERE a.trash=0 AND COALESCE(s.version,0)<1 LIMIT 1').get()?.id;if(!id)return;const controller=this.activeController=new AbortController();this.active=this.analyze(id,controller.signal);try{await this.active;}finally{if(controller.signal.aborted&&!this.closed&&this.queue.size<2000)this.queue.add(id);this.activeController=null;this.active=null;this.schedule();}}
  async analyze(id,signal){
    try{
      signal?.throwIfAborted();

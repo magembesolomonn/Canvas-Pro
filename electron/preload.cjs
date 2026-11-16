@@ -107,7 +107,7 @@ contextBridge.exposeInMainWorld('library', {
   startDrag: id => ipcRenderer.send('drag-file',id),
   prepareDrag: ids => ipcRenderer.send('prepare-drag',ids),
   openLink: id => ipcRenderer.invoke('open-link',id),
-  list: () => ipcRenderer.invoke('list'),
+  list: (limit) => ipcRenderer.invoke('list',limit),
   update: (id, changes) => ipcRenderer.invoke('update', id, changes),
   addFolder: name => ipcRenderer.invoke('folder', name),
   importDialog: (folder, directory) => ipcRenderer.invoke('import-dialog', folder, directory),

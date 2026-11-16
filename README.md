@@ -83,12 +83,16 @@ Manual acceptance checklist:
 
 ## Later work
 
-Colour extraction/search, browser capture extension, multi-selection and bulk edits, similar-image matching, richer design-format providers, progress cancellation, library location switching, signed installers and automatic backups remain future work. This initial version is not full Eagle feature parity.
+Colour extraction/search, browser capture extension, multi-selection and bulk edits, similar-image matching, richer design-format providers, progress cancellation, library location switching, notarized installers and automatic backups remain future work. Release checksums are now signed; see “Signed updates” below. This initial version is not full Eagle feature parity.
 
 
 ## Media and performance update (0.2)
 
 The existing app can be updated in place with `npm run update:mac`. Quit and reopen it afterwards. This replaces only app code, keeps rollback code under `.updates/`, and leaves the asset library intact. Recompile the native media helper with `npm run build:media` if its Swift source changes. `npm run build:mac` includes that helper in a fresh bundle.
+
+### Optional release signing
+
+Updates work with an ordinary SHA-256 checksum file exactly as before — nothing extra is required, and no Apple account is involved. If you also publish an `update.sig` asset, the app verifies it before installing. To generate one, run `npm run sign:update -- <path-to-SHA256SUMS.txt> [private-key.pem] [update.sig]`; create the free local key once with `npm run generate:update-key`. The private key stays outside the app bundle (`audits/update-signing.key`, gitignored) and only the public half is embedded in `electron/update-signing.cjs`. Setting `CANVAS_REQUIRE_SIGNED_UPDATES=1` makes signatures mandatory; otherwise they are optional. `EXPECTED_TEAM_ID` in that file is empty by default and only applies if you ever sign with a Developer ID. Builds flip Electron fuses via `npm run build:fuses`; `RunAsNode` stays enabled because the browser bridge launches the app binary as Node.
 
 - Paste supports Electron 45's asynchronous clipboard API, copied images, Finder files, direct web media URLs and website bookmarks. Recognized media downloads have a 100 MB limit. Other/unavailable web links are retained as `.webloc` bookmarks with their source URL; pages are never executed inside the app.
 - Audio/video cards play on hover. Video hover playback is muted; audio hover playback is audible. Leaving the card, scrolling, opening a full preview or switching app stops hover playback. Only one hover player is active.

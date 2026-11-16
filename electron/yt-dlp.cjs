@@ -1,9 +1,18 @@
-const fs=require('node:fs'),path=require('node:path'),zlib=require('node:zlib'),{spawn,execFile}=require('node:child_process'),{pipeline}=require('node:stream/promises'),{Readable}=require('node:stream');
+const fs=require('node:fs'),path=require('node:path'),zlib=require('node:zlib'),crypto=require('node:crypto'),{spawn,execFile}=require('node:child_process'),{pipeline}=require('node:stream/promises'),{Readable,Transform}=require('node:stream');
 
+// Both helpers are pinned to a version and a byte-for-byte checksum. The app
+// verifies the checksum on every launch and again after each download, so a
+// changed or truncated binary is never executed.
+const YTDLP_VERSION='2026.10.26';
 const YTDLP='yt-dlp_macos';
-const YTDLP_URL='https://github.com/yt-dlp/yt-dlp/releases/latest/download/'+YTDLP;
-// Static arm64 macOS build; gzipped to keep the on-demand download smaller.
-const FFMPEG_URL='https://github.com/eugeneware/ffmpeg-static/releases/download/ffmpeg-darwin-arm64.gz';
+const YTDLP_URL=`https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/${YTDLP}`;
+const YTDLP_SHA256='0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa';
+const YTDLP_SIZE=37466304;
+const FFMPEG_VERSION='b6.1.1';
+const FFMPEG_URL=`https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_VERSION}/ffmpeg-darwin-arm64.gz`;
+const FFMPEG_GZ_SHA256='8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa';
+const FFMPEG_SHA256='a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584';
+const FFMPEG_SIZE=45568216;
 
 function canRun(bin,args=['-version']){
   try{require('node:child_process').execFileSync(bin,args,{stdio:'ignore',timeout:3000});return true;}catch{return false;}
@@ -29,7 +38,16 @@ function findJSRuntime(){
   }
   return null;
 }
-
+function hashing(hash){return new Transform({transform(chunk,_encoding,callback){hash.update(chunk);callback(null,chunk);}});}
+async function verified(file,expected,size){
+  try{
+    const stat=await fs.promises.stat(file);
+    if(size&&stat.size!==size)return false;
+    const hash=crypto.createHash('sha256');
+    for await(const chunk of fs.createReadStream(file))hash.update(chunk);
+    return hash.digest('hex')===expected;
+  }catch{return false;}
+}
 function hostname(value){
   try{return new URL(value).hostname.toLowerCase();}catch{return '';}
 }
@@ -88,17 +106,24 @@ class YtDlp {
     this.jsRuntime=findJSRuntime();
   }
   async ensure(signal){
-    try{await fs.promises.access(this.bin,fs.constants.X_OK);return this.bin;}catch{}
+    try{
+      await fs.promises.access(this.bin,fs.constants.X_OK);
+      if(await verified(this.bin,YTDLP_SHA256,YTDLP_SIZE))return this.bin;
+    }catch{}
+    await fs.promises.rm(this.bin,{force:true}).catch(()=>{});
     if(this.installing) return this.installing;
     this.installing=(async()=>{
       await fs.promises.mkdir(this.dir,{recursive:true});
       const tmp=this.bin+'.tmp-'+process.pid;
-      const res=await this.fetcher(YTDLP_URL,{redirect:'follow',signal});
-      if(!res.ok||!res.body) throw new Error('Could not download yt-dlp ('+res.status+').');
-      await pipeline(Readable.fromWeb(res.body),fs.createWriteStream(tmp,{mode:0o755}),{signal});
-      await fs.promises.chmod(tmp,0o755);
-      await fs.promises.rename(tmp,this.bin);
-      return this.bin;
+      try{
+        const res=await this.fetcher(YTDLP_URL,{redirect:'follow',signal});
+        if(!res.ok||!res.body) throw new Error('Could not download yt-dlp ('+res.status+').');
+        await pipeline(Readable.fromWeb(res.body),fs.createWriteStream(tmp,{mode:0o755}),{signal});
+        if(!await verified(tmp,YTDLP_SHA256,YTDLP_SIZE))throw new Error('yt-dlp failed its checksum verification. The download was discarded.');
+        await fs.promises.chmod(tmp,0o755);
+        await fs.promises.rename(tmp,this.bin);
+        return this.bin;
+      }finally{await fs.promises.rm(tmp,{force:true}).catch(()=>{});}
     })().finally(()=>{this.installing=null;});
     return this.installing;
   }
@@ -107,19 +132,24 @@ class YtDlp {
     if(system) return system;
     try{
       await fs.promises.access(this.ffmpeg,fs.constants.X_OK);
-      if(canRun(this.ffmpeg,['-version'])) return this.ffmpeg;
-      await fs.promises.unlink(this.ffmpeg).catch(()=>{});
+      if(await verified(this.ffmpeg,FFMPEG_SHA256,FFMPEG_SIZE)&&canRun(this.ffmpeg,['-version']))return this.ffmpeg;
     }catch{}
+    await fs.promises.rm(this.ffmpeg,{force:true}).catch(()=>{});
     if(this.installingFFmpeg) return this.installingFFmpeg;
     this.installingFFmpeg=(async()=>{
       await fs.promises.mkdir(this.dir,{recursive:true});
       const tmp=this.ffmpeg+'.tmp-'+process.pid;
-      const res=await this.fetcher(FFMPEG_URL,{redirect:'follow',signal});
-      if(!res.ok||!res.body) throw new Error('Could not download ffmpeg ('+res.status+').');
-      await pipeline(Readable.fromWeb(res.body), zlib.createGunzip(), fs.createWriteStream(tmp,{mode:0o755}),{signal});
-      await fs.promises.chmod(tmp,0o755);
-      await fs.promises.rename(tmp,this.ffmpeg);
-      return this.ffmpeg;
+      try{
+        const res=await this.fetcher(FFMPEG_URL,{redirect:'follow',signal});
+        if(!res.ok||!res.body) throw new Error('Could not download ffmpeg ('+res.status+').');
+        const gzHash=crypto.createHash('sha256'),binHash=crypto.createHash('sha256');
+        await pipeline(Readable.fromWeb(res.body),hashing(gzHash),zlib.createGunzip(),hashing(binHash),fs.createWriteStream(tmp,{mode:0o755}),{signal});
+        if(gzHash.digest('hex')!==FFMPEG_GZ_SHA256||binHash.digest('hex')!==FFMPEG_SHA256||!await verified(tmp,FFMPEG_SHA256,FFMPEG_SIZE))
+          throw new Error('ffmpeg failed its checksum verification. The download was discarded.');
+        await fs.promises.chmod(tmp,0o755);
+        await fs.promises.rename(tmp,this.ffmpeg);
+        return this.ffmpeg;
+      }finally{await fs.promises.rm(tmp,{force:true}).catch(()=>{});}
     })().finally(()=>{this.installingFFmpeg=null;});
     return this.installingFFmpeg;
   }
@@ -188,6 +218,7 @@ class YtDlp {
     if(/not available|unavailable|removed|deleted/i.test(t)) return 'This video is unavailable.';
     if(/Unsupported URL|No video formats|Requested format is not available/i.test(t)) return 'This page does not contain a downloadable video in a supported format.';
     if(/ffmpeg|merg/i.test(t)&&/not found|No such file/i.test(t)) return 'A required media tool was not found to merge the highest-quality streams.';
+    if(/checksum verification/i.test(t)) return 'A required media tool failed its security check. Try again later.';
     return t.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).slice(-2).join(' ')||'Could not download this video.';
   }
 }

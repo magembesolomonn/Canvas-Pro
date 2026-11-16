@@ -10,7 +10,7 @@ class Library {
     fs.mkdirSync(path.join(root, 'originals'), { recursive: true });
     fs.mkdirSync(path.join(root, 'thumbnails'), { recursive: true });
     this.db = new DatabaseSync(path.join(root, 'library.sqlite'));
-    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
+    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-8000; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, name TEXT NOT NULL, ext TEXT NOT NULL, size INTEGER NOT NULL, hash TEXT UNIQUE NOT NULL, stored TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', folders TEXT NOT NULL DEFAULT '[]', notes TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '', rating INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, imported TEXT NOT NULL, trash INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS folders (name TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS capture_metadata (id TEXT PRIMARY KEY REFERENCES assets(id), json TEXT NOT NULL);
@@ -30,10 +30,11 @@ class Library {
     this.assetStatement=this.db.prepare('SELECT * FROM assets WHERE id=?');
     this.updateStatements=new Map();
     this.deleting=new Set();
+    this.revision=0;this.navCache=null;
     recoverDeletions(this);
     recoverImports(this);
   }
-  list(ids) { const where=ids?' WHERE assets.id IN ('+ids.map(()=>'?').join(',')+')':'';return this.db.prepare('SELECT assets.*, assets.rowid AS importOrder, aspect_ratios.ratio AS aspectRatio, capture_metadata.json AS captureJSON, asset_analysis.summary AS smartJSON FROM assets LEFT JOIN aspect_ratios ON assets.id=aspect_ratios.id LEFT JOIN capture_metadata ON assets.id=capture_metadata.id LEFT JOIN asset_analysis ON assets.id=asset_analysis.id'+where+' ORDER BY imported DESC, assets.rowid DESC').all(...(ids||[])).map(a => ({ ...a, captureMetadata: a.captureJSON?JSON.parse(a.captureJSON):null, captureJSON:undefined,smart:a.smartJSON?JSON.parse(a.smartJSON):null,smartJSON:undefined, tags: JSON.parse(a.tags), folders: JSON.parse(a.folders) })); }
+  list(ids,limit=0) { const where=ids?' WHERE assets.id IN ('+ids.map(()=>'?').join(',')+')':'';const params=[...(ids||[])];let sql='SELECT assets.*, assets.rowid AS importOrder, aspect_ratios.ratio AS aspectRatio, capture_metadata.json AS captureJSON, asset_analysis.summary AS smartJSON FROM assets LEFT JOIN aspect_ratios ON assets.id=aspect_ratios.id LEFT JOIN capture_metadata ON assets.id=capture_metadata.id LEFT JOIN asset_analysis ON assets.id=asset_analysis.id'+where+' ORDER BY imported DESC, assets.rowid DESC';if(Number.isFinite(limit)&&limit>0){sql+=' LIMIT ?';params.push(Math.floor(limit));}return this.db.prepare(sql).all(...params).map(a => ({ ...a, captureMetadata: a.captureJSON?JSON.parse(a.captureJSON):null, captureJSON:undefined,smart:a.smartJSON?JSON.parse(a.smartJSON):null,smartJSON:undefined, tags: JSON.parse(a.tags), folders: JSON.parse(a.folders) })); }
   page({view='all',folder='',tag='',sort='new',query='',matches=[],extensions=[],bookmark='',excludeBookmarks=false,other=false,knownExtensions=[],offset=0,limit=120}={}){
     const where=['a.trash=?'],params=[view==='trash'?1:0];
     const clause=(sql,...values)=>{where.push(sql);params.push(...values);};
@@ -63,6 +64,7 @@ class Library {
     return {assets:rows.map(row=>records.get(row.id)),total};
   }
   navSummary(){
+    if(this.navCache&&this.navCache.revision===this.revision)return this.navCache.value;
     const counts=this.db.prepare(`SELECT COUNT(*) FILTER(WHERE trash=0) AS "all", COUNT(*) FILTER(WHERE trash=1) AS trash,
       COUNT(*) FILTER(WHERE trash=0 AND favorite=1) AS favorites,
       COUNT(*) FILTER(WHERE trash=0 AND json_array_length(folders)>0) AS categorised FROM assets`).get();
@@ -70,14 +72,16 @@ class Library {
     const tags=this.db.prepare('SELECT DISTINCT value FROM assets,json_each(assets.tags) WHERE trash=0 ORDER BY value').all().map(row=>row.value);
     const members=this.db.prepare('SELECT value,COUNT(*) AS count FROM assets,json_each(assets.folders) WHERE trash=0 GROUP BY value').all().map(row=>[row.value,row.count]);
     const linkTypes=this.db.prepare("SELECT json_extract(m.json,'$.linkPreview.type') AS type,COUNT(*) AS count FROM capture_metadata m JOIN assets a ON a.id=m.id WHERE a.trash=0 AND json_extract(m.json,'$.linkPreview.type') IN ('social','recipe') GROUP BY type").all();
-    return {counts,extensions,tags,members,linkTypes};
+    const value={counts,extensions,tags,members,linkTypes};
+    this.navCache={revision:this.revision,value};
+    return value;
   }
   folders() { return this.db.prepare('SELECT name FROM folders ORDER BY name').all().map(f => f.name); }
   folderRecords(){return this.db.prepare('SELECT id,name FROM folders ORDER BY name').all();}
   addFolder(name) {
     name = String(name).trim();
     if (!name || name.length > 120) throw new Error('Use a folder name between 1 and 120 characters.');
-    this.db.prepare('INSERT OR IGNORE INTO folders(name,id) VALUES (?,?)').run(name,crypto.randomUUID());
+    this.db.prepare('INSERT OR IGNORE INTO folders(name,id) VALUES (?,?)').run(name,crypto.randomUUID());this.revision++;
     return this.folders();
   }
   filenameMatches(query, extensions = []) {
@@ -124,14 +128,14 @@ class Library {
     const a=this.asset(id);
     if(a.trash||a.missing||this.deleting.has(id))return false;
     this.db.prepare('UPDATE assets SET trash=1,missing=1 WHERE id=?').run(id);
-    this.onAssetChanged?.(id);
+    this.revision++;this.onAssetChanged?.(id);
     return true;
   }
   markPresent(id) {
     const a=this.asset(id);
     if(!a.missing)return false;
     this.db.prepare('UPDATE assets SET trash=0,missing=0 WHERE id=?').run(id);
-    this.onAssetChanged?.(id);
+    this.revision++;this.onAssetChanged?.(id);
     return true;
   }
   async importFile(source, folder, {signal} = {}) {
@@ -180,7 +184,7 @@ class Library {
       try {
       if(['url','webloc'].includes(ext)&&snapshot.size<1024*1024){const text=await fs.promises.readFile(dest,'utf8');const value=ext==='url'?text.match(/^URL\s*=\s*(.+)$/im)?.[1]:text.match(/<key>URL<\/key>\s*<string>([\s\S]*?)<\/string>/i)?.[1];if(value){try{const url=new URL(value.trim().replaceAll('&amp;','&'));if(['http:','https:'].includes(url.protocol))this.update(id,{url:url.href});}catch{}}}
       } catch { /* URL recovery can retry when the bookmark is opened. */ }
-      this.onAssetChanged?.(id);
+      this.revision++;this.onAssetChanged?.(id);
       return { imported: id };
     } finally {
       if (!retained) await fs.promises.rm(dest, { force: true });
@@ -204,12 +208,12 @@ class Library {
       else if (typeof v !== 'string') throw new Error('Invalid text');
       fields.push(key + '=?'); values.push(v);
     }
-    if(fields.length){const sql='UPDATE assets SET '+fields.join(',')+' WHERE id=?';if(!this.updateStatements.has(sql))this.updateStatements.set(sql,this.db.prepare(sql));this.updateStatements.get(sql).run(...values,id);this.onAssetChanged?.(id);}
+    if(fields.length){const sql='UPDATE assets SET '+fields.join(',')+' WHERE id=?';if(!this.updateStatements.has(sql))this.updateStatements.set(sql,this.db.prepare(sql));this.updateStatements.get(sql).run(...values,id);this.revision++;this.onAssetChanged?.(id);}
   }
   setCaptureMetadata(id,metadata){
     this.asset(id);const previous=this.db.prepare('SELECT json FROM capture_metadata WHERE id=?').get(id);const old=previous?JSON.parse(previous.json):{};
     const sources=[...new Set([...(old.sources||[]),old.pageUrl,metadata.pageUrl].filter(Boolean))].slice(-20);
-    this.db.prepare('INSERT INTO capture_metadata(id,json) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET json=excluded.json').run(id,JSON.stringify({...old,...metadata,sources}));this.onAssetChanged?.(id);
+    this.db.prepare('INSERT INTO capture_metadata(id,json) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET json=excluded.json').run(id,JSON.stringify({...old,...metadata,sources}));this.revision++;this.onAssetChanged?.(id);
   }
   selectedAssets(ids) {
     if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string')) throw new Error('Invalid selection.');
@@ -230,9 +234,9 @@ class Library {
       this.update(id,changes);
     }this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');if(operation.type==='trash'&&!operation.trash&&/original file is missing/i.test(String(e.message||'')))throw new Error('Nothing was restored: one of these files has no original in the library. Put it back in Finder, then restore it on its own.');throw e;}
   }
-  permanentDelete(ids,options){return permanentDelete(this,ids,options);}
-  renameCollection(oldName,newName){newName=String(newName).trim();if(!newName||newName.length>120)throw new Error('Use a collection name between 1 and 120 characters.');if(!this.folders().includes(oldName))throw new Error('Collection not found.');if(oldName===newName)return;if(this.folders().includes(newName))throw new Error('A collection with that name already exists.');this.db.exec('BEGIN');try{this.db.prepare('UPDATE folders SET name=? WHERE name=?').run(newName,oldName);for(const a of this.db.prepare('SELECT id,folders FROM assets').all()){const folders=JSON.parse(a.folders);if(folders.includes(oldName))this.update(a.id,{folders:folders.map(f=>f===oldName?newName:f)});}this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}}
-  removeCollection(name){if(!this.folders().includes(name))throw new Error('Collection not found.');this.db.exec('BEGIN');try{for(const a of this.db.prepare('SELECT id,folders FROM assets').all()){const folders=JSON.parse(a.folders);if(folders.includes(name))this.update(a.id,{folders:folders.filter(f=>f!==name)});}this.db.prepare('DELETE FROM folders WHERE name=?').run(name);this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}}
+  permanentDelete(ids,options){this.revision++;return permanentDelete(this,ids,options);}
+  renameCollection(oldName,newName){newName=String(newName).trim();if(!newName||newName.length>120)throw new Error('Use a collection name between 1 and 120 characters.');if(!this.folders().includes(oldName))throw new Error('Collection not found.');if(oldName===newName)return;if(this.folders().includes(newName))throw new Error('A collection with that name already exists.');this.db.exec('BEGIN');try{this.db.prepare('UPDATE folders SET name=? WHERE name=?').run(newName,oldName);for(const a of this.db.prepare('SELECT id,folders FROM assets').all()){const folders=JSON.parse(a.folders);if(folders.includes(oldName))this.update(a.id,{folders:folders.map(f=>f===oldName?newName:f)});}this.db.exec('COMMIT');this.revision++;}catch(e){this.db.exec('ROLLBACK');throw e;}}
+  removeCollection(name){if(!this.folders().includes(name))throw new Error('Collection not found.');this.db.exec('BEGIN');try{for(const a of this.db.prepare('SELECT id,folders FROM assets').all()){const folders=JSON.parse(a.folders);if(folders.includes(name))this.update(a.id,{folders:folders.filter(f=>f!==name)});}this.db.prepare('DELETE FROM folders WHERE name=?').run(name);this.db.exec('COMMIT');this.revision++;}catch(e){this.db.exec('ROLLBACK');throw e;}}
   setAspectRatios(entries) {
     const statement=this.db.prepare('INSERT INTO aspect_ratios(id,ratio) SELECT ?,? WHERE EXISTS(SELECT 1 FROM assets WHERE id=?) ON CONFLICT(id) DO UPDATE SET ratio=excluded.ratio');
     this.db.exec('BEGIN');try {for(const [id,ratio]of entries)if(typeof id==='string'&&Number.isFinite(ratio)&&ratio>0&&ratio<100000)statement.run(id,ratio,id);this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}

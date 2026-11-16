@@ -515,7 +515,8 @@ app.whenReady().then(async () => {
     isPackaged:app.isPackaged,
     fetchImpl:(url,options)=>net.fetch(url,options),
     onProgress:updateProgress,
-    quit:()=>app.quit()
+    quit:()=>app.quit(),
+    requireSignedManifest: !!process.env.CANVAS_REQUIRE_SIGNED_UPDATES
   });
   ipcMain.handle('update-check',event=>{trusted(event);return getUpdater().check();});
   ipcMain.handle('update-download',event=>{trusted(event);return getUpdater().download();});
@@ -767,9 +768,10 @@ app.whenReady().then(async () => {
     if(data.navigation)Object.assign(result,libraryNavigation());
     return result;
   });
-  ipcMain.handle('list', event => {
+  ipcMain.handle('list', (event,limit) => {
     trusted(event);
-    return { assets: library.list(), folders: library.folders(), root: library.root,canvases:canvasStore.list(),folderRecords:library.folderRecords(),prototype:!!process.env.CANVAS_PROTOTYPE,workbench:{icons:workbench.icons()} };
+    const capped=Number.isFinite(limit)?Math.max(1,Math.min(1000,Math.floor(limit))):0;
+    return { assets: library.list(null,capped), folders: library.folders(), root: library.root,canvases:canvasStore.list(),folderRecords:library.folderRecords(),prototype:!!process.env.CANVAS_PROTOTYPE,workbench:{icons:workbench.icons()} };
   });
   function checkedAssets(ids){return library.selectedAssets(ids);}
   async function deleteFromTrash(ids,empty=false){
@@ -953,17 +955,17 @@ app.whenReady().then(async () => {
   ]));
   createWindow();
   setImmediate(()=>originalsWatch.scan());
-  let lastFocusScan=0;
+  let lastFullScan=Date.now();
   app.on('browser-window-focus',()=>{
     const now=Date.now();
-    if(now-lastFocusScan<4000)return;
-    lastFocusScan=now;
+    if(now-lastFullScan<60000)return;
+    lastFullScan=now;
     originalsWatch.scan();
   });
-  powerMonitor.on('resume',()=>originalsWatch.scan());
+  powerMonitor.on('resume',()=>{lastFullScan=Date.now();originalsWatch.scan();});
   const bridgeDirectory=(process.env.ASSET_TEST_MODE||process.env.CANVAS_PROTOTYPE)?path.join(app.getPath('userData'),'Bridge'):path.join(app.getPath('appData'),'Canvas Pro/Bridge');
   videoDownloader=new YtDlp({root:app.getPath('userData'),fetcher:(url,options)=>net.fetch(url,options)});
-  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);},videoDownloader});
+  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);},videoDownloader,allowPrivateCapture:!!process.env.ASSET_TEST_MODE});
   try{await captureBridge.start();}catch(e){console.error('Browser capture bridge:',e.message);}
   setImmediate(()=>{
     try{

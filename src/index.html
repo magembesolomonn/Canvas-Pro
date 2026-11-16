@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' asset: data: blob:; media-src asset:; frame-src asset:; object-src 'none'; style-src 'self' 'sha256-IKhjRCvJlgA3VsuELN7fPr+PkBbifRzWqOb1Vk87ctU=' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' asset: data: blob:; worker-src 'self' blob:;"><title>Canvas Pro</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="notes.css"><link rel="stylesheet" href="sidebar.css"><link rel="stylesheet" href="islands.css"><link rel="stylesheet" href="select.css"></head>
 <body>
+<a class="skip-link" href="#gallery">Skip to library</a>
 <aside class="sidebar">
  <div class="window-space"><button id="toggle-sidebar" class="icon-button sidebar-toggle" title="Toggle sidebar · ⌘B" aria-label="Toggle sidebar" aria-pressed="true"></button></div><div class="brand"><span class="brand-icon">▦</span><strong>Canvas Pro</strong></div>
  <nav id="navigation"></nav>
@@ -74,7 +75,7 @@
  <div class="notes-footer"><span id="notes-status" role="status"></span><button id="notes-retry" type="button" hidden>Retry save</button></div>
 </main>
 <aside id="inspector" class="inspector"></aside>
-<div id="preview" class="preview" tabindex="-1" role="dialog" aria-modal="true" aria-label="File preview" hidden><div class="preview-drag-region" aria-hidden="true"></div><button id="close-preview" aria-label="Close preview" title="Close · Esc"></button><div class="preview-body"><div id="preview-content"></div></div><nav class="preview-bottom" aria-label="Preview navigation"><button id="previous" class="preview-arrow" aria-label="Previous file" title="Previous · Left arrow">‹</button><span id="preview-index" aria-live="polite" aria-atomic="true"></span><button id="next" class="preview-arrow" aria-label="Next file" title="Next · Left arrow">›</button></nav></div>
+<div id="preview" class="preview" tabindex="-1" role="dialog" aria-modal="true" aria-label="File preview" hidden><div class="preview-drag-region" aria-hidden="true"></div><button id="close-preview" aria-label="Close preview" title="Close · Esc"></button><div class="preview-body"><div id="preview-content"></div></div><nav class="preview-bottom" aria-label="Preview navigation"><button id="previous" class="preview-arrow" aria-label="Previous file" title="Previous · Left arrow">‹</button><span id="preview-index" aria-live="polite" aria-atomic="true"></span><button id="next" class="preview-arrow" aria-label="Next file" title="Next · Right arrow">›</button></nav></div>
 <div id="import-menu" class="layout-menu import-menu" popover role="menu" aria-label="Import">
 <button id="import" class="primary" type="button" role="menuitem">Import files</button>
 <button id="import-folder" type="button" role="menuitem">Import folder</button>

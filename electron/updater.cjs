@@ -8,6 +8,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { EXPECTED_TEAM_ID, verifyUpdateSignature } = require('./update-signing.cjs');
 
 const execFileAsync = promisify(execFile);
 const RELEASE_API = 'https://api.github.com/repos/magembesolomonn/Canvas-Pro/releases/latest';
@@ -62,7 +63,8 @@ function releaseAssets(release) {
     || assets.find(asset => /\.dmg$/i.test(asset.name || ''));
   const sums = assets.find(asset => /^SHA256SUMS\.txt$/i.test(asset.name || ''))
     || assets.find(asset => /sha256/i.test(asset.name || '') && /\.txt$/i.test(asset.name || ''));
-  return { dmg, sums };
+  const sig = assets.find(asset => /^update\.sig$/i.test(asset.name || ''));
+  return { dmg, sums, sig };
 }
 
 function xmlText(value) {
@@ -110,7 +112,6 @@ if ! mv "$staged" "$target"; then
   mv "$old" "$target"
   exit 1
 fi
-xattr -dr com.apple.quarantine "$target" 2>/dev/null || true
 "$open_command" "$target"
 sleep "\${CANVAS_UPDATE_SLEEP:-5}"
 rm -rf "$old"
@@ -168,6 +169,9 @@ class Updater {
     quit = () => {},
     openCommand = '/usr/bin/open',
     allowAnyLocation = false,
+    allowUnsigned = false,
+    requireSignedManifest = false,
+    verifySignature = verifyUpdateSignature,
     now = Date.now
   }) {
     this.currentVersion = String(currentVersion || '0.0.0');
@@ -182,6 +186,9 @@ class Updater {
     this.quit = quit;
     this.openCommand = openCommand;
     this.allowAnyLocation = allowAnyLocation;
+    this.allowUnsigned = allowUnsigned;
+    this.requireSignedManifest = !!requireSignedManifest && !allowUnsigned;
+    this.verifySignature = verifySignature;
     this.now = now;
     this.release = null;
     this.downloaded = null;
@@ -249,15 +256,17 @@ class Updater {
     const available = compareVersions(version, this.currentVersion) > 0;
     const blocker = available ? this.installBlocker() : null;
     let reason = blocker;
-    if (available && !assets.dmg) reason = 'The latest release does not include an Apple Silicon disk image.';
-    if (available && !assets.sums) reason = 'The latest release does not include a SHA-256 checksum, so it cannot be installed automatically.';
+    if (available && !reason && !assets.dmg) reason = 'The latest release does not include an Apple Silicon disk image.';
+    if (available && !reason && !assets.sums) reason = 'The latest release does not include a SHA-256 checksum, so it cannot be installed automatically.';
+    if (available && !reason && !assets.sig && this.requireSignedManifest) reason = 'The latest release does not include a signed checksum manifest, so it cannot be installed automatically.';
     this.release = available && !reason ? {
       version,
       notes: String(release.body || '').slice(0, 8000),
       page: String(release.html_url || ''),
       publishedAt: String(release.published_at || ''),
       dmg: { name: assets.dmg.name, url: assets.dmg.browser_download_url, size: Number(assets.dmg.size) || 0 },
-      sums: { name: assets.sums.name, url: assets.sums.browser_download_url }
+      sums: { name: assets.sums.name, url: assets.sums.browser_download_url },
+      sig: assets.sig ? { name: assets.sig.name, url: assets.sig.browser_download_url } : null
     } : null;
     return {
       available,
@@ -345,7 +354,17 @@ class Updater {
       const sumsPath = path.join(directory, this.release.sums.name);
       const dmgPath = path.join(directory, this.release.dmg.name);
       await this.fetchFile(this.release.sums.url, sumsPath, { name: this.release.sums.name, quiet: true });
-      const sums = parseChecksums(await fs.promises.readFile(sumsPath, 'utf8'));
+      const sumsBytes = await fs.promises.readFile(sumsPath);
+      if (this.release.sig) {
+        const sigPath = path.join(directory, this.release.sig.name);
+        await this.fetchFile(this.release.sig.url, sigPath, { name: this.release.sig.name, quiet: true });
+        if (!this.verifySignature(sumsBytes, await fs.promises.readFile(sigPath))) {
+          throw new UpdateError('The checksum manifest has an invalid signature. The update was discarded and nothing was installed.', 'signature');
+        }
+      } else if (this.requireSignedManifest) {
+        throw new UpdateError('This release has no signed checksum manifest. The update was discarded and nothing was installed.', 'signature');
+      }
+      const sums = parseChecksums(sumsBytes.toString('utf8'));
       const expected = sums.get(path.basename(this.release.dmg.name));
       if (!expected) throw new UpdateError('The release checksum does not list the downloaded disk image, so the update was not installed.', 'checksum-missing');
       await this.fetchFile(this.release.dmg.url, dmgPath, { name: this.release.dmg.name, totalHint: this.release.dmg.size });
@@ -407,6 +426,20 @@ class Updater {
       } catch {
         throw new UpdateError('The downloaded app failed its security check. Nothing was installed.', 'signature');
       }
+      if (EXPECTED_TEAM_ID) {
+        let details = '';
+        try {
+          details = (await this.runCommand('/usr/bin/codesign', ['-dv', '--verbose=4', mountedApp], { timeout: 60000, maxBuffer: 4 * 1024 * 1024 })).stdout || '';
+        } catch {}
+        if (!String(details).includes('TeamIdentifier=' + EXPECTED_TEAM_ID)) {
+          throw new UpdateError('The downloaded app is not signed by the expected developer. Nothing was installed.', 'signature');
+        }
+        try {
+          await this.runCommand('/usr/bin/spctl', ['-a', '--type', 'execute', '-vvv', mountedApp], { timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
+        } catch {
+          throw new UpdateError('The downloaded app is not notarized. Nothing was installed.', 'signature');
+        }
+      }
       const parent = path.dirname(this.appBundle);
       staged = path.join(parent, '.Canvas Pro Update-' + process.pid + '-' + this.now() + '.app');
       old = this.appBundle + '.previous-update';
@@ -448,5 +481,7 @@ module.exports = {
   mountPointFromPlist,
   shellQuote,
   SWAP_SCRIPT,
-  RELEASE_API
+  RELEASE_API,
+  verifyUpdateSignature,
+  EXPECTED_TEAM_ID
 };

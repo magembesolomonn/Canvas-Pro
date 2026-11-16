@@ -9,7 +9,7 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
  const profile=path.join(temporary,'profile'),extension=path.join(temporary,'extension');fs.mkdirSync(profile);fs.cpSync(path.join(root,'chrome-extension'),extension,{recursive:true});const manifest=JSON.parse(fs.readFileSync(path.join(extension,'manifest.json'),'utf8'));
  // Only this isolated test copy receives fixture-host access. The shipped manifest uses activeTab.
  manifest.host_permissions=['<all_urls>'];fs.writeFileSync(path.join(extension,'manifest.json'),JSON.stringify(manifest));const id=fs.readFileSync(path.join(extension,'extension-id.txt'),'utf8').trim();
- lib=new Library(path.join(temporary,'library'));bridge=new CaptureBridge({library:lib,directory:path.join(temporary,'bridge'),fetcher:fetch});await bridge.start();
+ lib=new Library(path.join(temporary,'library'));bridge=new CaptureBridge({allowPrivateCapture:true,library:lib,directory:path.join(temporary,'bridge'),fetcher:fetch});await bridge.start();
  const runtimeCandidates=[path.join(root,'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),'/Users/solomon/Documents/eagle/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'];
  const runtime=runtimeCandidates.find(candidate=>fs.existsSync(candidate));
  if(!runtime)throw new Error('No Electron runtime was found for the native host test.');

@@ -16,6 +16,7 @@ const AppSelect=(()=>{
  // rather than in each control: a view that draws its inspector again makes a
  // new control every time, and the old ones must not leave listeners behind.
  const live=new Set();
+  let optionCounter=0;
  document.addEventListener('click',event=>{
   for(const api of live){
    if(!api.root.isConnected){live.delete(api);continue;}
@@ -94,6 +95,7 @@ const AppSelect=(()=>{
    list.replaceChildren();
    for(const option of state.options){
     const item=el('button','select-item');
+    item.id='select-item-'+(++optionCounter);
     item.type='button';
     item.setAttribute('role','option');
     const chosen=state.selected.has(option.value);
@@ -211,7 +213,8 @@ const AppSelect=(()=>{
    else if(event.key==='Tab')closeList();
    else if(event.key.length===1&&!event.metaKey&&!event.ctrlKey)typeahead(event.key);
   };
-  popover.addEventListener('toggle',event=>{if(event.newState==='closed'&&state.open){state.open=false;trigger.setAttribute('aria-expanded','false');root.classList.remove('is-open');live.delete(api);}});
+  list.addEventListener('focusin',event=>{const item=event.target.closest?.('.select-item');if(item)popover.setAttribute('aria-activedescendant',item.id);});
+   popover.addEventListener('toggle',event=>{if(event.newState==='closed'&&state.open){popover.removeAttribute('aria-activedescendant');state.open=false;trigger.setAttribute('aria-expanded','false');root.classList.remove('is-open');live.delete(api);}});
 
   render();
   const api={

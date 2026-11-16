@@ -82,6 +82,7 @@ test('check reports a newer release and whether this copy can install it', async
       appBundle: bundle,
       isPackaged: true,
       allowAnyLocation: true,
+      allowUnsigned: true,
       tempRoot: root,
       fetchImpl: async () => jsonResponse(releasePayload('1.1.4'))
     });
@@ -97,6 +98,7 @@ test('check reports a newer release and whether this copy can install it', async
       appBundle: bundle,
       isPackaged: true,
       allowAnyLocation: true,
+      allowUnsigned: true,
       tempRoot: root,
       fetchImpl: async () => jsonResponse(releasePayload('1.1.4'))
     });
@@ -109,6 +111,7 @@ test('check reports a newer release and whether this copy can install it', async
       appBundle: bundle,
       isPackaged: true,
       allowAnyLocation: true,
+      allowUnsigned: true,
       tempRoot: root,
       fetchImpl: async () => jsonResponse({ message: 'Not Found' }, 404)
     });
@@ -184,6 +187,7 @@ test('download streams the DMG, reports progress and verifies SHA-256', async ()
       appBundle: bundle,
       isPackaged: true,
       allowAnyLocation: true,
+      allowUnsigned: true,
       tempRoot: root,
       onProgress: event => events.push(event),
       fetchImpl: (url, options) => url === RELEASE_API
@@ -226,6 +230,7 @@ test('a bad checksum discards the download and leaves no update behind', async (
       appBundle: bundle,
       isPackaged: true,
       allowAnyLocation: true,
+      allowUnsigned: true,
       tempRoot: root,
       fetchImpl: (url, options) => url === RELEASE_API
         ? Promise.resolve(jsonResponse(badRelease))
@@ -259,6 +264,7 @@ test('install stages the new bundle and hands the swap to a detached helper', as
       appBundle: bundle,
       isPackaged: true,
       allowAnyLocation: true,
+      allowUnsigned: true,
       tempRoot: root,
       runCommand: async (command, args) => {
         calls.push([command, ...args]);
@@ -319,6 +325,77 @@ test('install stages the new bundle and hands the swap to a detached helper', as
     });
     assert.equal(fs.readFileSync(path.join(target, 'new-marker'), 'utf8'), 'new');
     assert.equal(fs.existsSync(old), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('unsigned checksum manifests are rejected only when required', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canvas-updater-unsigned-'));
+  try {
+    const updater = new Updater({
+      currentVersion: '1.1.3',
+      appBundle: fakeBundle(root),
+      isPackaged: true,
+      allowAnyLocation: true,
+      requireSignedManifest: true,
+      fetchImpl: async () => jsonResponse(releasePayload('1.1.4'))
+    });
+    const result = await updater.check();
+    assert.equal(result.installable, false);
+    assert.match(result.reason, /signed checksum manifest/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('download refuses a checksum manifest with an invalid signature', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canvas-updater-signature-'));
+  const sums = 'a'.repeat(64) + '  Canvas-Pro-1.1.4-apple-silicon.dmg\n';
+  let server;
+  try {
+    server = http.createServer((request, response) => {
+      if (request.url === '/SHA256SUMS.txt') response.end(sums);
+      else if (request.url === '/update.sig') response.end('bogus');
+      else { response.writeHead(404); response.end(); }
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const origin = 'http://127.0.0.1:' + server.address().port;
+    const updater = new Updater({
+      currentVersion: '1.1.3',
+      appBundle: fakeBundle(root),
+      isPackaged: true,
+      allowAnyLocation: true,
+      fetchImpl: fetch,
+      tempRoot: root,
+      verifySignature: () => false
+    });
+    updater.release = {
+      version: '1.1.4',
+      dmg: { name: 'Canvas-Pro-1.1.4-apple-silicon.dmg', url: origin + '/dmg', size: sums.length },
+      sums: { name: 'SHA256SUMS.txt', url: origin + '/SHA256SUMS.txt' },
+      sig: { name: 'update.sig', url: origin + '/update.sig' }
+    };
+    await assert.rejects(() => updater.download(), error => error.code === 'signature');
+  } finally {
+    if (server) await new Promise(resolve => server.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('unsigned checksum manifests remain installable by default', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canvas-updater-default-'));
+  try {
+    const updater = new Updater({
+      currentVersion: '1.1.3',
+      appBundle: fakeBundle(root),
+      isPackaged: true,
+      allowAnyLocation: true,
+      fetchImpl: async () => jsonResponse(releasePayload('1.1.4'))
+    });
+    const result = await updater.check();
+    assert.equal(result.installable, true);
+    assert.equal(result.reason, null);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
