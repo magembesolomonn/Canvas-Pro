@@ -512,7 +512,11 @@ app.whenReady().then(async () => {
   const getUpdater=()=>updater??=new Updater({
     currentVersion:require('../package.json').version,
     appBundle:path.resolve(app.getPath('exe'),'../../..'),
-    isPackaged:app.isPackaged,
+    // An unpacked Contents/Resources/app folder makes app.isPackaged false in
+    // Electron even for a real .app bundle. process.defaultApp is true only
+    // when Electron was launched with a source path (`electron .`), so it is
+    // the reliable signal for "installed app can replace itself".
+    isPackaged: !process.defaultApp,
     fetchImpl:(url,options)=>net.fetch(url,options),
     onProgress:updateProgress,
     quit:()=>app.quit(),
