@@ -123,7 +123,7 @@ class NotesStore {
     const from = ids.indexOf(id), to = ids.indexOf(target);
     if (from < 0 || to < 0) throw Error('This note no longer exists.');
     ids.splice(from, 1);
-    ids.splice(to, 0, id);
+    ids.splice(to > from ? to - 1 : to, 0, id);
     this.db.exec('SAVEPOINT reorder_notes');
     try {
       const update = this.db.prepare('UPDATE workspace_notes SET position = ? WHERE id = ?');

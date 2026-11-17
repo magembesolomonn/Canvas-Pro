@@ -4,7 +4,59 @@ test('file and bulk undo preserve tags, favourites and collection membership',()
 test('emoji choices persist in the portable library',()=>fixture(async({tools})=>{tools.icon('canvas:fixture',{type:'emoji',value:'🎨'});assert.equal(tools.icons()['canvas:fixture'].value,'🎨');}));
 test('recovery rejects wrong bytes and restores the exact original without losing metadata',()=>fixture(async({lib,tools,id,source,dir})=>{lib.update(id,{tags:['keep']});const original=lib.file(id);fs.unlinkSync(original);const wrong=path.join(dir,'wrong.txt');fs.writeFileSync(wrong,'wrong');await assert.rejects(tools.recover(id,wrong),/match/);await tools.recover(id,source);assert.equal(fs.readFileSync(lib.file(id),'utf8'),'Keep my original and metadata');assert.deepEqual(JSON.parse(lib.asset(id).tags),['keep']);await assert.rejects(tools.recover(id,source),/exists/);}));
 test('backup contains a consistent database, originals and presentation settings',()=>fixture(async({lib,tools,id,dir})=>{lib.update(id,{notes:'Important'});tools.icon('canvas:a',{type:'symbol',value:'star'});const dest=path.join(dir,'Backup.canvaslibrary');await tools.backup(dest);const restored=new Library(dest);try{assert.equal(restored.asset(id).notes,'Important');assert.equal(fs.readFileSync(restored.file(id),'utf8'),'Keep my original and metadata');assert.equal(new Workbench(restored).icons()['canvas:a'].value,'star');}finally{restored.close();}await assert.rejects(tools.backup(path.join(lib.root,'nested')),/outside/);assert.ok(tools.pref('lastBackup').at);}));
-test('duplicate review groups high-similarity candidates without deleting anything',()=>fixture(async({lib,tools,id,dir})=>{const source=path.join(dir,'second.txt');fs.writeFileSync(source,'A distinct original');const second=(await lib.importFile(source)).imported;const vector=Buffer.from(new Float32Array(Array.from({length:512},(_,i)=>i===0?1:0)).buffer),insert=lib.db.prepare('INSERT INTO asset_analysis(id,vector,model,version) VALUES(?,?,?,1)');for(const key of [id,second])insert.run(key,vector,'clip-vit-base-patch32-q8-v1');const groups=await tools.duplicates();assert.equal(groups.length,1);assert.equal(groups[0][1].score,1);assert.equal(lib.list().length,2);}));
+async function importCopy(lib,dir,name,contents){const source=path.join(dir,name);fs.writeFileSync(source,contents);return (await lib.importFile(source)).imported;}
+test('duplicate review clusters fingerprints, keeps the annotated copy and leaves files alone',()=>fixture(async({lib,tools,id,dir})=>{
+  // Three versions of one picture: the first differs by one bit from the
+  // second and the second by one bit from the third, so only transitivity can
+  // put them in one group. The fourth is a different picture.
+  const second=await importCopy(lib,dir,'second.txt','A second version');
+  const third=await importCopy(lib,dir,'third.txt','A third version, with a note');
+  const other=await importCopy(lib,dir,'other.txt','An unrelated picture');
+  lib.setPhash(id,'0f0f0f0f0f0f0f0f');
+  lib.setPhash(second,'0f0f0f0f0f0f0f0e');
+  lib.setPhash(third,'0f0f0f0f0f0f0f0c');
+  lib.setPhash(other,'f0f0f0f0f0f0f0f0');
+  lib.update(third,{notes:'Colour-corrected'});
+  const result=await tools.duplicates();
+  assert.equal(result.groups.length,1);
+  const [group]=result.groups;
+  assert.deepEqual(group.members.map(m=>m.id).sort(),[id,second,third].sort());
+  assert.equal(group.keep,third,'the copy with notes is kept');
+  assert.equal(group.kind,'near');
+  assert.equal(group.bits,1);
+  assert.equal(group.similarity,98);
+  assert.ok(group.savings>0);
+  assert.equal(lib.list().length,4,'review never removes anything');
+}));
+test('duplicate review forgets a dismissed group until the library changes',()=>fixture(async({lib,tools,id,dir})=>{
+  const second=await importCopy(lib,dir,'second.txt','Another copy');
+  lib.setPhash(id,'0f0f0f0f0f0f0f0f');
+  lib.setPhash(second,'0f0f0f0f0f0f0f0e');
+  const [group]=(await tools.duplicates()).groups;
+  tools.dismissDuplicates(group.members.map(m=>m.id));
+  assert.deepEqual((await tools.duplicates()).groups,[]);
+  // A third copy forms a different group, so the subject can be reviewed again.
+  const third=await importCopy(lib,dir,'third.txt','A later copy');
+  lib.setPhash(third,'0f0f0f0f0f0f0f0c');
+  const again=(await tools.duplicates()).groups;
+  assert.equal(again.length,1);
+  assert.equal(again[0].members.length,3);
+  assert.throws(()=>tools.dismissDuplicates([id]),/group/);
+}));
+test('duplicate review compares only non-empty fingerprints and reports pending work',()=>fixture(async({lib,tools,id,dir})=>{
+  const failed=await importCopy(lib,dir,'failed.txt','Undecodable');
+  const unchecked=await importCopy(lib,dir,'unchecked.txt','Not looked at yet');
+  lib.setPhash(id,'0f0f0f0f0f0f0f0f');
+  lib.setPhash(failed,'');
+  const result=await tools.duplicates();
+  assert.deepEqual(result.groups,[]);
+  assert.equal(result.total,1);
+  // The .txt files are outside the fingerprint formats, so only real pictures
+  // are ever queued; a NULL fingerprint is pending work.
+  assert.equal(result.pending,0);
+  lib.db.prepare("UPDATE assets SET ext='jpg' WHERE id=?").run(unchecked);
+  assert.equal((await tools.duplicates()).pending,1);
+}));
 test('undo changes only edited fields, retaining unrelated metadata enrichment',()=>fixture(async({lib,tools,id})=>{tools.change([id],()=>lib.update(id,{favorite:true}));lib.update(id,{notes:'Written after the favourite action'});tools.history();assert.equal(lib.asset(id).favorite,0);assert.equal(lib.asset(id).notes,'Written after the favourite action');}));
 test('backup never overwrites an existing destination and close waits for a running copy',()=>fixture(async({tools,dir})=>{const existing=path.join(dir,'Existing');fs.mkdirSync(existing);fs.writeFileSync(path.join(existing,'keep.txt'),'keep');await assert.rejects(tools.backup(existing));assert.equal(fs.readFileSync(path.join(existing,'keep.txt'),'utf8'),'keep');const task=tools.backup(path.join(dir,'Second.canvaslibrary'));await tools.close();await task;assert.equal(tools.backingUp,false);}));
 

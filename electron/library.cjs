@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const {permanentDelete,recoverDeletions}=require('./deletion.cjs');
 const {recordImport,recoverImports}=require('./import-recovery.cjs');
+const {HASHED_SQL}=require('./perceptual-hash.cjs');
 class Library {
   constructor(root) {
     this.root = root;
@@ -23,6 +24,10 @@ class Library {
     // record moves to Trash and remembers why, so it can return if the file is
     // put back. This is separate from a file the person moved to Trash here.
     if(!this.db.prepare('PRAGMA table_info(assets)').all().some(c=>c.name==='missing'))this.db.exec('ALTER TABLE assets ADD COLUMN missing INTEGER NOT NULL DEFAULT 0');
+    // A 64-bit perceptual fingerprint (16 hex characters). NULL means "not
+    // looked at yet"; an empty string records a file that could not be
+    // decoded, so a review does not retry it forever.
+    if(!this.db.prepare('PRAGMA table_info(assets)').all().some(c=>c.name==='phash'))this.db.exec('ALTER TABLE assets ADD COLUMN phash TEXT');
     if(!this.db.prepare('PRAGMA table_info(folders)').all().some(c=>c.name==='id'))this.db.exec('ALTER TABLE folders ADD COLUMN id TEXT');for(const folder of this.db.prepare('SELECT name FROM folders WHERE id IS NULL').all())this.db.prepare('UPDATE folders SET id=? WHERE name=?').run(crypto.randomUUID(),folder.name);this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS folders_id ON folders(id)');
     // The Movies tracker and the RSS reader were removed. Their tables are
     // dropped so existing libraries do not keep orphaned data around.
@@ -214,6 +219,20 @@ class Library {
     this.asset(id);const previous=this.db.prepare('SELECT json FROM capture_metadata WHERE id=?').get(id);const old=previous?JSON.parse(previous.json):{};
     const sources=[...new Set([...(old.sources||[]),old.pageUrl,metadata.pageUrl].filter(Boolean))].slice(-20);
     this.db.prepare('INSERT INTO capture_metadata(id,json) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET json=excluded.json').run(id,JSON.stringify({...old,...metadata,sources}));this.revision++;this.onAssetChanged?.(id);
+  }
+  // Fingerprints are written by the main process after it decodes a picture.
+  // Keeping them out of importFile means importing never waits on a decode.
+  setPhash(id, value) {
+    if (typeof value !== 'string' || (value && !/^[0-9a-f]{16}$/.test(value))) throw new Error('Invalid fingerprint');
+    this.db.prepare('UPDATE assets SET phash=? WHERE id=?').run(value, id);
+    this.revision++;
+  }
+  phashCandidates(limit = 24) {
+    const extensions = HASHED_SQL;
+    return this.db.prepare(`SELECT id,ext,size FROM assets WHERE trash=0 AND phash IS NULL AND ext IN (${extensions}) ORDER BY imported DESC LIMIT ?`).all(limit);
+  }
+  phashPending() {
+    return this.db.prepare(`SELECT COUNT(*) AS count FROM assets WHERE trash=0 AND phash IS NULL AND ext IN (${HASHED_SQL})`).get().count;
   }
   selectedAssets(ids) {
     if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string')) throw new Error('Invalid selection.');

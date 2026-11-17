@@ -146,7 +146,7 @@ const Calendar=(()=>{
     surface.style.left=left+'px';
     surface.style.top=top+'px';
     const onPointerDown=event=>{if(!surface.contains(event.target))close();};
-    const onKey=event=>{if(event.key==='Escape'){event.preventDefault();close();anchor.focus();}};
+    const onKey=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();anchor.focus();}};
     document.addEventListener('pointerdown',onPointerDown,true);
     document.addEventListener('keydown',onKey,true);
     dismiss=()=>{

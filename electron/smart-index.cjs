@@ -73,8 +73,8 @@ const visualRetryDelays=[1,5,30,60].map(minutes=>minutes*60000);
 const colors={red:[210,55,55],orange:[225,135,40],yellow:[220,205,60],green:[65,150,75],blue:[50,110,200],purple:[135,75,175],pink:[215,125,165],brown:[125,90,55],black:[25,25,25],white:[235,235,235],grey:[135,135,135]};
 function palette(image){if(!image||image.isEmpty())return [];const {width,height}=image.getSize(),scale=Math.min(1,64/Math.max(width,height));const tiny=scale===1?image:image.resize({width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))});const bytes=tiny.toBitmap(),bins=new Map();for(let i=0;i<bytes.length;i+=4){if(bytes[i+3]<128)continue;const b=bytes[i],g=bytes[i+1],r=bytes[i+2],key=(r>>5)*64+(g>>5)*8+(b>>5),bin=bins.get(key)||[0,0,0,0];bin[0]+=r;bin[1]+=g;bin[2]+=b;bin[3]++;bins.set(key,bin);}const chosen=[];for(const bin of [...bins.values()].sort((a,b)=>b[3]-a[3])){const rgb=bin.slice(0,3).map(v=>Math.round(v/bin[3]));if(chosen.some(c=>c.rgb.reduce((n,v,i)=>n+(v-rgb[i])**2,0)<1800))continue;const hex='#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join('');let color='grey',distance=Infinity;for(const [name,value]of Object.entries(colors)){const d=value.reduce((n,v,i)=>n+(v-rgb[i])**2,0);if(d<distance){distance=d;color=name;}}chosen.push({hex,name:color,rgb});if(chosen.length===6)break;}return chosen.map(({hex,name})=>({hex,name}));}
 class SmartIndex{
- constructor({library,thumbnail,nativeImage,onUpdate=()=>{},onWork=()=>{},delay=()=>650,testMode=false}){Object.assign(this,{library,thumbnail,nativeImage,onUpdate,onWork,delay});this.db=library.db;this.closed=false;this.paused=testMode;this.powerPause=null;this.queue=new Set();this.textQueue=new Set();this.stateCache=null;this.db.exec(`CREATE TABLE IF NOT EXISTS asset_analysis(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,summary TEXT NOT NULL DEFAULT '{}',text TEXT NOT NULL DEFAULT '',vector BLOB,model TEXT,version INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS asset_chunks(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,chunk INTEGER NOT NULL,vector BLOB NOT NULL,model TEXT NOT NULL);CREATE VIRTUAL TABLE IF NOT EXISTS smart_fts USING fts5(id UNINDEXED,body,tokenize='unicode61');CREATE TRIGGER IF NOT EXISTS smart_delete AFTER DELETE ON assets BEGIN DELETE FROM smart_fts WHERE id=old.id;END;`);this.db.prepare("UPDATE asset_analysis SET summary=json_set(summary,'$.visualRetry',MIN(json_extract(summary,'$.visualRetry'),?), '$.visualAttempts',1) WHERE json_extract(summary,'$.visualRetry') IS NOT NULL AND json_extract(summary,'$.visualAttempts') IS NULL").run(Date.now()+visualRetryDelays[0]);library.onAssetChanged=id=>this.changed(id);this.timer=setTimeout(()=>this.pump(),1500);this.timer.unref();}
+ constructor({library,thumbnail,nativeImage,onUpdate=()=>{},onWork=()=>{},delay=()=>650,testMode=false}){Object.assign(this,{library,thumbnail,nativeImage,onUpdate,onWork,delay});this.db=library.db;this.closed=false;this.paused=testMode;this.powerPause=null;this.queue=new Set();this.textQueue=new Set();this.stateCache=null;this.db.exec(`CREATE TABLE IF NOT EXISTS asset_analysis(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,summary TEXT NOT NULL DEFAULT '{}',text TEXT NOT NULL DEFAULT '',vector BLOB,model TEXT,version INTEGER NOT NULL DEFAULT 0,text_vector BLOB);
+    CREATE TABLE IF NOT EXISTS asset_chunks(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,chunk INTEGER NOT NULL,vector BLOB NOT NULL,model TEXT NOT NULL);CREATE VIRTUAL TABLE IF NOT EXISTS smart_fts USING fts5(id UNINDEXED,body,tokenize='unicode61');CREATE TRIGGER IF NOT EXISTS smart_delete AFTER DELETE ON assets BEGIN DELETE FROM smart_fts WHERE id=old.id;END;`);if(!this.db.prepare("SELECT 1 FROM pragma_table_info('asset_analysis') WHERE name='text_vector'").get())this.db.exec('ALTER TABLE asset_analysis ADD COLUMN text_vector BLOB');this.db.prepare("UPDATE asset_analysis SET summary=json_set(summary,'$.visualRetry',MIN(json_extract(summary,'$.visualRetry'),?), '$.visualAttempts',1) WHERE json_extract(summary,'$.visualRetry') IS NOT NULL AND json_extract(summary,'$.visualAttempts') IS NULL").run(Date.now()+visualRetryDelays[0]);library.onAssetChanged=id=>this.changed(id);this.timer=setTimeout(()=>this.pump(),1500);this.timer.unref();}
  info(id){const row=this.db.prepare('SELECT summary FROM asset_analysis WHERE id=?').get(id);return row?JSON.parse(row.summary):null;}
  changed(id){
   if(this.closed)return;
@@ -104,14 +104,22 @@ class SmartIndex{
    if(summary.tags)summary.tags=[...new Set(summary.tags)].slice(0,50);
    let vector=old?.vector||null;
    let model=old?.model||null;
+   let textVector=old?.text_vector||null;
    if(patch.vector){
      if(!Array.isArray(patch.vector)||patch.vector.length!==512||patch.vector.some(v=>!Number.isFinite(v)))throw Error('Invalid index vector.');
      vector=Buffer.from(new Float32Array(patch.vector).buffer);
      model=patch.model||MODEL;
      if(model===MODEL){delete summary.visualRetry;delete summary.visualAttempts;}
    }
-   this.db.prepare('INSERT INTO asset_analysis(id,summary,text,vector,model,version) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET summary=excluded.summary,text=excluded.text,vector=excluded.vector,model=excluded.model,version=excluded.version').run(
-     id,JSON.stringify(summary),patch.text===undefined?old?.text||'':String(patch.text).slice(0,50000),vector,patch.vector?(patch.model||MODEL):old?.model||null,patch.version??old?.version??0);
+   // Text embeddings live beside the visual vector instead of in it: a
+   // non-CLIP model in `vector` is invisible to visual search but still
+   // blocks visual indexing. Keeping `vector` free lets that work proceed.
+   if(patch.text_vector){
+     if(!Array.isArray(patch.text_vector)||patch.text_vector.length!==512||patch.text_vector.some(v=>!Number.isFinite(v)))throw Error('Invalid index vector.');
+     textVector=Buffer.from(new Float32Array(patch.text_vector).buffer);
+   }
+   this.db.prepare('INSERT INTO asset_analysis(id,summary,text,vector,model,version,text_vector) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET summary=excluded.summary,text=excluded.text,vector=excluded.vector,model=excluded.model,version=excluded.version,text_vector=excluded.text_vector').run(
+     id,JSON.stringify(summary),patch.text===undefined?old?.text||'':String(patch.text).slice(0,50000),vector,model,patch.version??old?.version??0,textVector);
    // Embedding writes and retry bookkeeping cannot change the searchable text.
    if(old&&patch.text===undefined&&Object.keys(patch.summary||{}).every(key=>key==='visualRetry'||key==='visualAttempts'))return summary;
    const result=this.indexText(id);
@@ -119,7 +127,7 @@ class SmartIndex{
    return result;
  }
  state(){if(this.stateCache&&this.stateCache.expires>Date.now())return this.stateCache.value;const total=this.db.prepare('SELECT COUNT(*) n FROM assets WHERE trash=0').get().n,indexed=this.db.prepare('SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE s.version=1 AND a.trash=0').get().n,visual=this.db.prepare('SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE s.model=? AND s.vector IS NOT NULL AND a.trash=0').get(MODEL).n;const visualRemaining=this.db.prepare(`SELECT COUNT(*) n FROM assets a LEFT JOIN asset_analysis s ON s.id=a.id
-     WHERE a.trash=0 AND (s.vector IS NULL OR s.model IS NOT ?) AND a.ext IN (${VISUAL_EXTENSIONS})`).get(MODEL).n;const failed=this.db.prepare("SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE a.trash=0 AND json_extract(s.summary,'$.state')='unavailable'").get().n;const value={total,indexed,visual,visualRemaining,failed,paused:this.paused,powerPause:this.powerPause,running:!!this.active};this.stateCache={expires:Date.now()+500,value};return value;}
+     WHERE a.trash=0 AND s.vector IS NULL AND a.ext IN (${VISUAL_EXTENSIONS})`).get().n;const failed=this.db.prepare("SELECT COUNT(*) n FROM asset_analysis s JOIN assets a ON a.id=s.id WHERE a.trash=0 AND json_extract(s.summary,'$.state')='unavailable'").get().n;const value={total,indexed,visual,visualRemaining,failed,paused:this.paused,powerPause:this.powerPause,running:!!this.active};this.stateCache={expires:Date.now()+500,value};return value;}
  pause(value){this.paused=!!value;if(this.paused)this.activeController?.abort();this.schedule();this.onWork();return this.state();}
  setPowerPause(reason){
    if(this.powerPause===reason)return;
@@ -186,7 +194,7 @@ class SmartIndex{
        tags:[...(old.tags||[]),...labels.map(label=>label.label),...swatches.map(color=>color.name)],
        state:error?'unavailable':'indexed',error,analyzedAt:Date.now(),
        ...(originalName?{originalName}:{})
-     },version:1,...(textVector?{vector:textVector,model:TEXT_MODEL}:{})});
+     },version:1,...(textVector?{text_vector:textVector}:{})});
      // Tell the window about the new name so the card shows it at once.
      if(renamed)this.onUpdate({id,smart:this.indexText(id),name:renamed});
    }catch(error){
@@ -314,13 +322,13 @@ class SmartIndex{
    const paused=this.paused?'manual':this.powerPause;
    if(paused)return {paused};
    const eligible=`FROM assets a LEFT JOIN asset_analysis s ON s.id=a.id
-     WHERE a.trash=0 AND (s.vector IS NULL OR s.model IS NOT ?)
+     WHERE a.trash=0 AND s.vector IS NULL
      AND a.ext IN (${VISUAL_EXTENSIONS})`;
    const retry="COALESCE(json_extract(s.summary,'$.visualRetry'),0)";
    const now=Date.now();
-   const rows=this.db.prepare(`SELECT a.id ${eligible} AND ${retry}<=? LIMIT 16`).all(MODEL,now);
+   const rows=this.db.prepare(`SELECT a.id ${eligible} AND ${retry}<=? LIMIT 16`).all(now);
    if(rows.length)return {ids:rows.map(row=>row.id)};
-   return this.db.prepare(`SELECT MIN(${retry}) AS retryAt ${eligible} AND ${retry}>?`).get(MODEL,now);
+   return this.db.prepare(`SELECT MIN(${retry}) AS retryAt ${eligible} AND ${retry}>?`).get(now);
  }
 
  async close(){this.closed=true;clearTimeout(this.timer);this.activeController?.abort();await this.active;}

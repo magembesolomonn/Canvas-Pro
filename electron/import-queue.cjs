@@ -12,9 +12,14 @@ class ImportQueue {
     const job={id:crypto.randomUUID(),paths:[...paths],folder,folderId:folder?this.library.folderRecords().find(f=>f.name===folder)?.id:null,state:'queued',entries:[],failedPaths:[],controller:new AbortController(),result:{imported:0,duplicates:0,errors:[],skipped:0,ids:[],cancelled:false},processed:0,name:''};
     job.done=new Promise(resolve=>job.resolve=resolve);this.jobs.set(job.id,job);this.waiting.push(job);this.emit(true);this.pump();return job;
   }
-  snapshot(){return [...this.jobs.values()].slice(-20).reverse().map(j=>({id:j.id,state:j.state,name:j.name,processed:j.processed,imported:j.result.imported,duplicates:j.result.duplicates,skipped:j.result.skipped,failed:j.result.errors.length,error:j.error||'',canRetry:j.failedPaths.length>0||['cancelled','failed'].includes(j.state),entries:(j.entries.length?j.entries.slice(-50):j.paths.slice(0,50).map(p=>({path:p,name:path.basename(p),state:j.state}))).map(e=>({...e}))}));}
+  // Finished jobs are kept briefly so the activity view can still show them
+  // and they can be retried, but they are pruned at every state change instead
+  // of lingering until the next pump. 'cancelling' is still in flight, so it is
+  // never pruned and is treated like other cancellable states by the UI.
+  prune(){const finished=[...this.jobs].filter(([,j])=>!['queued','running','cancelling'].includes(j.state));for(const [id] of finished.slice(0,Math.max(0,finished.length-20)))this.jobs.delete(id);}
+  snapshot(){return [...this.jobs.values()].slice(-20).reverse().map(j=>({id:j.id,state:j.state,name:j.name,processed:j.processed,imported:j.result.imported,duplicates:j.result.duplicates,skipped:j.result.skipped,failed:j.result.errors.length,error:j.error||'',canRetry:j.failedPaths.length>0||['cancelling','cancelled','failed'].includes(j.state),entries:(j.entries.length?j.entries.slice(-50):j.paths.slice(0,50).map(p=>({path:p,name:path.basename(p),state:j.state}))).map(e=>({...e}))}));}
   emit(force=false){if(force||Date.now()-this.lastEvent>=100){this.lastEvent=Date.now();this.onChange(this.snapshot());}}
-  cancel(id){const job=this.jobs.get(id);if(!job||!['queued','running'].includes(job.state))return;job.controller.abort();if(job.state==='running')job.state='cancelling';if(job.state==='queued'){this.waiting=this.waiting.filter(j=>j!==job);job.state='cancelled';job.result.cancelled=true;job.resolve(job.result);}this.emit(true);}
+  cancel(id){const job=this.jobs.get(id);if(!job||!['queued','running'].includes(job.state))return;job.controller.abort();if(job.state==='running')job.state='cancelling';if(job.state==='queued'){this.waiting=this.waiting.filter(j=>j!==job);job.state='cancelled';job.result.cancelled=true;job.resolve(job.result);}this.prune();this.emit(true);}
   destination(job){if(!job.folderId)return job.folder;const folder=this.library.folderRecords().find(f=>f.id===job.folderId);if(!folder)throw new Error('The destination collection no longer exists.');return folder.name;}
   retry(id){const job=this.jobs.get(id);if(!job||!['completed','cancelled','failed'].includes(job.state))throw new Error('This import cannot be retried yet.');return this.enqueue(job.state==='cancelled'||!job.failedPaths.length?job.paths:job.failedPaths,this.destination(job));}
   async visit(source,job){
@@ -46,7 +51,7 @@ class ImportQueue {
     if(this.active||this.closing)return;
     const job=this.waiting.shift();if(!job)return;this.active=job;job.state='running';this.emit(true);
     this.task=(async()=>{try{if(job.folder&&!this.library.folders().includes(this.destination(job)))throw new Error('The destination collection no longer exists.');for(const source of job.paths)await this.visit(source,job);job.state='completed';}catch(error){job.state=job.controller.signal.aborted?'cancelled':'failed';job.result.cancelled=job.state==='cancelled';if(!job.result.cancelled){job.error=error.message;job.result.errors.push(error.message);}}
-    finally{this.active=null;job.resolve(job.result);this.emit(true);for(const [id,old]of this.jobs){if(this.jobs.size<=30)break;if(!['queued','running'].includes(old.state))this.jobs.delete(id);}this.pump();}})();
+    finally{this.active=null;job.resolve(job.result);this.prune();this.emit(true);this.pump();}})();
   }
   async close(){this.closing=true;for(const job of this.waiting.slice())this.cancel(job.id);if(this.active)this.cancel(this.active.id);await this.task;}
 }

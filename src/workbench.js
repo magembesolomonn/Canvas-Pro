@@ -1,6 +1,7 @@
 const WorkbenchUI=(()=>{
  let state={icons:{}},similarIds=null,similarScores=null,title='Similar files',color='',pendingIcons={};
- function dialog(title){const d=el('dialog','workbench-dialog'),head=el('div','dialog-heading');const close=action('',()=>d.close());close.setAttribute('aria-label','Close');close.append(glyph('close'));head.append(el('h2','',title),close);d.append(head);d.addEventListener('close',()=>d.remove());document.body.append(d);d.showModal();return d;}
+ let dialogSequence=0;
+ function dialog(title){const d=el('dialog','workbench-dialog'),head=el('div','dialog-heading');const labelId='workbench-dialog-title-'+(++dialogSequence),heading=el('h2','',title);heading.id=labelId;d.setAttribute('aria-labelledby',labelId);const close=action('',()=>d.close());close.setAttribute('aria-label','Close');close.append(glyph('close'));head.append(heading,close);d.append(head);d.addEventListener('close',()=>d.remove());document.body.append(d);d.showModal();return d;}
  function icon(key,fallback='folder'){const choice=state.icons[key];if(choice?.type==='emoji'){const n=el('span','emoji-icon',choice.value);return n;}return glyph(choice?.value||fallback);}
  async function pickIcon(key,onChoose){const value=await EmojiPicker.pick();if(!value)return;const choice={type:'emoji',value};if(onChoose)onChoose(choice);else{state.icons=await api.workbench('icon',{key,icon:choice});renderNav();}}
  function setData(data){if(data)state=data;}
@@ -104,8 +105,131 @@ const WorkbenchUI=(()=>{
   if(!matches.length)notify('No indexed file uses that colour yet. Colours are known once the local index has looked at a file.');
  }
  async function history(redo=false){const result=await api.workbench('history',{redo});if(result.changed){await refreshCurrent();notify((redo?'Redid: ':'Undid: ')+result.label);}else notify('No file changes to '+(redo?'redo':'undo')+'.');}
- function shortcuts(){const d=dialog('Keyboard shortcuts'),input=field('','Find a shortcut',()=>{}),list=el('div');const values=[['Undo file / canvas change','⌘ Z'],['Redo','⇧ ⌘ Z'],['Sidebar','⌘ B / ⌘ S'],['Search','⌘ F / ⌘ K'],['Settings','⌘ ,'],['Import files','⌘ O'],['File details','⌘ I'],['Select all','⌘ A'],['Extend selection','⇧ + arrow'],['Toggle individual selection','⌘ + click'],['Copy / paste','⌘ C / ⌘ V'],['Trash selection','⌘ Delete'],['Preview / close','Space / Escape'],['Navigate','Arrow keys'],['Canvas select / hand / text','V / H / T'],['Canvas rectangle / ellipse','R / O'],['Canvas fit','⌘ 0'],['Pan canvas','Space + drag'],['This shortcut reference','⌘ /']];const paint=()=>{list.replaceChildren();for(const [name,key]of values.filter(r=>r.join(' ').toLowerCase().includes(input.value.toLowerCase()))){const row=el('div','shortcut-row');row.append(el('span','',name),el('kbd','',key));list.append(row);}};input.oninput=paint;d.append(input,list);paint();input.focus();}
- async function duplicateReview(){const d=dialog('Duplicate review');d.append(el('p','hint','Identical imports are already prevented by file hashes. Review visually similar items before moving any to Trash. Nothing is removed automatically.'));const loading=el('p','hint','Comparing indexed images locally…');d.append(loading);const exact=await api.workbench('duplicates');loading.textContent=exact.length?exact.length+' candidate pairs · check visually before removing anything.':'No duplicate candidates found in the available index.';for(const group of exact){const row=el('div','review-row');for(const record of group){const a=assetById.get(record.id);if(a){const b=action('',()=>{d.close();setView('all');selection.clear();for(const record of group)selection.ids.add(record.id);selection.focus=group[0].id;selected=group[0].id;renderInspector();openPreview(group.map(v=>assetById.get(v.id)).filter(Boolean));});b.title=a.name;b.append(thumb(a));row.append(b);}}row.append(el('span','',group[1].score?'Visually similar · '+Math.round(group[1].score*100)+'%':'Identical file hash'));d.append(row);}const candidates=current()?[current()]:assets.filter(a=>kind(a)==='image'&&!a.trash&&a.smart?.state==='indexed').slice(0,30);if(!candidates.length)d.append(el('p','hint','Select an indexed image to find similar files. Enable local visual search first.'));for(const a of candidates){const row=el('div','review-row');row.append(thumb(a),el('span','',a.name),action('Compare similar',async()=>{d.close();await similar(a.id);}));d.append(row);}}
+ // The searchable sheet lives with the command palette so both use the same
+// list; Settings and ⌘/ route here too.
+ function shortcuts(){return window.CommandPalette ? window.CommandPalette.open('shortcuts') : null;}
+ async function duplicateReview(){
+  const d=dialog('Duplicate review');
+  const intro=el('p','hint','Identical files are already stopped at import. These groups are the same picture saved more than once — resized, re-compressed, or exported again. Nothing moves until you choose a copy to keep.');
+  const summary=el('p','duplicates-summary');
+  const progress=el('p','hint','');
+  const list=el('div','duplicates-list');
+  d.append(intro,summary,progress,list,el('p','hint','Moving a copy to Trash is undoable with ⌘Z. “Not duplicates” remembers the group and leaves it out of later reviews.'));
+  let timer=0;
+  const formatDate=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?'':date.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});};
+  const groupCard=group=>{
+    const card=el('div','duplicate-group');
+    card.dataset.savings=String(group.savings||0);
+    const head=el('div','duplicate-group-head');
+    head.append(
+      el('strong','duplicate-title',group.members.length+' copies'),
+      el('span','duplicate-badge',group.kind==='exact'?'Exact copies':group.similarity+'% the same picture')
+    );
+    const options=el('div','duplicate-options');
+    const name='duplicate-'+group.token;
+    for(const member of group.members){
+      const label=el('label','duplicate-choice');
+      const input=el('input');
+      input.type='radio';input.name=name;input.value=member.id;input.checked=member.id===group.keep;
+      input.setAttribute('aria-label','Keep '+member.name);
+      const frame=el('span','duplicate-thumb');frame.append(thumb(member));
+      const fileName=el('strong','duplicate-name',member.name);fileName.title=member.name;
+      const meta=el('small','duplicate-meta',[bytes(member.size),formatDate(member.imported)].filter(Boolean).join(' · '));
+      const marks=[];
+      if(member.favorite)marks.push('★');
+      if(member.notes)marks.push('note');
+      if(member.tags.length)marks.push(member.tags.length+(member.tags.length===1?' tag':' tags'));
+      if(member.folders.length)marks.push(member.folders.length===1?'collection':member.folders.length+' collections');
+      if(marks.length)meta.append(' · '+marks.join(' · '));
+      label.append(input,frame,fileName,meta);
+      options.append(label);
+    }
+    const actions=el('div','duplicate-actions');
+    const remove=action('',()=>{});
+    remove.className='primary';
+    const dismiss=action('Not duplicates',()=>{});
+    const compare=action('Compare',()=>{});
+    const refreshButton=()=>{
+      const chosen=options.querySelector('input:checked');
+      const count=Math.max(0,group.members.length-(chosen?1:0));
+      remove.textContent=count===1?'Move 1 copy to Trash':'Move '+count+' copies to Trash';
+      remove.disabled=!count;
+    };
+    options.addEventListener('change',refreshButton);
+    refreshButton();
+    remove.onclick=async()=>{
+      const chosen=options.querySelector('input:checked');
+      const keepId=chosen?.value||group.keep;
+      const ids=group.members.filter(member=>member.id!==keepId).map(member=>member.id);
+      if(!ids.length)return;
+      remove.disabled=true;
+      try{
+        await api.bulkUpdate(ids,{type:'trash',trash:true});
+        await refreshCurrent();
+        card.remove();
+        paintSummary();
+        notify((ids.length===1?'1 copy':ids.length+' copies')+' moved to Trash'+(group.savings?' · '+bytes(group.savings)+' freed':'')+' · ⌘Z to undo');
+        if(!list.querySelector('.duplicate-group'))list.append(el('p','hint','Nothing else looks duplicated.'));
+      }catch(error){
+        notify(error.message||String(error));
+        if(remove.isConnected)remove.disabled=false;
+      }
+    };
+    dismiss.onclick=async()=>{
+      dismiss.disabled=true;
+      try{
+        await api.workbench('dismiss-duplicates',{ids:group.members.map(member=>member.id)});
+        card.remove();
+        paintSummary();
+        notify('Hidden from future duplicate reviews.');
+        if(!list.querySelector('.duplicate-group'))list.append(el('p','hint','Nothing else looks duplicated.'));
+      }catch(error){
+        notify(error.message||String(error));
+        dismiss.disabled=false;
+      }
+    };
+    compare.onclick=()=>{
+      const members=group.members.map(member=>assetById.get(member.id)).filter(Boolean);
+      if(!members.length)return;
+      d.close();
+      setView('all');
+      selection.clear();
+      for(const member of members)selection.ids.add(member.id);
+      selection.focus=members[0].id;
+      selected=members[0].id;
+      renderInspector();
+      openPreview(members);
+    };
+    actions.append(remove,dismiss,compare);
+    card.append(head,options,actions);
+    return card;
+  };
+  const paintSummary=()=>{
+    const cards=[...list.querySelectorAll('.duplicate-group')];
+    if(!cards.length){summary.textContent='';return;}
+    const savings=cards.reduce((sum,node)=>sum+Number(node.dataset.savings||0),0);
+    summary.textContent=cards.length+(cards.length===1?' group':' groups')+(savings?' · '+bytes(savings)+' can be freed':'');
+  };
+  const paint=async()=>{
+    clearTimeout(timer);
+    const result=await api.workbench('duplicates');
+    if(!d.isConnected)return;
+    list.replaceChildren();
+    for(const group of result.groups)list.append(groupCard(group));
+    if(!result.groups.length){
+      list.append(el('p','hint',result.pending?'Still reading pictures…':'No duplicate pictures found.'));
+      if(!result.pending)progress.textContent='Compared '+result.total+(result.total===1?' picture':' pictures')+'.';
+    }
+    if(result.pending){
+      progress.textContent='Reading '+(result.pending===1?'1 more picture':'more pictures')+' · '+result.pending+' left. Results update as they finish.';
+      timer=setTimeout(()=>{paint().catch(()=>{});},1500);
+    }else if(result.groups.length)progress.textContent='';
+    paintSummary();
+  };
+  d.addEventListener('close',()=>clearTimeout(timer));
+  try{await paint();}
+  catch(error){summary.textContent='';progress.textContent='';list.replaceChildren(el('p','hint',error.message||String(error)));}
+ }
  async function recovery(issue){const result=await api.workbench('recover',{id:issue.id});if(result.restored){notify('Original restored. Your tags and canvas placements are preserved.');thumbnailReset(issue.id);await refreshCurrent();renderHealth(await api.startHealth());}}
  function thumbnailReset(id){for(const key of [...linkRequests.keys()])if(key===id)linkRequests.delete(key);}
  async function backupSettings(){const d=dialog('Library backup'),info=await api.workbench('state');d.append(el('p','',info.root),el('p','hint',info.total.n+' files · '+bytes(info.total.bytes||0)),el('p','hint',info.backup?'Last backup: '+new Date(info.backup.at).toLocaleString()+' · '+info.backup.path:'No backup recorded yet.'),el('p','hint','Keep a copy on another disk before resetting your Mac. Open the copied .canvaslibrary folder through Open existing library.'));const check=el('input');check.type='checkbox';check.checked=info.reminders;const label=el('label','tool-field','Remind me after 30 days');label.prepend(check);check.onchange=()=>api.workbench('reminders',{enabled:check.checked});d.append(label,action('Create backup…',async()=>{const button=d.querySelector('button:last-child');button.disabled=true;try{const result=await api.workbench('backup');if(result.at){state.backup=result;notify('Library backup saved.');d.close();}}finally{if(button.isConnected)button.disabled=false;}}));}

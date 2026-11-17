@@ -46,7 +46,8 @@ const AppSelect=(()=>{
   trigger.type='button';
   trigger.setAttribute('aria-haspopup','listbox');
   trigger.setAttribute('aria-expanded','false');
-  if(config.label)trigger.setAttribute('aria-label',config.label);
+  const accessibleName=config.label||config.placeholder||'';
+  if(accessibleName)trigger.setAttribute('aria-label',accessibleName);
   const valueBox=el('span','select-value');
   const indicator=chevron();
   trigger.append(valueBox,indicator);

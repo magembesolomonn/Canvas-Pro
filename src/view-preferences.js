@@ -48,7 +48,11 @@ function initViewPreferences(){
   }
   pointerOpening = false;
  });
- menu.addEventListener('keydown',event=>{event.stopPropagation();const index=options.indexOf(document.activeElement);if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?options.length-1:(index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length;options[next].focus();}else if(event.key==='Escape'){event.preventDefault();menu.hidePopover();button.focus();}else if(event.key==='Enter'||event.code==='Space'){event.preventDefault();document.activeElement.click();}});
+ // Arrow navigation is owned by the generic popover handler in app.js so it
+ // works uniformly across every menu item. This listener only handles the
+ // keys unique to this menu and stops them reaching the document; it must not
+ // stop propagation to the app.js listener on this same element.
+ menu.addEventListener('keydown',event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();menu.hidePopover();button.focus();}else if(event.key==='Enter'||event.code==='Space'){event.preventDefault();document.activeElement.click();}});
  menu.addEventListener('focusout',()=>requestAnimationFrame(()=>{if(menu.matches(':popover-open')&&!menu.contains(document.activeElement)&&document.activeElement!==button)menu.hidePopover();}));
  addEventListener('resize',positionMenu);
  applyAppearance({dark:matchMedia('(prefers-color-scheme: dark)').matches});

@@ -8,7 +8,7 @@ const {classifyURL}=require('./bookmark-types.cjs');
 // plain link. Previews saved by an older extractor are upgraded on demand when
 // the reader opens them, never in bulk at launch.
 const EXTRACTOR_VERSION=10;
-function smartPage(html,url){return new Promise((resolve,reject)=>{const worker=new Worker(path.join(__dirname,'page-worker.cjs'),{workerData:{html,url},resourceLimits:{maxOldGenerationSizeMb:128}});const timeout=setTimeout(()=>{worker.terminate();reject(Error('Page extraction timed out'));},10000);worker.once('message',value=>{clearTimeout(timeout);worker.terminate();value.error?reject(Error(value.error)):resolve(value);});worker.once('error',error=>{clearTimeout(timeout);reject(error);});});}
+function smartPage(html,url){return new Promise((resolve,reject)=>{const worker=new Worker(path.join(__dirname,'page-worker.cjs'),{workerData:{html,url},resourceLimits:{maxOldGenerationSizeMb:128}});const timeout=setTimeout(()=>{worker.terminate();reject(Error('Page extraction timed out'));},10000);worker.once('message',value=>{clearTimeout(timeout);worker.terminate();value.error?reject(Error(value.error)):resolve(value);});worker.once('error',error=>{clearTimeout(timeout);worker.terminate();reject(error);});});}
 
 function webURL(value){const u=new URL(value);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)throw new Error('Use an HTTP or HTTPS link.');return u.href;}
 function decode(value=''){return value.replace(/&(#x[\da-f]+|#\d+|amp|quot|apos|lt|gt|nbsp);/gi,(_,e)=>{if(e[0]==='#'){const n=e[1].toLowerCase()==='x'?parseInt(e.slice(2),16):parseInt(e.slice(1),10);return n>0&&n<=0x10ffff?String.fromCodePoint(n):'';}return {amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' '}[e.toLowerCase()]||'';});}

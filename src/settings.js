@@ -4,7 +4,9 @@
   'use strict';
 
   const SHORTCUTS = [
-    ['⌘K', 'Search the library'],
+    ['⌘ K', 'Open command palette'],
+    ['⌘ F', 'Search the library'],
+    ['⌘ /', 'Keyboard shortcuts'],
     ['Space', 'Preview the selected file'],
     ['← →', 'Move through the library'],
     ['⌘I', 'Toggle file details'],
@@ -34,7 +36,7 @@
     panes: new Map(),
     navItems: [],
     titles: new Map(),
-    currentPane: 'general',
+    currentPane: 'library',
 
     init() {
       const dialog = $('#settings-dialog');
@@ -69,7 +71,12 @@
       this.wireLayouts();
       this.wireExperimental();
 
-      $('#settings-new-collection').onclick = () => $('#add-folder').click();
+      // A modal dialog makes everything outside it inert, so close Settings
+      // before handing off to the sidebar's inline collection field.
+      $('#settings-new-collection').onclick = () => {
+        $('#settings-dialog').close();
+        $('#add-folder').click();
+      };
       $('#settings-import-files').onclick = () => importDialog();
       $('#settings-check-updates').onclick = () => this.checkUpdates();
       $('#settings-licenses-toggle').onclick = event => {
@@ -78,7 +85,7 @@
         card.hidden = !open;
         event.currentTarget.setAttribute('aria-expanded', String(open));
       };
-      this.show('general');
+      this.show('library');
     },
 
     pane(name) {
@@ -95,7 +102,7 @@
     },
 
     show(name) {
-      if (!this.panes.has(name)) name = 'general';
+      if (!this.panes.has(name)) name = 'library';
       this.currentPane = name;
       for (const [key, pane] of this.panes) pane.hidden = key !== name;
       for (const item of this.navItems) {
@@ -135,7 +142,7 @@
       if (name === 'appearance') this.syncAppearance();
       if (name === 'collections') this.syncCollections();
       if (name === 'galleries') this.syncLayouts();
-      if (name === 'experimental') this.syncExperimental();
+      if (name === 'search-models') this.syncExperimental();
       if (name === 'about') this.syncVersion();
     },
 

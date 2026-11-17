@@ -70,11 +70,11 @@ function key(keyCode,modifiers=[]) {
   await until(()=>run("!document.body.classList.contains('hide-sidebar') && $('[data-section=media]').open"));
   await run("$('[data-section=media] > summary').click()");
   await run("$('#add-folder').click()");
-  assert.equal(await run("$('#folder-dialog').open"),true);
-  await run("$('#folder-dialog').close()");
+  assert.ok(await run("!!document.querySelector('#folders .inline-create input')"),'Inline collection field must open');
+  await run("document.querySelector('#folders .inline-create input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
   console.log('SIDEBAR_PILLS_FULL_HIDE_CMDS_SECTIONS_OK');
 
-  await run("$('#new-note').click();$('#note-template').value='blank';$('#note-template-form').requestSubmit()");
+  await run("$('#new-note').click();const input=document.querySelector('#note-pages .inline-create input');input.value='Sidebar note';input.closest('form').requestSubmit()");
   await until(()=>run("!$('#notes-editor').inert && !!$('#note-pages [aria-current]')"));
   await pause(220);
   assert.equal(await run("$('.sidebar-active-pill').hidden"),false);

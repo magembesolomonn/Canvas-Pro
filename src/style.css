@@ -539,7 +539,6 @@ kbd {
 }
 .card.selected .card-surface {
   border-color: #bdbdbd;
-  box-shadow: 0 0 0 1px #ffffff25;
 }
 .card:hover .card-surface {
   border-color: #ffffff40;
@@ -2235,6 +2234,7 @@ dialog {
      nothing on a narrow window, and that must not reach into the dialog:
      a one-pixel rail let the search field and the icons overlap the pane
      title. */
+  position: relative;
   width: var(--settings-sidebar, 200px);
   flex: none;
   display: flex;
@@ -2278,16 +2278,20 @@ dialog {
   flex: 1;
   min-width: 0;
   width: 100%;
-  /* The magnifier's glyph sits low in its box, so the text is given a
-     matching line: more room above the text than below it. */
-  height: auto;
-  padding: 9px 0 1px;
+  /* Share the pill's 30px inner height so the text and the centred icon
+     have the same vertical centre instead of relying on uneven padding. */
+  height: 30px;
+  /* The pill is the field here. `dialog input` gives typeset fields a
+     bottom margin, and as a flex child that margin lifted the text five
+     pixels above the icon. */
+  margin: 0;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--text);
   font: 12px var(--app-font);
-  line-height: 1.4;
+  line-height: 30px;
   outline: none;
 }
 /* The ring belongs to the pill, not to the input inside it. These selectors
@@ -5643,6 +5647,133 @@ body.light-mode footer {
 .review-row > span {
   flex: 1;
 }
+
+/* Duplicate review ------------------------------------------------------
+   A group is one picture, however many files it arrived as. The chosen copy
+   wears the focus grey; the others are what "Move to Trash" will take. */
+.duplicates-summary {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.duplicates-summary:empty {
+  display: none;
+}
+.duplicates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 12px;
+}
+.duplicate-group {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-card);
+}
+.duplicate-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.duplicate-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.duplicate-badge {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.duplicate-options {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+}
+.duplicate-choice {
+  position: relative;
+  flex: 0 0 126px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--fill-hover);
+  cursor: pointer;
+}
+.duplicate-choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.duplicate-choice:has(input:checked) {
+  border-color: var(--focus);
+  background: var(--surface-raised);
+}
+.duplicate-choice:has(input:focus-visible) {
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
+}
+.duplicate-thumb {
+  display: block;
+  height: 82px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-field);
+}
+.duplicate-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.duplicate-name {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.duplicate-meta {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.duplicate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.duplicate-actions button {
+  font-size: 11px;
+}
+body.light-mode .duplicate-group {
+  background: #ffffff;
+  border-color: #00000014;
+}
+body.light-mode .duplicate-choice {
+  background: #f6f6f7;
+  border-color: #00000014;
+}
+body.light-mode .duplicate-choice:has(input:checked) {
+  background: #ffffff;
+  border-color: var(--focus);
+}
+body.light-mode .duplicate-thumb {
+  background: #ebebeb;
+}
 .inspector-disclosure {
   margin: 16px 0;
   padding: 16px 0;
@@ -5762,7 +5893,7 @@ nav button.active .sf-symbol {
 body.light-mode nav .sf-symbol {
   color: #777777;
 }
-body.light-mode nav button.active .sf-symbol {
+body.light-mode .sidebar nav button.active .sf-symbol {
   color: #2a2a2a;
 }
 .full-player.video-player .player-controls {
@@ -6088,7 +6219,6 @@ body.light-mode .card .card-name {
 }
 body.light-mode .card.selected .card-surface {
   border-color: var(--focus);
-  box-shadow: 0 0 0 1px var(--focus);
 }
 body.light-mode .card:hover .card-surface {
   border-color: #a8a8ac;
@@ -6556,10 +6686,11 @@ dialog .dialog-actions {
   align-items: center;
 }
 
-/* Distinguish the keyboard cursor from the selection in the virtualized grid. */
+/* The keyboard cursor uses the card's own hairline, not a second ring. An
+   outline here would sit outside the selection border and read as two
+   different coloured edges. */
 #gallery:focus-visible .card.focused .card-surface {
-  outline: 2px solid var(--focus, #a9a9ad);
-  outline-offset: 2px;
+  border-color: var(--focus, #a9a9ad);
 }
 
 
@@ -6834,3 +6965,613 @@ body.light-mode #settings-update-progress::-webkit-progress-value {
 }
 .skip-link{position:fixed;top:8px;left:8px;z-index:10000;padding:8px 12px;border-radius:6px;background:var(--surface-menu);color:var(--text);transform:translateY(-200%)}
 .skip-link:focus{transform:none;outline:1px solid var(--focus)}
+
+/* Draggable splits --------------------------------------------------------
+   The app sidebar, the Settings rail and File Details share one 11px grab
+   edge centred on the existing hairline. Nothing is visible until the
+   pointer reaches it, then the line doubles and takes the app's focus grey. */
+.panel-resizer {
+  --resizer-line: #ffffff2b;
+  --resizer-line-strong: #ffffff70;
+  --resizer-accent: var(--focus);
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 45;
+  width: 11px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+.panel-resizer[hidden] {
+  display: none;
+}
+/* A modal sheet owns the window; the rails behind it cannot be dragged. */
+body:has(dialog[open]) .panel-resizer[data-panel]:not([data-panel="settings"]),
+body:has(#preview:not([hidden])) .panel-resizer[data-panel]:not([data-panel="settings"]),
+body.sidebar-drawer-open .panel-resizer[data-panel]:not([data-panel="settings"]) {
+  display: none;
+}
+.panel-resizer[data-panel="settings"] {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  bottom: 0;
+  left: auto;
+  height: auto;
+  z-index: 6;
+}
+.panel-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--resizer-line-strong);
+  opacity: 0;
+  transition: opacity var(--duration-instant) linear,
+    width var(--duration-instant) linear,
+    background-color var(--duration-instant) linear;
+}
+.panel-resizer:hover::before,
+.panel-resizer:focus-visible::before,
+.panel-resizer.is-dragging::before {
+  width: 2px;
+  background: var(--resizer-accent);
+  opacity: 1;
+}
+.panel-resizer-badge {
+  position: absolute;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border: 1px solid #ffffff1c;
+  border-radius: 6px;
+  background: #2c2c2ef2;
+  box-shadow: 0 4px 12px #00000059;
+  color: #f2f2f2;
+  font: 500 10px/1 var(--app-font);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-instant) linear;
+}
+.panel-resizer.is-flashing .panel-resizer-badge {
+  opacity: 1;
+}
+body.light-mode .panel-resizer {
+  --resizer-line: #00000022;
+  --resizer-line-strong: #00000055;
+}
+body.light-mode .panel-resizer-badge {
+  border-color: #0000001f;
+  background: #fffffff2;
+  box-shadow: 0 4px 12px #00000026;
+  color: #2a2a2a;
+}
+/* While a split is being dragged, every cursor in the window agrees. */
+body.is-resizing-panel,
+body.is-resizing-panel * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+@media (prefers-contrast: more) {
+  .panel-resizer {
+    --resizer-line-strong: var(--focus);
+  }
+}
+
+/* Video player chrome ---------------------------------------------------
+   A single cinematic overlay used by both the preview and the card player.
+   The controls sit on the picture, so they keep one white ink and a soft
+   scrim in both themes: a light bar over an arbitrary frame is unreadable,
+   while a theme-coloured bar looks out of place over a film. The lavender
+   seek outline is the one accent, chosen to stay legible on warm and cool
+   frames alike. */
+.media-player {
+  --player-ink: #ffffff;
+  --player-muted: rgba(255, 255, 255, 0.72);
+  --player-scrim: linear-gradient(transparent, rgba(0, 0, 0, 0.16) 38%, rgba(0, 0, 0, 0.72));
+  --player-hover: rgba(255, 255, 255, 0.14);
+  --player-track: rgba(255, 255, 255, 0.38);
+}
+body .media-player.video-player .player-controls {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 0;
+  padding: 34px 16px 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--player-scrim) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  color: var(--player-ink);
+  pointer-events: none;
+}
+body .media-player.video-player .player-controls > * {
+  pointer-events: auto;
+}
+body .media-player.video-player .player-controls button,
+body .media-player.video-player .player-controls .player-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--player-ink);
+  cursor: pointer;
+}
+body .media-player.video-player .player-controls button:hover,
+body .media-player.video-player .player-controls button:focus-visible {
+  background: var(--player-hover);
+}
+body .media-player.video-player .player-controls button:active {
+  background: var(--player-hover);
+  transform: scale(0.96);
+}
+body .media-player.video-player .player-controls button .sf-symbol {
+  width: 17px;
+  height: 17px;
+  color: var(--player-ink);
+}
+body .media-player.video-player .player-controls .player-loop[aria-pressed="true"] {
+  color: var(--player-ink);
+}
+body .media-player.video-player .player-controls .player-loop[aria-pressed="true"] .sf-symbol {
+  color: var(--player-ink);
+}
+body .media-player.video-player .player-controls .player-time,
+body .media-player.video-player .player-controls .elapsed,
+body .media-player.video-player .player-controls .total-time {
+  flex: none;
+  color: var(--player-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+body .media-player.video-player .player-controls .player-remaining {
+  min-width: 42px;
+  text-align: right;
+}
+body .media-player.video-player .player-controls .player-speed {
+  width: auto;
+  min-width: 28px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+body .media-player.video-player .player-controls .player-seek-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 40px;
+  height: 26px;
+}
+body .media-player.video-player .player-controls .seek {
+  display: block;
+  flex: 1;
+  width: 100%;
+  height: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+  background: linear-gradient(to right, #fff var(--position, 0%), var(--player-track) var(--position, 0%));
+}
+body .media-player.video-player .player-controls .seek::-webkit-slider-runnable-track {
+  height: 3px;
+  background: transparent;
+}
+body .media-player.video-player .player-controls .seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -3.5px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 100ms linear;
+}
+body .media-player.video-player .player-controls:hover .seek::-webkit-slider-thumb,
+body .media-player.video-player .player-controls .seek:focus-visible::-webkit-slider-thumb,
+body .media-player.video-player .player-controls .seek:active::-webkit-slider-thumb {
+  opacity: 1;
+}
+body .media-player.video-player .player-controls .player-seek-hover {
+  position: absolute;
+  bottom: 11px;
+  left: var(--position, 0%);
+  width: 1px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.55);
+  opacity: 0;
+  pointer-events: none;
+}
+body .media-player.video-player .player-controls .player-seek-preview {
+  position: absolute;
+  bottom: 39px;
+  left: var(--position, 0%);
+  transform: translateX(-50%);
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(12, 12, 14, 0.62);
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 100ms linear;
+}
+body .media-player.video-player .player-controls .player-seek-wrap.is-previewing .player-seek-hover,
+body .media-player.video-player .player-controls .player-seek-wrap.is-previewing .player-seek-preview {
+  opacity: 1;
+}
+body .media-player.video-player .player-controls .volume {
+  width: 0;
+  opacity: 0;
+  flex: none;
+  accent-color: #fff;
+  transition: width 150ms ease, opacity 150ms ease;
+}
+body .media-player.video-player .player-controls.volume-open .volume {
+  width: 66px;
+  opacity: 1;
+}
+body .media-player.compact-player.video-player .player-controls {
+  gap: 6px;
+  padding: 18px 8px 5px;
+}
+body .media-player.compact-player.video-player .player-controls button,
+body .media-player.compact-player.video-player .player-controls .player-button {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
+body .media-player.compact-player.video-player .player-controls button .sf-symbol {
+  width: 12px;
+  height: 12px;
+}
+body .media-player.compact-player.video-player .player-controls .player-time,
+body .media-player.compact-player.video-player .player-controls .player-speed {
+  font-size: 9px;
+}
+body .media-player.compact-player.video-player .player-controls .player-remaining {
+  min-width: 0;
+}
+body .media-player.compact-player.video-player .player-controls .player-speed,
+body .media-player.compact-player.video-player .player-controls .volume {
+  display: none;
+}
+body .media-player.compact-player.video-player .player-controls .seek {
+  height: 2px;
+}
+body .media-player.compact-player.video-player .player-controls .seek::-webkit-slider-thumb {
+  width: 8px;
+  height: 8px;
+  margin-top: -3px;
+}
+body .media-player.compact-player.video-player .player-controls .player-seek-hover {
+  height: 18px;
+  bottom: 7px;
+}
+body .media-player.compact-player.video-player .player-controls .player-seek-preview {
+  bottom: 27px;
+  font-size: 9px;
+}
+body.full-screen .media-player.video-player .player-controls,
+.media-player.video-player:fullscreen .player-controls {
+  padding-bottom: 18px;
+}
+
+/* The older light-mode capsule rules carry four classes and an !important
+   background. These full-player selectors match that weight and win by
+   source order, so the overlay is identical in both themes. */
+body .media-player.full-player.video-player .player-controls {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  margin: 0;
+  padding: 34px 16px 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--player-scrim) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  color: var(--player-ink);
+}
+body .media-player.full-player.video-player .player-controls button,
+body .media-player.full-player.video-player .player-controls .player-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--player-ink);
+}
+body .media-player.full-player.video-player .player-controls button .sf-symbol {
+  color: var(--player-ink);
+}
+body .media-player.full-player.video-player .player-controls .player-loop[aria-pressed="true"],
+body .media-player.full-player.video-player .player-controls .player-loop[aria-pressed="true"] .sf-symbol {
+  color: var(--player-ink);
+}
+body .media-player.full-player.video-player .player-controls .player-time,
+body .media-player.full-player.video-player .player-controls .elapsed,
+body .media-player.full-player.video-player .player-controls .total-time {
+  color: var(--player-muted);
+  font-size: 11px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+body .media-player.full-player.video-player .player-controls .player-speed {
+  width: auto;
+  min-width: 28px;
+  padding: 0 5px;
+  font-size: 11px;
+}
+body .media-player.full-player.video-player .player-controls .seek {
+  height: 3px;
+  margin: 0;
+  border: 0;
+  border-radius: 3px;
+  background: linear-gradient(to right, #fff var(--position, 0%), var(--player-track) var(--position, 0%));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+body .media-player.full-player.video-player .player-controls .seek::-webkit-slider-thumb {
+  width: 10px;
+  height: 10px;
+  margin-top: -3.5px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0;
+}
+body .media-player.full-player.video-player .player-controls:hover .seek::-webkit-slider-thumb,
+body .media-player.full-player.video-player .player-controls .seek:focus-visible::-webkit-slider-thumb,
+body .media-player.full-player.video-player .player-controls .seek:active::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+/* Audio keeps its in-flow control strip; only the new control class names
+   need mapping to the existing audio layout and palette. */
+body .media-player.audio-player .player-controls .player-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+body .media-player.audio-player .player-controls .player-button .sf-symbol {
+  color: currentColor;
+}
+body .media-player.audio-player .player-controls .player-time {
+  color: #c4c4c4;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+body.light-mode .media-player.audio-player .player-controls .player-time {
+  color: var(--text);
+}
+body .media-player.audio-player .player-controls .player-seek-preview,
+body .media-player.audio-player .player-controls .player-seek-hover {
+  display: none;
+}
+body .media-player.audio-player .player-controls .player-speed {
+  width: auto;
+  min-width: 34px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+/* Portrait video: the player box is only as wide as the picture, so shed the
+   secondary controls before the seek bar is squeezed out. */
+@container (max-width: 340px) {
+  body .media-player.full-player.video-player .player-controls {
+    gap: 6px;
+    padding: 24px 8px 8px;
+  }
+  body .media-player.full-player.video-player .player-controls .player-time:not(.player-remaining) {
+    display: none;
+  }
+  body .media-player.full-player.video-player .player-controls button[aria-label="Full screen"] {
+    display: none;
+  }
+  body .media-player.full-player.video-player .player-controls .player-remaining {
+    min-width: 0;
+  }
+}
+
+/* The base control strip caps itself at 900px, which left-anchored it inside
+   a wider video. The overlay must follow the picture edge to edge. */
+body .media-player.full-player.video-player .player-controls {
+  max-width: none !important;
+  inset-inline: 0;
+  margin-inline: 0;
+}
+
+/* Command palette -------------------------------------------------------
+   One ⌘K surface for commands and for the things in the library. */
+.command-palette {
+  width: min(640px, calc(100vw - 40px));
+  max-width: none;
+  max-height: min(72vh, 640px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-sheet);
+}
+.command-palette::backdrop { background: #0009; backdrop-filter: blur(2px); }
+.command-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.command-search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 24px;
+  flex: none;
+  color: var(--muted);
+}
+.command-search-icon .sf-symbol { width: 17px; height: 17px; }
+.command-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  height: 24px;
+  line-height: 24px;
+  outline: none;
+  box-shadow: none;
+}
+.command-input::placeholder { color: var(--muted); }
+.command-list { max-height: min(56vh, 520px); overflow: auto; padding: 6px 8px 10px; }
+.command-group-title {
+  padding: 12px 10px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.command-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.command-row[aria-selected="true"] { background: var(--fill-active); }
+.command-icon { display: inline-flex; width: 18px; justify-content: center; flex: none; color: var(--muted); }
+.command-icon .sf-symbol { width: 15px; height: 15px; }
+.command-label { flex: 1; min-width: 0; overflow: hidden; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+.command-meta { font-size: 11px; color: var(--muted); }
+.command-row kbd { flex: none; margin-left: 6px; }
+.command-empty { padding: 30px 16px; text-align: center; font-size: 12px; color: var(--muted); }
+.command-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.command-foot kbd { border-color: var(--line); color: var(--muted); }
+body.light-mode .command-palette { background: var(--bg-primary); border-color: var(--line); }
+body.light-mode .command-row[aria-selected="true"] { background: var(--selection); }
+body.light-mode .command-palette kbd { border-color: var(--line); background: var(--bg-secondary); color: var(--muted); }
+
+/* Grid results (files, canvases, notes) */
+.command-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 2px 10px 12px; }
+.command-card { display: block; min-width: 0; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--fill-field); text-align: left; }
+.command-card:hover, .command-card[aria-selected="true"] { border-color: var(--focus); background: var(--fill-hover); }
+.command-thumb { display: block; width: 100%; height: 84px; object-fit: cover; background: var(--surface-field); }
+.command-card-foot { display: block; padding: 6px 8px 7px; }
+.command-card-name { display: block; overflow: hidden; font-size: 11px; white-space: nowrap; text-overflow: ellipsis; color: var(--text); }
+.command-card-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.command-tag { padding: 1px 5px; border-radius: 999px; background: var(--fill-hover); color: var(--muted); font-size: 9px; }
+body.light-mode .command-card { border-color: var(--line); background: var(--bg-primary); }
+body.light-mode .command-card:hover, body.light-mode .command-card[aria-selected="true"] { border-color: var(--focus); background: var(--bg-secondary); }
+body.light-mode .command-thumb { background: var(--bg-secondary); }
+
+/* `dialog input` adds typeset-field margins; the palette search is a toolbar. */
+body .command-input,
+body.light-mode .command-input { margin: 0; width: auto; border: 0; background: transparent; box-shadow: none; outline: none; }
+body .command-input:focus-visible,
+body.light-mode .command-input:focus-visible { outline: none; }
+
+/* Inline creation in the sidebar */
+.inline-create { display: flex; padding: 2px 6px 5px 24px; }
+.inline-create input {
+  width: 100%; min-width: 0; padding: 5px 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--fill-field); color: var(--text);
+  font: inherit; font-size: 12px; outline: none; box-shadow: none;
+}
+.inline-create input:focus-visible { border-color: var(--focus); }
+body.light-mode .inline-create input { background: var(--bg-primary); }
+
+/* Shortcut hints inside menus and Settings rows */
+.layout-menu button > kbd, .settings-button kbd { margin-left: auto; border-color: var(--line); color: var(--muted); }
+body.light-mode .layout-menu button > kbd, body.light-mode .settings-button kbd { border-color: var(--line); background: var(--bg-secondary); color: var(--muted); }
+
+/* When the canvas tray is open on a narrow window, the centred tool dock
+   would sit on top of the zoom cluster. Lift it clear instead. */
+@media (max-width: 1040px) {
+  .canvas-workspace:has(#canvas-tray:not([hidden])) .canvas-dock {
+    left: auto;
+    right: 16px;
+    transform: none;
+    bottom: 64px;
+  }
+}
+
+/* The animated pill supplies the highlight; the row itself stays clear. */
+body.light-mode .sidebar nav button.active { background: transparent; }
+
+.narrow-inspector-close {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 36;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-panel);
+  color: var(--text);
+}
+body.narrow-panel-open .narrow-inspector-close { display: inline-flex; }
+body.light-mode .narrow-inspector-close { background: var(--bg-primary); border-color: var(--line); }

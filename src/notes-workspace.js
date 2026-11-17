@@ -115,10 +115,10 @@ const NotesWorkspace = (() => {
       selected.classList.remove('active');
     }
   }
-  async function loadList() {
-    if (!list) {
+  async function loadList(force = false) {
+    if (!list || force) {
       const loaded = await api.notesList();
-      list ??= loaded;
+      list = loaded;
     }
     renderTree();
   }
@@ -160,13 +160,29 @@ const NotesWorkspace = (() => {
     $('#notes-retry').hidden = true;
   }
   // Serialize page changes so a save can never update a different open draft.
-  async function run(fn) {
-    if (busy) return;
+  // Actions that arrive while one is async are queued behind it rather than dropped.
+  let current = Promise.resolve(), pending = 0;
+  function run(fn) {
+    const execute = async () => {
+      try { return await fn(); }
+      catch (error) { notify(error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
+      finally {
+        // Keep the editor inert until the whole queue has drained, not just
+        // the action that happens to finish first.
+        if (--pending === 0) { busy = false; $('#notes-editor').inert = false; }
+      }
+    };
+    pending++;
+    if (busy) {
+      // Something is in flight: wait for the current tail, then run in order.
+      const queued = current.then(execute, execute);
+      current = queued;
+      return queued;
+    }
     busy = true;
     $('#notes-editor').inert = true;
-    try { return await fn(); }
-    catch (error) { notify(error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
-    finally { busy = false; $('#notes-editor').inert = false; }
+    current = execute(); // starts synchronously up to its first await
+    return current;
   }
   function setNote(item) {
     note = item;
@@ -176,17 +192,20 @@ const NotesWorkspace = (() => {
     renderTree();
     renderEditor();
   }
-  async function select(id) {
+  async function select(id, force = false) {
     enter();
     await flush();
-    await loadList();
+    await loadList(force);
     if (id && note?.id !== id) setNote(await api.notesGet(id));
     else if (!note && list.length) setNote(await api.notesGet(list[0].id));
     else renderTree();
   }
   async function reorder(id, target) {
     list = await api.notesReorder(id, target);
-    if (note) list.find(item => item.id === note.id).title = note.title;
+    if (note) {
+      const item = list.find(item => item.id === note.id);
+      if (item) item.title = note.title;
+    }
     renderTree();
     updateMoveButtons();
   }
@@ -603,7 +622,7 @@ const NotesWorkspace = (() => {
     bold.setAttribute('aria-label', 'Bold');
     bold.setAttribute('aria-pressed', String(Boolean(block.bold)));
     const alignment = el('div', 'note-format-align');
-    for (const [value, name, glyph] of [['left', 'Align left', '≡'], ['center', 'Align center', '≡'], ['right', 'Align right', '≡']]) {
+    for (const [value, name, glyph] of [['left', 'Align left', '⇤'], ['center', 'Align center', '↔'], ['right', 'Align right', '⇥']]) {
       const control = button(glyph, () => {
         block.align = value;
         alignment.querySelectorAll('button').forEach(node => node.setAttribute('aria-pressed', String(node.dataset.align === value)));
@@ -894,9 +913,10 @@ const NotesWorkspace = (() => {
         return true;
       }).then(created => { if (created) $('#note-title').select(); });
     };
-    for (const id of ['new-note', 'new-note-empty']) {
-      $('#'+id).onclick = () => { templateParent = null; $('#note-template-dialog').showModal(); };
-    }
+    // The rail's + creates a blank page right there; the empty state still
+    // opens the template chooser when someone wants a starting structure.
+    $('#new-note').onclick = () => SidebarUI.inlineCreate('notes');
+    $('#new-note-empty').onclick = () => { templateParent = null; $('#note-template-dialog').showModal(); };
     $('#note-child').onclick = () => {
       templateParent = note.id;
       $('.notes-page-menu').open = false;
@@ -1004,7 +1024,17 @@ const NotesWorkspace = (() => {
 
   return {
     init, show, flush, pickThumbnail: title => pickImage(false, true, title),
-    open: id => run(async () => { await select(id); return note?.id === id; }),
+    open: id => run(async () => { await select(id, true); return note?.id === id; }),
+    create: (title, parent = null) => run(async () => {
+      await flush();
+      const item = await api.notesCreate('blank', parent, title);
+      list = await api.notesList();
+      enter();
+      setNote(item);
+      $('#note-title').focus();
+      $('#note-title').select();
+      return item;
+    }),
     active: () => view === 'notes' && note ? { id: note.id, title: note.title } : null,
     assistantWrite, setCoverFromLibrary: (id, assetId) => cover(false, { id: assetId }, id),
     menuAction: noteMenuAction

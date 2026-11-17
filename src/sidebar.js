@@ -314,5 +314,49 @@ const SidebarUI = (() => {
     syncMode();
   }
 
-  return { init, syncAccessibility };
+  // A small input in the rail is faster than a sheet for the two things
+  // people create constantly. Enter commits, Escape backs out, and the rest
+  // of the app still uses the full dialogs when it needs templates or targets.
+  function inlineCreate(section) {
+    if (!sidebar) return null;
+    const details = sidebar.querySelector('.sidebar-section[data-section="' + section + '"]');
+    const nav = details?.querySelector('nav');
+    if (!nav) return null;
+    details.open = true;
+    for (const old of sidebar.querySelectorAll('.inline-create')) old.remove();
+    const form = el('form', 'inline-create');
+    const input = el('input');
+    input.type = 'text';
+    input.maxLength = 120;
+    input.placeholder = section === 'collections' ? 'Collection name' : 'Note title';
+    input.setAttribute('aria-label', input.placeholder);
+    const finish = () => form.remove();
+    form.onsubmit = event => {
+      event.preventDefault();
+      const value = input.value.trim();
+      if (!value) return finish();
+      finish();
+      if (section === 'collections') {
+        safe(async () => {
+          await api.addFolder(value);
+          await refreshCurrent();
+          const folder = CanvasWorkspace.folderRecords.find(item => item.name === value);
+          if (folder) await WorkbenchUI.created('folder:' + folder.id, 'collection');
+        });
+      } else {
+        safe(() => NotesWorkspace.create(value));
+      }
+    };
+    input.onkeydown = event => {
+      event.stopPropagation();
+      if (event.key === 'Escape') { event.preventDefault(); finish(); }
+      else if (event.key === 'Enter') { event.preventDefault(); form.requestSubmit(); }
+    };
+    form.append(input);
+    nav.prepend(form);
+    input.focus();
+    return input;
+  }
+
+  return { init, syncAccessibility, inlineCreate };
 })();

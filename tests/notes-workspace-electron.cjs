@@ -131,7 +131,7 @@ async function insertBlock(type) {
     return add.getAttribute('aria-label')==='New note' &&
       getComputedStyle(icon).getPropertyValue('--symbol').includes('plus.png');
   })()`),true);
-  await run("$('#new-note').click();$('#note-template').focus()");
+  await run("$('#new-note-empty').click();$('#note-template').focus()");
   assert.deepEqual(await run("Array.from($('#note-template').options,option=>option.value)"),['blank','movies','finance','product','youtube']);
   assert.equal(await run("$('#note-template-dialog').open && $('#notes-tree').open"),true);
   // The sheet's field is the listbox now, so the space is measured from it.

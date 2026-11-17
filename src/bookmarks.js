@@ -1,4 +1,6 @@
 const linkRequests=new Map();
+const linkRetries=new Map();
+const LINK_MAX_ATTEMPTS=3;
 // Mirrors EXTRACTOR_VERSION in electron/bookmarks.cjs. A preview saved by an
 // older extractor is refreshed once, when it is opened, so an existing link
 // picks up its recipe card without a delete-and-re-add or a launch-time sweep.
@@ -6,9 +8,12 @@ const EXTRACTOR_VERSION=10;
 function bookmarkInfo(a,force=false){
  const existing=linkRequests.get(a.id);
  if(!force&&existing?.url===a.url&&(!existing.expires||existing.expires>Date.now()))return existing.promise;
+ const attempts=(linkRetries.get(a.id)||0)+1;
+ linkRetries.set(a.id,attempts);
  const entry={url:a.url};
  entry.promise=api.linkInfo(a.id,force).then(info=>{
   if(info){
+   linkRetries.delete(a.id);
    applyBookmarkInfo(a.id,info);
    entry.url=a.url;
    entry.expires=Date.now()+60000;
@@ -20,13 +25,15 @@ function bookmarkInfo(a,force=false){
    }
   }else if(linkRequests.get(a.id)===entry){
    linkRequests.delete(a.id);
-   if(mounted.has(a.id)&&!a.trash)setTimeout(()=>{
+   if(attempts<LINK_MAX_ATTEMPTS&&mounted.has(a.id)&&!a.trash)setTimeout(()=>{
     if(mounted.has(a.id)&&!linkRequests.has(a.id))bookmarkInfo(a);
    },300);
+   else linkRetries.delete(a.id);
   }
   return info;
  }).catch(()=>{
   if(linkRequests.get(a.id)===entry)linkRequests.delete(a.id);
+  linkRetries.delete(a.id);
   return null;
  });
  linkRequests.set(a.id,entry);

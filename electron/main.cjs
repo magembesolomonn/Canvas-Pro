@@ -26,6 +26,7 @@ const {YtDlp}=require('./yt-dlp.cjs');
 const {contextTemplate}=require('./file-menu.cjs');
 const {ImportQueue}=require('./import-queue.cjs');
 const {Workbench}=require('./workbench.cjs');
+const {hashFile}=require('./perceptual-hash.cjs');
 const {HealthService}=require('./health-service.cjs');
 const {createOriginalsWatch}=require('./originals-watch.cjs');
 const {Updater}=require('./updater.cjs');
@@ -331,10 +332,11 @@ let pendingLibraryRefreshAll=false;
 let lastCaptureAt=0;
 function notifyLibraryChanged(ids){
   lastCaptureAt=Date.now();
+  const canSend=win&&!win.isDestroyed()&&!win.webContents.isLoading();
   if(!Array.isArray(ids)){
     pendingLibraryRefreshAll=true;
     pendingLibraryChanges.clear();
-    if(win&&!win.isDestroyed()&&!win.webContents.isLoading())win.webContents.send('library-changed');
+    if(canSend){pendingLibraryRefreshAll=false;win.webContents.send('library-changed');}
     return;
   }
   if(!pendingLibraryRefreshAll){
@@ -343,9 +345,9 @@ function notifyLibraryChanged(ids){
   }
   // The change is only remembered while the view cannot receive it. Once it
   // has been handed over, it must not be replayed later.
-  if(win&&!win.isDestroyed()&&!win.webContents.isLoading()){
+  if(canSend){
     if(pendingLibraryRefreshAll){pendingLibraryRefreshAll=false;pendingLibraryChanges.clear();win.webContents.send('library-changed');}
-    else{win.webContents.send('library-changed',ids);for(const id of ids)pendingLibraryChanges.delete(id);}
+    else{const pending=[...pendingLibraryChanges];pendingLibraryChanges.clear();win.webContents.send('library-changed',pending);}
   }
 }
 function flushLibraryChanges(){
@@ -357,7 +359,7 @@ function flushLibraryChanges(){
 }
 function createWindow() {
   const appearance=appearanceState();
-  win = new BrowserWindow({ width: 1480, height: 940, minWidth: 960, minHeight: 640, title: 'Canvas Pro', backgroundColor: '#00000000', transparent: true, titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  win = new BrowserWindow({ width: 1480, height: 940, minWidth: 760, minHeight: 600, title: 'Canvas Pro', backgroundColor: '#00000000', transparent: true, titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
   previewZoomActive=false;
   win.webContents.on('before-input-event',(_event,input)=>{
     win.webContents.setIgnoreMenuShortcuts(previewZoomActive&&(input.meta||input.control)&&['+','=','-','0'].includes(input.key));
@@ -409,6 +411,32 @@ app.whenReady().then(async () => {
   if(!process.env.ASSET_TEST_MODE&&(savedLibrary?.root!==libraryRoot||savedLibrary.recent[0]!==libraryRoot))locations.remember(libraryRoot);
   library = new Library(libraryRoot);
   workbench=new Workbench(library);
+  // Fingerprints are filled in quietly in the background: a review should not
+  // make someone wait while every picture in the library is decoded, and
+  // importing a file should not either. The review dialog polls the pending
+  // count, so it can say what it is still looking at.
+  let phashSweeping=false;
+  const preparePhashes=async()=>{
+    if(phashSweeping||!library)return;
+    phashSweeping=true;
+    try{
+      for(;;){
+        if(shutdownStarted)return;
+        let batch;
+        try{batch=library.phashCandidates(12);}catch{return;}
+        if(!batch.length)return;
+        for(const row of batch){
+          let value='';
+          try{value=hashFile(nativeImage,library.file(row.id));}catch{value='';}
+          try{library.setPhash(row.id,value);}catch{return;}
+          // Decoding is synchronous, so yield between pictures: one decode per
+          // turn keeps scrolling responsive instead of a dozen in a row.
+          await new Promise(resolve=>setTimeout(resolve,40));
+        }
+      }
+    }finally{phashSweeping=false;}
+  };
+  setTimeout(()=>{preparePhashes().catch(()=>{});},2500);
   originalsWatch=createOriginalsWatch({library,onChange:ids=>notifyLibraryChanged(ids)});
   if(process.env.ASSET_TEST_MODE)global.originalsWatch=originalsWatch;
   let switchingLibrary=false;
@@ -680,7 +708,7 @@ app.whenReady().then(async () => {
         const file=path.join(dir,'export.html');
         const url=pathToFileURL(file).href;
         const head=`<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><style>@page{margin:0}html,body{margin:0}svg{display:block;width:100%;height:100%}</style>`;
-        await fs.promises.writeFile(file,[head,data.svg],{mode:0o600});
+        await fs.promises.writeFile(file,head+data.svg,{mode:0o600});
         printer=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,javascript:false,partition:'canvas-export-'+crypto.randomUUID()}});
         printer.webContents.session.webRequest.onBeforeRequest((details,callback)=>callback({cancel:details.url!==url&&!details.url.startsWith('data:')}));
         await printer.loadFile(file);
@@ -697,7 +725,8 @@ app.whenReady().then(async () => {
     if(op==='state')return {icons:workbench.icons(),backup:workbench.pref('lastBackup'),reminders:workbench.pref('backupReminders')!==false,total:library.db.prepare('SELECT COUNT(*) n,SUM(size) bytes FROM assets').get(),root:library.root};
     if(op==='history')return workbench.history(!!data.redo);
     if(op==='icon')return workbench.icon(data.key,data.icon);
-    if(op==='duplicates')return workbench.duplicates();
+    if(op==='duplicates'){preparePhashes().catch(()=>{});return workbench.duplicates({threshold:data.threshold});}
+    if(op==='dismiss-duplicates')return workbench.dismissDuplicates(data.ids);
     if(op==='similar')return workbench.similar(data.id);
     if(op==='retry-index'){
       thumbnailMisses.clear();
@@ -847,8 +876,9 @@ app.whenReady().then(async () => {
     return importPaths(paths, folder);
   });
   const ratioUpdates=new Map();let ratioTimer;
-  ipcMain.on('asset-ratio',(event,id,ratio)=>{trusted(event);if(typeof id!=='string'||!Number.isFinite(ratio)||ratio<=0||ratio>=100000)return;ratioUpdates.set(id,ratio);clearTimeout(ratioTimer);ratioTimer=setTimeout(()=>{try{library.setAspectRatios([...ratioUpdates]);ratioUpdates.clear();}catch{}},200);});
-  app.on('before-quit',()=>{clearTimeout(ratioTimer);if(ratioUpdates.size)library.setAspectRatios([...ratioUpdates]);});
+  function flushRatioUpdates(){if(!ratioUpdates.size)return;const updates=[...ratioUpdates];try{library.setAspectRatios(updates);ratioUpdates.clear();}catch(e){console.error('Could not save aspect ratios:',e);}}
+  ipcMain.on('asset-ratio',(event,id,ratio)=>{trusted(event);if(typeof id!=='string'||!Number.isFinite(ratio)||ratio<=0||ratio>=100000)return;ratioUpdates.set(id,ratio);clearTimeout(ratioTimer);ratioTimer=setTimeout(flushRatioUpdates,200);});
+  app.on('before-quit',()=>{clearTimeout(ratioTimer);flushRatioUpdates();});
   ipcMain.handle('media-info', (event,id,priority) => {trusted(event);return mediaCache.get(id,!!priority);});
   ipcMain.handle('image-size', (event,id) => {
     trusted(event);

@@ -12,7 +12,7 @@ function publishVisibleAssets(ids){
  api.visibleAssets(ids);
 }
 function assetRatio(a,width){return SmartCards.ratio(a,width)||a.aspectRatio||(kind(a)==='video'?16/9:kind(a)==='audio'?3.5:kind(a)==='pdf'?.707:kind(a)==='link'?1.6:1);}
-function rememberRatio(a,ratio){if(!Number.isFinite(ratio)||ratio<=0||Math.abs((a.aspectRatio||0)-ratio)<.001)return;a.aspectRatio=ratio;layoutDirty=true;scheduleGallery();api.setAspectRatio(a.id,ratio);}
+function rememberRatio(a,ratio){if(!Number.isFinite(ratio)||ratio<=0||Math.abs((a.aspectRatio||0)-ratio)<.001)return;a.aspectRatio=ratio;layoutDirty=true;scheduleGallery();safe(()=>api.setAspectRatio(a.id,ratio));}
 // The gallery footer is the file name plus, when present, the tag count.
 // These match the line heights in .card-name and .card-details.
 const CARD_NAME_FOOTER=21, CARD_DETAIL_FOOTER=13;
@@ -30,25 +30,32 @@ function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className
 // second dialog of our own in front of it.
 const EmojiPicker=(()=>{
  let field, pending=null;
+ // The macOS picker inserts into whichever field has focus. While a modal
+ // dialog owns the keyboard everything outside it is inert, so the capture
+ // field must live inside the open dialog or focus() would silently fail.
+ function release(){if(field){field.value='';field.remove();field=null;}}
+ function finish(value){
+  const done=pending;pending=null;
+  if(field)field.blur();
+  release();
+  if(done)done(value);
+ }
  function capture(){
-  if(field)return field;
+  if(field&&field.isConnected)return field;
+  release();
+  const host=document.querySelector('dialog[open]')||document.body;
   field=el('input','emoji-capture');
   field.type='text';
   field.autocomplete='off';
+  field.tabIndex=-1;
   field.setAttribute('aria-label','Emoji');
-  document.body.append(field);
+  host.append(field);
   field.addEventListener('input',()=>{
    if(!pending)return;
    const value=[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(field.value)].pop()?.segment;
-   if(!value)return;
-   const done=pending;pending=null;field.value='';
-   field.blur();
-   done(value);
+   if(value)finish(value);
   });
-  field.addEventListener('blur',()=>{
-   if(!pending)return;
-   const done=pending;pending=null;done(null);
-  });
+  field.addEventListener('blur',()=>{if(pending)finish(null);});
   return field;
  }
  function pick(){
@@ -216,7 +223,6 @@ async function refresh(){
 }
 
 async function refreshCaptured(ids){
- if(pagedCatalog)return refreshCurrent();
  if(!appliedRefreshVersion||appliedRefreshVersion!==refreshVersion||ids.length>500)return refresh();
  if(!ids.length)return;
  const version=refreshVersion;
@@ -270,6 +276,10 @@ let hoverIntent=null;
 function stopHover(){if(hoverIntent){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer){hoverPlayer.dispose();hoverPlayer=null;}}
 function unmount(id){if(hoverIntent?.id===id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===id)stopHover();cardCleanup.get(id)?.();cardCleanup.delete(id);const card=mounted.get(id);if(card)SmartCards.release(card);card?.remove();mounted.delete(id);}
 function makeCard(a){const card=el('article','card');card.id='gallery-option-'+a.id;card.dataset.id=a.id;card.setAttribute('role','option');card.setAttribute('aria-label',a.name);card.draggable=true;card.title='Drag out to Finder · Option-drag to a Canvas';card.onpointerdown=e=>{if(e.button===0&&e.pointerType!=='touch')api.prepareDrag(selection.ids.has(a.id)?selection.values():[a.id]);};card.ondragstart=e=>{stopHover();const ids=selection.ids.has(a.id)?selection.values():[a.id];if(e.altKey){e.dataTransfer.setData('application/x-canvaspro-assets',JSON.stringify(ids));e.dataTransfer.effectAllowed='copy';}else{e.preventDefault();safe(()=>api.startDrag(ids));}};card.ondragend=()=>CanvasWorkspace.clearDrag();const surface=el('div','card-surface');const type=kind(a);if(type==='audio')cardCleanup.set(a.id,audioTile(a,surface));else surface.append(type==='link'?bookmarkVisual(a):SmartCards.fileVisual(a)||thumb(a,'',true));
+// The drag hint is useful on a still card, but a native tooltip lingers over
+// video and GIF previews right where the scrub bar appears. Hide it while the
+// pointer is on their picture and bring it back on the filename.
+if(type==='video'||type==='audio'||a.ext==='gif'||a.ext==='gifv'){const hint=card.title;surface.addEventListener('pointerenter',()=>{card.title='';});surface.addEventListener('pointerleave',()=>{card.title=hint;});}
 if(!a.trash)surface.append(favoriteButton(a));if(type==='video'||type==='audio'){const duration=el('span','duration');surface.append(duration);getMediaInfo(a).then(info=>{if(info.duration)duration.textContent=timecode(info.duration);});}
 card.onpointerenter=e=>{if(type!=='video'&&type!=='audio')return;if(e.pointerType==='touch'||!$('#preview').hidden||selection.ids.size>1)return;if(hoverIntent?.id===a.id)return;stopHover();hoverIntent={id:a.id,timer:setTimeout(()=>{if(hoverIntent?.id!==a.id||!card.isConnected||!$('#preview').hidden||selection.ids.size>1)return;hoverIntent=null;const player=createPlayer(a,{compact:true,muted:type==='video'});player.id=a.id;hoverPlayer=player;surface.append(player.element);},180)};};card.onpointerleave=()=>{if(hoverIntent?.id===a.id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===a.id)stopHover();};
 const meta=el('div','card-meta'),details=el('div','card-details');details.append(el('span','',a.tags.length?a.tags.length+' tags':''));meta.append(el('span','card-name',a.name),details);card.append(surface,meta);card._parts={
@@ -705,11 +715,24 @@ $('#show-library').onclick=()=>safe(()=>api.showLibrary());
 // returns as a sheet over the gallery instead of a column beside it.
 const narrowInspectorWidth=880;
 let narrowPanelOpen=false;
+function closeNarrowInspector(){
+ if(!narrowPanelOpen)return;
+ narrowPanelOpen=false;
+ document.body.classList.remove('narrow-panel-open');
+ $('#narrow-inspector-close')?.remove();
+}
+function ensureNarrowClose(){
+ if(!narrowPanelOpen||!document.body.classList.contains('narrow-inspector')||$('#narrow-inspector-close'))return;
+ const close=el('button','narrow-inspector-close');close.id='narrow-inspector-close';
+ close.setAttribute('aria-label','Close file details');close.title='Close file details';
+ close.append(glyph('close'));close.onclick=closeNarrowInspector;document.body.append(close);
+}
 function applyNarrowLayout(){
  const narrow=innerWidth<=narrowInspectorWidth;
  document.body.classList.toggle('narrow-inspector',narrow);
- if(!narrow)narrowPanelOpen=false;
+ if(!narrow)closeNarrowInspector();
  document.body.classList.toggle('narrow-panel-open',narrow&&narrowPanelOpen);
+ ensureNarrowClose();
 }
 applyNarrowLayout();
 addEventListener('resize',applyNarrowLayout);
@@ -717,13 +740,14 @@ $('#toggle-inspector').onclick=()=>{
  if(document.body.classList.contains('narrow-inspector')){
   narrowPanelOpen=!narrowPanelOpen;
   document.body.classList.toggle('narrow-panel-open',narrowPanelOpen);
+  ensureNarrowClose();
   return;
  }
  document.body.classList.toggle('hide-inspector');
  localStorage.setItem('hide-inspector',String(document.body.classList.contains('hide-inspector')));
 };
 if(localStorage.getItem('hide-inspector')==='true')document.body.classList.add('hide-inspector');
-$('#add-folder').onclick=()=>{$('#folder-dialog').returnValue='';$('#folder-name').value='';$('#folder-dialog').showModal();$('#folder-name').focus();};$('#folder-dialog').addEventListener('close',()=>{if($('#folder-dialog').returnValue==='create')safe(async()=>{await api.addFolder($('#folder-name').value);await refreshCurrent();const f=CanvasWorkspace.folderRecords.find(f=>f.name===$('#folder-name').value.trim());if(f)await WorkbenchUI.created('folder:'+f.id,'collection');});});
+$('#add-folder').onclick=()=>SidebarUI.inlineCreate('collections');$('#folder-dialog').addEventListener('close',()=>{if($('#folder-dialog').returnValue==='create')safe(async()=>{const name=$('#folder-name').value.trim();await api.addFolder(name);await refreshCurrent();const f=CanvasWorkspace.folderRecords.find(f=>f.name===name);if(f)await WorkbenchUI.created('folder:'+f.id,'collection');});});
 $('#previous').replaceChildren(glyph('chevronLeft'));$('#next').replaceChildren(glyph('chevronRight'));$('#close-preview').onclick=closePreview;$('#previous').onclick=()=>move(-1);$('#next').onclick=()=>move(1);
 let trashingPreview=false;
 async function trashSelection(){
@@ -759,8 +783,12 @@ document.addEventListener('keydown',e=>{
  const command=e.metaKey||e.ctrlKey,key=e.key.toLowerCase();
  const typing=e.target.matches?.('input:not([type="range"]),textarea,select,[contenteditable="true"]');
  const editing=e.target.matches?.('input,textarea,select,[contenteditable="true"],canvas[role="slider"]');
- // Any open dialog or popover owns the keyboard while it is up.
- if(document.querySelector('dialog[open], [popover]:popover-open'))return;
+ // A modal dialog owns the keyboard while it is up. Open popovers keep their
+ // own key handlers and must not swallow global shortcuts.
+ if(document.querySelector('dialog[open]'))return;
+ // ⌘K is the one command entry point, including from inside the canvas where
+// CanvasWorkspace otherwise claims the same chord for its tray search.
+ if(command&&key==='k'&&!e.altKey){e.preventDefault();if(!$('#preview').hidden)closePreview();window.CommandPalette?.open('commands');return;}
  if(e.code==='Space'&&e.target.closest?.('button,summary,input[type="checkbox"],input[type="radio"]'))return;
  const preview = $('#preview');
  if (!preview.hidden && e.key === 'Tab') {
@@ -783,7 +811,7 @@ document.addEventListener('keydown',e=>{
  if(!$('#preview').hidden&&command&&previewPlayer&&['+','=','-','0'].includes(key)){
   e.preventDefault();
   if(key==='0'){if(previewPlayer.resetZoom)previewPlayer.resetZoom();}else if(previewPlayer.zoomBy)previewPlayer.zoomBy(key==='-'?1/1.4:1.4);
-  else notify(key==='+'||key==='='?'Zoom not available for this preview type':'');
+  else notify('Zoom not available for this preview type');
   return;
  }
  if(e.key!=='Escape'&&e.target.closest?.('.canvas-selection-tools'))return;
@@ -801,7 +829,7 @@ document.addEventListener('keydown',e=>{
  if(command&&!e.shiftKey&&!e.altKey&&['s','b'].includes(key)){e.preventDefault();if(!e.repeat)$('#toggle-sidebar').click();return;}
  if(command&&!e.shiftKey&&!e.altKey&&key===','){e.preventDefault();if(!$('#preview').hidden)closePreview();$('#show-settings').click();return;}
   if(view==='notes')return;
- if(command&&['f','k'].includes(key)){e.preventDefault();if(!$('#preview').hidden)closePreview();if(view==='canvas'){CanvasWorkspace.toggleTray(true);$('#canvas-tray-search').focus();}else $('#search').focus();return;}
+ if(command&&key==='f'){e.preventDefault();if(!$('#preview').hidden)closePreview();if(view==='canvas'){CanvasWorkspace.toggleTray(true);$('#canvas-tray-search').focus();}else $('#search').focus();return;}
  if(command&&!e.shiftKey&&!e.altKey&&['Backspace','Delete'].includes(e.key)&&!typing){e.preventDefault();if(!e.repeat)safe(trashSelection);return;}
  if(e.code==='Space'&&e.repeat&&!typing){e.preventDefault();return;}
  if(!$('#preview').hidden&&e.code==='Space'){e.preventDefault();closePreview();return;}
@@ -812,6 +840,7 @@ document.addEventListener('keydown',e=>{
   safe(async()=>{if(pagedCatalog&&assets.length<catalogTotal)await hydrateCatalog();selection.all();selected=selection.focus;stopHover();paintSelection();scheduleInspector();});
   return;
  }
+ if(e.key==='Escape'&&narrowPanelOpen){e.preventDefault();closeNarrowInspector();return;}
  if(e.key==='Escape'&&$('#preview').hidden){selection.clear();selected=null;paintSelection();renderInspector();return;}
  if(command&&key==='i'){e.preventDefault();$('#toggle-inspector').click();return;}
  if(command&&key==='c'&&selected){e.preventDefault();const ids=$('#preview').hidden?selection.values():[selected];safe(async()=>{await api.copyFiles(ids);notify(ids.length+' files copied.');});return;}
@@ -830,7 +859,7 @@ api.onLibraryChanged(ids=>{
  captureRefreshTimer=setTimeout(()=>{
    const changed=[...pendingCaptures],full=needsFullRefresh||changed.length>500||!appliedRefreshVersion||appliedRefreshVersion!==refreshVersion;
    pendingCaptures.clear();needsFullRefresh=false;
-   safe(pagedCatalog?refreshCurrent:full?refresh:()=>refreshCaptured(changed));
+   safe(full?refresh:()=>refreshCaptured(changed));
  },100);
 });api.onCaptureStatus(job=>{if(job.state==='running')return;notify(job.errors.length?'Capture finished with '+job.errors.length+' issue'+(job.errors.length===1?'':'s'):'Saved '+job.imported+' browser captures');});initContextUI();initReliabilityUI();initViewPreferences();initBookmarks();CanvasWorkspace.init();SmartSearch.init();WorkbenchUI.init();NotesWorkspace.init();SidebarUI.init();safe(loadLibraryPage);
 // A capture that arrived while this view was loading, or while the window was

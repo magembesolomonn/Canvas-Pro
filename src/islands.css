@@ -223,7 +223,7 @@ body.light-mode .card-surface {
 }
 
 body.light-mode .sidebar nav button.active {
-  background: #0000000d;
+  background: transparent;
 }
 
 body.light-mode .layout-switch {
@@ -249,4 +249,8 @@ body.light-mode .layout-switch button[aria-checked="true"] {
   .layout-switch button {
     transition: none;
   }
+}
+
+body.light-mode .sidebar nav button.active {
+  background: transparent;
 }

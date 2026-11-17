@@ -25,7 +25,7 @@
   <div class="toolbar-actions">
    <button id="import-menu-button" class="toolbar-button" popovertarget="import-menu" aria-haspopup="menu" aria-controls="import-menu" aria-expanded="false" title="Add files or folders · ⌘O" aria-label="Add files or folders"></button>
    <button id="view-menu-button" class="toolbar-button" popovertarget="view-menu" aria-haspopup="menu" aria-controls="view-menu" aria-expanded="false" title="View options: type, sort and layout" aria-label="View options"></button>
-   <div class="search"><span class="search-glyph" aria-hidden="true"></span><input id="search" type="search" placeholder="Search" aria-label="Search library"><kbd>⌘ K</kbd></div>
+   <div class="search"><span class="search-glyph" aria-hidden="true"></span><input id="search" type="search" placeholder="Search" aria-label="Search library"><kbd>⌘ F</kbd></div>
    <button id="toggle-inspector" class="toolbar-button" title="Toggle details · ⌘I" aria-label="Toggle file details"></button>
    <button id="empty-trash" class="danger" hidden>Empty Trash…</button>
   </div>
@@ -77,7 +77,7 @@
 <aside id="inspector" class="inspector"></aside>
 <div id="preview" class="preview" tabindex="-1" role="dialog" aria-modal="true" aria-label="File preview" hidden><div class="preview-drag-region" aria-hidden="true"></div><button id="close-preview" aria-label="Close preview" title="Close · Esc"></button><div class="preview-body"><div id="preview-content"></div></div><nav class="preview-bottom" aria-label="Preview navigation"><button id="previous" class="preview-arrow" aria-label="Previous file" title="Previous · Left arrow">‹</button><span id="preview-index" aria-live="polite" aria-atomic="true"></span><button id="next" class="preview-arrow" aria-label="Next file" title="Next · Right arrow">›</button></nav></div>
 <div id="import-menu" class="layout-menu import-menu" popover role="menu" aria-label="Import">
-<button id="import" class="primary" type="button" role="menuitem">Import files</button>
+<button id="import" class="primary" type="button" role="menuitem"><span>Import files</span><kbd>⌘ O</kbd></button>
 <button id="import-folder" type="button" role="menuitem">Import folder</button>
 </div>
 <div id="view-menu" class="layout-menu view-menu" popover role="menu" aria-label="View">
@@ -105,7 +105,7 @@
  </div>
 </div>
 <div id="toast" role="status" hidden></div>
-<dialog id="canvas-dialog" aria-labelledby="canvas-dialog-title"><form id="canvas-dialog-form"><h2 id="canvas-dialog-title">New canvas</h2><p id="canvas-dialog-description">A place for your ideas, saved on this Mac.</p><label id="canvas-target-label">Canvas<select id="canvas-target"></select></label><label id="canvas-name-label">Name<input id="canvas-name" required maxlength="120" placeholder="Untitled canvas"></label><p id="canvas-dialog-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="canvas-dialog-cancel">Cancel</button><button type="submit" id="canvas-dialog-save" class="primary">Create canvas</button></div></form></dialog>
+<dialog id="canvas-dialog" aria-labelledby="canvas-dialog-title"><form id="canvas-dialog-form"><h2 id="canvas-dialog-title">New canvas</h2><p id="canvas-dialog-description">A place for your ideas, saved on this Mac.</p><label id="canvas-target-label">Canvas<select id="canvas-target" aria-label="Canvas"></select></label><label id="canvas-name-label">Name<input id="canvas-name" required maxlength="120" placeholder="Untitled canvas"></label><p id="canvas-dialog-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="canvas-dialog-cancel">Cancel</button><button type="submit" id="canvas-dialog-save" class="primary">Create canvas</button></div></form></dialog>
 <dialog id="folder-dialog" aria-labelledby="folder-dialog-title"><form method="dialog"><h2 id="folder-dialog-title">New collection</h2><p>Group your files without duplicating originals.</p><input id="folder-name" placeholder="Collection name" maxlength="120" required><div class="dialog-actions"><button value="cancel" formnovalidate>Cancel</button><button value="create" class="primary">Create collection</button></div></form></dialog>
 <dialog id="action-dialog" aria-labelledby="action-title"><form id="action-form"><h2 id="action-title"></h2><p id="action-description"></p><input id="action-value" required autocomplete="off"><p id="action-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="action-cancel">Cancel</button><button type="submit" id="action-save" class="primary">Save</button></div></form></dialog>
 <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
@@ -117,7 +117,8 @@
    </div>
    <nav class="settings-nav" id="settings-nav" aria-label="Settings sections">
     <div class="settings-nav-group">
-     <button type="button" class="settings-nav-item" data-settings-pane="general" aria-current="true"><span class="settings-nav-icon" data-settings-icon="settings" aria-hidden="true"></span><span class="settings-nav-label">General</span></button>
+     <h3 class="settings-nav-title">Application</h3>
+     <button type="button" class="settings-nav-item" data-settings-pane="library" aria-current="true"><span class="settings-nav-icon" data-settings-icon="settings" aria-hidden="true"></span><span class="settings-nav-label">Library</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="appearance"><span class="settings-nav-icon" data-settings-icon="appearance" aria-hidden="true"></span><span class="settings-nav-label">Appearance</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="shortcuts"><span class="settings-nav-icon" data-settings-icon="keyboard" aria-hidden="true"></span><span class="settings-nav-label">Shortcuts</span></button>
     </div>
@@ -125,30 +126,32 @@
      <h3 class="settings-nav-title">Library</h3>
      <button type="button" class="settings-nav-item" data-settings-pane="collections"><span class="settings-nav-icon" data-settings-icon="folder" aria-hidden="true"></span><span class="settings-nav-label">Collections</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="importing"><span class="settings-nav-icon" data-settings-icon="importing" aria-hidden="true"></span><span class="settings-nav-label">Importing</span></button>
-     <button type="button" class="settings-nav-item" data-settings-pane="media"><span class="settings-nav-icon" data-settings-icon="video" aria-hidden="true"></span><span class="settings-nav-label">Media</span></button>
+     <button type="button" class="settings-nav-item" data-settings-pane="maintenance"><span class="settings-nav-icon" data-settings-icon="health" aria-hidden="true"></span><span class="settings-nav-label">Maintenance</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="galleries"><span class="settings-nav-icon" data-settings-icon="grid" aria-hidden="true"></span><span class="settings-nav-label">Galleries</span></button>
     </div>
-    <div class="settings-nav-group">
-     <h3 class="settings-nav-title">Connections</h3>
-     <button type="button" class="settings-nav-item" data-settings-pane="services"><span class="settings-nav-icon" data-settings-icon="sparkles" aria-hidden="true"></span><span class="settings-nav-label">Services</span></button>
-     <button type="button" class="settings-nav-item" data-settings-pane="extensions"><span class="settings-nav-icon" data-settings-icon="extensions" aria-hidden="true"></span><span class="settings-nav-label">Extensions</span></button>
-     <button type="button" class="settings-nav-item" data-settings-pane="developers"><span class="settings-nav-icon" data-settings-icon="developers" aria-hidden="true"></span><span class="settings-nav-label">Developers</span></button>
-    </div>
+     <div class="settings-nav-group">
+      <h3 class="settings-nav-title">Browser</h3>
+      <button type="button" class="settings-nav-item" data-settings-pane="extensions"><span class="settings-nav-icon" data-settings-icon="extensions" aria-hidden="true"></span><span class="settings-nav-label">Extensions</span></button>
+     </div>
+     <div class="settings-nav-group">
+      <h3 class="settings-nav-title">Support</h3>
+      <button type="button" class="settings-nav-item" data-settings-pane="feedback"><span class="settings-nav-icon" data-settings-icon="flag" aria-hidden="true"></span><span class="settings-nav-label">Feedback</span></button>
+     </div>
     <div class="settings-nav-group">
      <h3 class="settings-nav-title">Canvas Pro</h3>
      <button type="button" class="settings-nav-item" data-settings-pane="about"><span class="settings-nav-icon" data-settings-icon="about" aria-hidden="true"></span><span class="settings-nav-label">About</span></button>
-     <button type="button" class="settings-nav-item" data-settings-pane="experimental"><span class="settings-nav-icon" data-settings-icon="experimental" aria-hidden="true"></span><span class="settings-nav-label">Experimental</span></button>
+     <button type="button" class="settings-nav-item" data-settings-pane="search-models"><span class="settings-nav-icon" data-settings-icon="search" aria-hidden="true"></span><span class="settings-nav-label">Search &amp; models</span></button>
     </div>
    </nav>
   </aside>
   <div class="settings-body">
    <header class="settings-header">
-    <h2 id="settings-title">General</h2>
+    <h2 id="settings-title">Library</h2>
     <button id="settings-close" class="settings-close" type="button" aria-label="Close Settings">&#10005;</button>
    </header>
    <div class="settings-scroll" id="settings-scroll">
-    <section class="settings-pane" data-settings-pane="general" aria-label="General settings">
-     <h3 class="settings-section-label">Library</h3>
+    <section class="settings-pane" data-settings-pane="library" aria-label="Library settings">
+     <h3 class="settings-section-label">Current library</h3>
      <div class="settings-card">
       <div class="settings-row settings-row-plain">
        <span class="settings-copy"><strong id="current-library-name">Current library</strong><small id="current-library-path" class="settings-subtle"></small></span>
@@ -159,6 +162,12 @@
       </div>
      </div>
      <p class="settings-note">Switching libraries saves your canvases and notes and restarts Canvas Pro. Originals stay in their library folder.</p>
+
+     <h3 class="settings-section-label">Duplicates</h3>
+     <div class="settings-card">
+      <button id="settings-duplicate-review" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Duplicate review</strong><small>Find copies of the same picture</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
+     </div>
+     <p class="settings-note">Identical files are already prevented at import. This compares the pictures themselves, so a resized or re-saved copy is found too.</p>
     </section>
 
     <section class="settings-pane" data-settings-pane="appearance" aria-label="Appearance settings" hidden>
@@ -180,7 +189,7 @@
      <h3 class="settings-section-label">Keyboard</h3>
      <div class="settings-card settings-card-shortcuts" id="settings-shortcuts"></div>
      <div class="settings-row settings-row-actions settings-row-outside">
-      <button id="settings-all-shortcuts" class="settings-button" type="button">All shortcuts&#8230;</button>
+      <button id="settings-all-shortcuts" class="settings-button" type="button">All shortcuts&#8230; <kbd>⌘ /</kbd></button>
      </div>
     </section>
 
@@ -196,13 +205,12 @@
      <h3 class="settings-section-label">Import</h3>
      <div class="settings-card">
       <button id="show-activity" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong class="settings-label">Import activity</strong><small>Queue, cancel and retry imports</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
-      <button id="settings-duplicate-review" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Duplicate review</strong><small>Look again at near-identical imports</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
       <button id="settings-import-files" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Import files</strong><small>Add files to this library</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
      </div>
      <p class="settings-note">Originals are copied into the library, never moved. Exact duplicates are detected by checksum.</p>
     </section>
 
-    <section class="settings-pane" data-settings-pane="media" aria-label="Media" hidden>
+    <section class="settings-pane" data-settings-pane="maintenance" aria-label="Maintenance" hidden>
      <h3 class="settings-section-label">Your library</h3>
      <div class="settings-card">
       <button id="check-library" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library health</strong><small>Check your originals for missing or changed files</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
@@ -228,13 +236,6 @@
      <p class="settings-note">Thumbnail size lives on the toolbar slider. Your choice is remembered per library.</p>
     </section>
 
-    <section class="settings-pane" data-settings-pane="services" aria-label="Services" hidden>
-     <h3 class="settings-section-label">On this Mac</h3>
-     <div class="settings-card">
-     </div>
-     <p class="settings-note">Canvas Pro runs on-device. Models download once and queries never leave your Mac.</p>
-    </section>
-
     <section class="settings-pane" data-settings-pane="extensions" aria-label="Extensions" hidden>
      <h3 class="settings-section-label">Browser</h3>
      <div class="settings-card">
@@ -243,8 +244,8 @@
      <p class="settings-note">Load the folder as an unpacked extension in Helium or Chrome to capture pages straight into your library.</p>
     </section>
 
-    <section class="settings-pane" data-settings-pane="developers" aria-label="Developers" hidden>
-     <h3 class="settings-section-label">Beta</h3>
+    <section class="settings-pane" data-settings-pane="feedback" aria-label="Feedback" hidden>
+     <h3 class="settings-section-label">Feedback</h3>
      <div class="settings-card">
       <button id="settings-beta" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Beta testing and feedback</strong><small>Export a diagnostics report</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
      </div>
@@ -271,7 +272,7 @@
      <p class="settings-note">Each project is used under its own licence. The full texts ship inside the application.</p>
     </section>
 
-    <section class="settings-pane" data-settings-pane="experimental" aria-label="Experimental" hidden>
+    <section class="settings-pane" data-settings-pane="search-models" aria-label="Search and models" hidden>
      <h3 class="settings-section-label">Search</h3>
      <div class="settings-card">
       <label class="settings-row settings-row-switch">
@@ -293,7 +294,7 @@
 </dialog>
 <dialog id="activity-dialog" class="reliability-dialog" aria-labelledby="activity-dialog-title"><div class="dialog-heading"><h2 id="activity-dialog-title">Import activity</h2><button id="activity-close" aria-label="Close import activity"></button></div><p>Imports continue while you browse. Recent file results appear below.</p><div id="import-jobs" class="job-list"></div></dialog>
 <dialog id="health-dialog" class="reliability-dialog" aria-labelledby="health-dialog-title"><div class="dialog-heading"><h2 id="health-dialog-title">Library health</h2><button id="health-close" aria-label="Close library health"></button></div><p>Check your originals for missing files and changes. This check only reads files and never repairs or deletes them.</p><p id="health-summary" role="status">Ready to check your library.</p><progress id="health-progress" value="0" max="1" hidden></progress><div id="health-issues" class="health-issues"></div><div class="dialog-actions"><button id="health-show-library">Show library</button><button id="health-cancel" hidden>Cancel check</button><button id="health-run" class="primary">Check originals</button></div></dialog>
-<dialog id="note-template-dialog" aria-labelledby="note-template-title"><form id="note-template-form"><h2 id="note-template-title">New note</h2><p id="note-template-description">A place for your notes, saved on this Mac.</p><label id="note-template-label" for="note-template">Start from<select id="note-template"><option value="blank">Blank page</option><option value="movies">Movies &amp; Series</option><option value="finance">Finance tracker</option><option value="product">Product workspace</option><option value="youtube">YouTube workspace</option></select></label><div class="dialog-actions"><button type="button" id="note-template-cancel">Cancel</button><button class="primary" type="submit">Create note</button></div></form></dialog>
+<dialog id="note-template-dialog" aria-labelledby="note-template-title"><form id="note-template-form"><h2 id="note-template-title">New note</h2><p id="note-template-description">A place for your notes, saved on this Mac.</p><label id="note-template-label" for="note-template">Start from<select id="note-template" aria-label="Note template"><option value="blank">Blank page</option><option value="movies">Movies &amp; Series</option><option value="finance">Finance tracker</option><option value="product">Product workspace</option><option value="youtube">YouTube workspace</option></select></label><div class="dialog-actions"><button type="button" id="note-template-cancel">Cancel</button><button class="primary" type="submit">Create note</button></div></form></dialog>
 <dialog id="note-image-dialog" aria-labelledby="note-image-title">
  <div class="note-dialog-heading"><h2 id="note-image-title">Choose a library image</h2><button type="button" class="note-dialog-close" id="note-image-close" aria-label="Close"></button></div>
  <div class="note-dialog-body">
@@ -303,4 +304,4 @@
  </div>
  <div class="dialog-actions note-dialog-actions"><button id="note-image-more" type="button" hidden>Load more</button><button id="note-image-browse" type="button">Choose from Mac…</button><button id="note-image-cancel" type="button">Cancel</button></div>
 </dialog>
-<script src="motion.js"></script><script src="select.js"></script><script src="calendar.js"></script><script src="note-trackers.js"></script><script src="notes-workspace.js"></script><script src="selection.js"></script><script src="layout.js"></script><script src="media.js"></script><script src="settings.js"></script><script src="context.js"></script><script src="format-loader.js"></script><script src="reliability.js"></script><script src="view-preferences.js"></script><script src="bookmarks.js"></script><script src="smart-cards.js"></script><script src="tag-vocabulary.js"></script><script src="smart-search.js"></script><script src="tag-suggestions.js"></script><script src="canvas-model.js"></script><script src="canvas-workspace.js"></script><script src="workbench.js"></script><script src="canvas-export.js"></script><script src="sidebar.js"></script><script src="app.js"></script></body></html>
+<script src="motion.js"></script><script src="select.js"></script><script src="calendar.js"></script><script src="note-trackers.js"></script><script src="notes-workspace.js"></script><script src="selection.js"></script><script src="layout.js"></script><script src="media.js"></script><script src="settings.js"></script><script src="context.js"></script><script src="format-loader.js"></script><script src="reliability.js"></script><script src="view-preferences.js"></script><script src="bookmarks.js"></script><script src="smart-cards.js"></script><script src="tag-vocabulary.js"></script><script src="smart-search.js"></script><script src="tag-suggestions.js"></script><script src="canvas-model.js"></script><script src="canvas-workspace.js"></script><script src="workbench.js"></script><script src="canvas-export.js"></script><script src="sidebar.js"></script><script src="panel-resize.js"></script><script src="command-palette.js"></script><script src="app.js"></script></body></html>
