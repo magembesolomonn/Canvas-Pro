@@ -36,15 +36,16 @@ const Motion = (() => {
     const { frames, duration } = springFrames(from, to, velocity);
     const start = performance.now();
     let raf = 0, cancelled = false;
-    const ease = t => 1 - Math.pow(1 - t, 3);
     const step = now => {
       if (cancelled) return;
       const p = Math.min(1, (now - start) / duration);
-      // Interpolate between sampled spring points for smoothness.
+      // Interpolate linearly between sampled spring points. The spring model
+      // already supplies the curvature; easing again here made numbers land
+      // late and overshoot twice.
       const index = Math.min(frames.length - 2, Math.floor(p * (frames.length - 1)));
       const a = frames[index], b = frames[index + 1];
       const local = b.t === a.t ? 1 : (p * duration - a.t) / (b.t - a.t);
-      render(a.value + (b.value - a.value) * ease(Math.max(0, Math.min(1, local))));
+      render(a.value + (b.value - a.value) * Math.max(0, Math.min(1, local)));
       if (p < 1) raf = requestAnimationFrame(step);
       else { render(to); onFinish?.(); }
     };

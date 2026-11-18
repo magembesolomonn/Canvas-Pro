@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard, nativeImage, shell, protocol, net, Menu, ShareMenu, nativeTheme, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, nativeImage, shell, protocol, net, Menu, ShareMenu, nativeTheme, powerMonitor, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -14,7 +14,7 @@ const crypto=require('node:crypto');
 const {CanvasStore,normalize:normalizeCanvasItem}=require('./canvas-store.cjs');
 const {publicFetch}=require('./public-fetch.cjs');
 const {previewFetch}=require('./browser-fetch.cjs');
-const {Bookmarks}=require('./bookmarks.cjs');
+const {Bookmarks,webURL}=require('./bookmarks.cjs');
 const {resolveSocialVideo}=require('./social-video.cjs');
 const {Readable,Transform}=require('node:stream');
 const {pipeline}=require('node:stream/promises');
@@ -45,7 +45,13 @@ if (process.env.AGAGWU_DATA_DIR) {
   app.setPath('userData', process.env.AGAGWU_DATA_DIR);
 }
 if(!process.env.ASSET_TEST_MODE&&!app.requestSingleInstanceLock()){app.quit();return;}
-let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,originalsWatch,updater,videoDownloader;
+let win, library, mediaCache, captureBridge, importQueue, healthService,bookmarks,webPreview,canvasStore,smartIndex,localModel,workbench,originalsWatch,updater,videoDownloader,floatingWindow;
+let floatingBounds=null;
+function closeFloating(){
+ if(!floatingWindow)return;
+ if(!floatingWindow.isDestroyed())floatingWindow.close();
+ floatingWindow=null;
+}
 let notesStore;
 const getNotesStore=()=>notesStore??=new (require('./notes-store.cjs').NotesStore)(library.db);
 let pendingLibrarySwitch=null;
@@ -198,7 +204,6 @@ async function importBuffer(buffer, name, folder, sourceURL='') {
     return result;
   } finally { await fs.promises.rm(dir,{recursive:true,force:true}); }
 }
-function escapeXML(value){return value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');}
 async function downloadMediaToTemp(mediaUrl,pageUrl,title,kind='video'){
   const extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/avif':'avif','video/mp4':'mp4','video/x-m4v':'m4v','video/3gpp':'3gp','video/webm':'webm','video/quicktime':'mov','audio/mpeg':'mp3','audio/mp4':'m4a','audio/wav':'wav'};
   const tempDir=await fs.promises.mkdtemp(path.join(app.getPath('temp'),'canvas-social-'));
@@ -317,9 +322,11 @@ function appearanceState(){
 function applyAppearanceWindow(){
  if(!win||win.isDestroyed())return;
  const state=appearanceState();
- // The window is see-through: the app paints its own rounded shape inside it.
- win.setBackgroundColor('#00000000');
+ // The window is opaque so macOS draws the real window shape and its native
+ // shadow. The colour matches the app surface, so a resize never flashes.
+ win.setBackgroundColor(state.dark?'#0a0a0a':'#ffffff');
  win.webContents.send('appearance-changed',state);
+ if(floatingWindow&&!floatingWindow.isDestroyed())floatingWindow.webContents.send('appearance-changed',state);
 }
 loadAppearancePrefs();
 nativeTheme.themeSource=appearancePrefs.theme;
@@ -359,7 +366,7 @@ function flushLibraryChanges(){
 }
 function createWindow() {
   const appearance=appearanceState();
-  win = new BrowserWindow({ width: 1480, height: 940, minWidth: 760, minHeight: 600, title: 'Canvas Pro', backgroundColor: '#00000000', transparent: true, titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  win = new BrowserWindow({ width: 1480, height: 940, minWidth: 760, minHeight: 600, title: 'Canvas Pro', backgroundColor: appearance.dark?'#0a0a0a':'#ffffff', transparent: false, titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
   previewZoomActive=false;
   win.webContents.on('before-input-event',(_event,input)=>{
     win.webContents.setIgnoreMenuShortcuts(previewZoomActive&&(input.meta||input.control)&&['+','=','-','0'].includes(input.key));
@@ -441,7 +448,12 @@ app.whenReady().then(async () => {
   if(process.env.ASSET_TEST_MODE)global.originalsWatch=originalsWatch;
   let switchingLibrary=false;
   async function changeLibrary(mode){if(switchingLibrary)return;switchingLibrary=true;try{await flushWorkspaces();const target=await chooseLibrary(mode);if(!target||target===library.root)return;pendingLibrarySwitch=()=>{locations.remember(target);app.relaunch();};app.quit();}catch(error){dialog.showErrorBox('Could not switch library',error.message);}finally{switchingLibrary=false;}}
-  const trusted=event=>{if(event.sender!==win?.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Unavailable outside the library.');};
+  const trusted=event=>{
+   // A late IPC can arrive while the window is closing; reading webContents
+   // on a destroyed window throws instead of failing the check.
+   if(!win||win.isDestroyed())throw new Error('Unavailable outside the library.');
+   if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Unavailable outside the library.');
+  };
   ipcMain.handle('library-location',event=>{trusted(event);return ({root:library.root,name:path.basename(library.root).replace(/\.canvaslibrary$/i,''),recent:locations.read().recent||[]});});
   ipcMain.handle('library-switch',(event,mode)=>{trusted(event);if(!['new','open'].includes(mode))throw Error('Invalid library action.');return changeLibrary(mode);});
   canvasStore=new CanvasStore(library);if(process.env.ASSET_TEST_MODE)global.canvasTestStore=canvasStore;
@@ -549,6 +561,56 @@ app.whenReady().then(async () => {
     onProgress:updateProgress,
     quit:()=>app.quit(),
     requireSignedManifest: !!process.env.CANVAS_REQUIRE_SIGNED_UPDATES
+  });
+  ipcMain.handle('floating-player',(event,op,data={})=>{
+    // The mini player has its own preload bridge; only accept its commands
+    // from that window's main frame, never from arbitrary renderers.
+    const mini=floatingWindow&&!floatingWindow.isDestroyed()&&event.sender===floatingWindow.webContents&&event.senderFrame===floatingWindow.webContents.mainFrame;
+    if(!mini)trusted(event);
+    if(op==='state')return {open:!!floatingWindow&&!floatingWindow.isDestroyed()};
+    if(op==='close'){closeFloating();return {closed:true};}
+    if(op==='restore'){
+      const state=data||{};
+      if(win&&!win.isDestroyed())win.webContents.send('floating-restore',state);
+      closeFloating();
+      if(win&&!win.isDestroyed())win.focus();
+      return {restored:true};
+    }
+    if(op!=='open')throw new Error('Invalid floating player command.');
+    const a=library.asset(data.id);
+    const ratio=Number.isFinite(data.aspectRatio)&&data.aspectRatio>0?data.aspectRatio:(a.aspectRatio||16/9);
+    // Safari-style picture in picture: a small window that starts in the
+    // bottom corner of the display the app is on, and stays where it is moved.
+    const base=Math.min(440,Math.max(280,Math.round(320*Math.min(1,Math.max(0.45,ratio)))));
+    const width=ratio<1?Math.round(base*ratio):base;
+    const height=ratio<1?base:Math.round(base/ratio);
+    const anchor=win&&!win.isDestroyed()?screen.getDisplayMatching(win.getBounds()):screen.getPrimaryDisplay();
+    const area=anchor.workArea;
+    const bounds=floatingBounds&&Number.isFinite(floatingBounds.x)&&Number.isFinite(floatingBounds.y)
+      ? {...floatingBounds,width,height}
+      : {x:area.x+Math.max(16,area.width-width-24),y:area.y+Math.max(16,area.height-height-24),width,height};
+    bounds.x=Math.max(area.x,Math.min(bounds.x,area.x+area.width-width));
+    bounds.y=Math.max(area.y,Math.min(bounds.y,area.y+area.height-height));
+    // Replace any existing mini player before creating the new one. The
+    // closing window's handler must not clear the reference to the new one.
+    closeFloating();
+    data.theme=appearanceState().dark?'dark':'light';
+    floatingWindow=new BrowserWindow({
+      ...bounds,minWidth:280,minHeight:180,frame:false,transparent:true,alwaysOnTop:true,resizable:true,
+      hasShadow:true,title:'Floating video',backgroundColor:'#00000000',
+      webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,autoplayPolicy:'no-user-gesture-required'}
+    });
+    const floatingWindowRef=floatingWindow;
+    floatingWindow.setAspectRatio(ratio);
+    floatingWindow.loadFile(path.join(__dirname,'../src/floating-player.html'),{hash:encodeURIComponent(JSON.stringify(data))});
+    floatingWindow.on('moved',()=>{if(floatingWindow&&!floatingWindow.isDestroyed())floatingBounds=floatingWindow.getBounds();});
+    floatingWindow.on('closed',()=>{
+      if(floatingWindow!==floatingWindowRef)return;
+      floatingWindow=null;
+      if(win&&!win.isDestroyed())win.webContents.send('floating-close');
+    });
+    if(process.env.ASSET_TEST_MODE)global.floatingWindow=floatingWindow;
+    return {opened:true};
   });
   ipcMain.handle('update-check',event=>{trusted(event);return getUpdater().check();});
   ipcMain.handle('update-download',event=>{trusted(event);return getUpdater().download();});
@@ -1019,7 +1081,7 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 let shutdownStarted=false,shutdownComplete=false;
 app.on('before-quit',event=>{
   if(shutdownComplete)return;
-  event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;updater?.cancel();
+  event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;updater?.cancel();closeFloating();
   flushWorkspaces().then(()=>Promise.allSettled([originalsWatch?.close(),bookmarks?.close(),webPreview?.close(),importQueue?.close(),captureBridge?.close(),smartIndex?.close(),localModel?.close(),workbench?.close(),healthService?.cancel(),mediaCache?.cancelAndDrain([...mediaCache.pending.keys()])])).then(()=>{pendingLibrarySwitch?.();pendingLibrarySwitch=null;shutdownComplete=true;app.quit();}).catch(error=>{shutdownStarted=false;dialog.showErrorBox('Workspace could not be saved',error.message);});
 });
 app.on('will-quit', () => {library?.close();});

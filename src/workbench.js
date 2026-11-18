@@ -1,6 +1,6 @@
 const WorkbenchUI=(()=>{
  let state={icons:{}},similarIds=null,similarScores=null,title='Similar files',color='',pendingIcons={};
- let dialogSequence=0;
+ let dialogSequence=0,similarBusy=false;
  function dialog(title){const d=el('dialog','workbench-dialog'),head=el('div','dialog-heading');const labelId='workbench-dialog-title-'+(++dialogSequence),heading=el('h2','',title);heading.id=labelId;d.setAttribute('aria-labelledby',labelId);const close=action('',()=>d.close());close.setAttribute('aria-label','Close');close.append(glyph('close'));head.append(heading,close);d.append(head);d.addEventListener('close',()=>d.remove());document.body.append(d);d.showModal();return d;}
  function icon(key,fallback='folder'){const choice=state.icons[key];if(choice?.type==='emoji'){const n=el('span','emoji-icon',choice.value);return n;}return glyph(choice?.value||fallback);}
  async function pickIcon(key,onChoose){const value=await EmojiPicker.pick();if(!value)return;const choice={type:'emoji',value};if(onChoose)onChoose(choice);else{state.icons=await api.workbench('icon',{key,icon:choice});renderNav();}}
@@ -42,50 +42,35 @@ const WorkbenchUI=(()=>{
  function rank(a){return color?colourDistance(a,color):similarScores?-(similarScores.get(a.id)||0):0;}
  function rankOrder(){return !!color||!!similarScores;}
  function accepts(a){return view!=='smart'||((!similarIds||similarIds.has(a.id))&&(!color||colorMatch(a,color)));}
- function matchGrid(items,onOpen){
-  const grid=el('div','similar-grid');
-  for(const item of items){
-   const asset=assetById.get(item.id);
-   if(!asset)continue;
-   const cell=el('button','similar-cell');
-   cell.type='button';
-   cell.title=asset.name;
-   cell.append(thumb(asset));
-   if(item.badge){const badge=el('span','similar-badge',item.badge);cell.append(badge);}
-   cell.onclick=()=>onOpen(asset);
-   grid.append(cell);
-  }
-  return grid;
- }
- function openMatchPanel(title,subtitle,items,footerActions){
-  const d=dialog(title);
-  d.classList.add('similar-panel');
-  d.append(el('p','hint',subtitle));
-  d.append(matchGrid(items,asset=>{d.close();setView('all');select(asset.id);}));
-  const actions=typeof footerActions==='function'?footerActions(d):footerActions;
-  if(actions.length){const footer=el('div','similar-footer');for(const item of actions)footer.append(item);d.append(footer);}
-  return d;
- }
  function showSimilarInLibrary(source,result){
-  setView('smart');$('#type').value='all';similarIds=new Set(result.map(r=>r.id));similarScores=new Map(result.map(r=>[r.id,r.score]));title='Similar to '+(source.name||'image');
-  // Select the closest match once the gallery has its rows, so the file
-  // viewer opens on it and the arrows stay inside the similar set.
-  pendingSelection=result[0]?.id||null;render();
+  similarIds=new Set(result.map(r=>r.id));similarScores=new Map(result.map(r=>[r.id,r.score]));title='Similar to '+(source.name||'image');
+  // Set the result up before changing views so the single render that follows
+  // already has the filter, the ranking and the closest match selected.
+  setView('smart',null,false,{keepWorkbench:true,type:'all',pendingSelection:result[0]?.id||null});
  }
  async function similar(id){
+  if(similarBusy)return;
   const source=assetById.get(id);
   if(!source)return;
-  let result=[];
-  try{result=(await api.workbench('similar',{id})).filter(r=>r.score>=0.2);}catch(error){notify(error.message||String(error));return;}
-  if(!result.length){
-   const [index,installed]=await Promise.all([api.smartState().catch(()=>null),api.modelState('clip').catch(()=>null)]);
-   const reason=!installed?.ready?'Install the local visual model in Settings → Experimental, then let the index finish.'
-    :index?.visualRemaining?'Still indexing: '+index.visualRemaining+' files left to compare.'
-    :'No close matches yet. Enable local visual search in Settings → Experimental and let the index finish.';
-   notify(reason);
-   return;
+  const button=document.querySelector('.inspector > .find-similar');
+  similarBusy=true;
+  if(button){button.disabled=true;button.setAttribute('aria-busy','true');button.title='Searching for similar files…';}
+  try{
+   let result=[];
+   try{result=(await api.workbench('similar',{id})).filter(r=>r.score>=0.2);}catch(error){notify(error.message||String(error));return;}
+   if(!result.length){
+    const [index,installed]=await Promise.all([api.smartState().catch(()=>null),api.modelState('clip').catch(()=>null)]);
+    const reason=!installed?.ready?'Install the local visual model in Settings → Experimental, then let the index finish.'
+     :index?.visualRemaining?'Still indexing: '+index.visualRemaining+' files left to compare.'
+     :'No close matches yet. Enable local visual search in Settings → Experimental and let the index finish.';
+    notify(reason);
+    return;
+   }
+   showSimilarInLibrary(source,result);
+  }finally{
+   similarBusy=false;
+   if(button?.isConnected){button.disabled=false;button.removeAttribute('aria-busy');button.title='';}
   }
-  showSimilarInLibrary(source,result);
  }
  // A colour is a filter, not a report: clicking a swatch takes you to every
  // file that uses that colour, the same way Find similar takes you to the
@@ -243,5 +228,5 @@ const WorkbenchUI=(()=>{
  document.addEventListener('keydown',e=>{if(!(e.metaKey||e.ctrlKey))return;const typing=e.target.matches?.('input,textarea,select,[contenteditable=true]');if(e.key==='/'&&!typing){e.preventDefault();e.stopImmediatePropagation();shortcuts();}else if(e.key.toLowerCase()==='z'&&!typing&&view!=='canvas'&&!document.querySelector('dialog[open]')){e.preventDefault();e.stopImmediatePropagation();safe(()=>history(e.shiftKey));}},true);
  }
  function beta(){const d=dialog('Beta testing and feedback');d.append(el('p','hint','Use a disposable library for destructive tests. Try import, preview, search, canvas edits, backup and reopening on several Apple Silicon Macs. Real testers are still needed before a public launch.'));const steps=['Create a new library and reopen it','Import images, audio, videos, PDFs and bookmarks','Test shortcuts, undo, selection and duplicate review','Create a canvas; move, resize and export items','Back up, then open the backup as an existing library','Check large-library scrolling and local search','Test light/dark and Reduce Motion'];for(const text of steps){const l=el('label','tool-field'),check=el('input');check.type='checkbox';l.append(check,document.createTextNode(text));d.append(l);}const notes=field('','What happened? Include steps, expected result and actual result.',()=>{},true);d.append(notes,action('Save feedback report…',async()=>{await api.saveReport({notes:notes.value,checks:[...d.querySelectorAll('label')].map(l=>({test:l.textContent,passed:l.querySelector('input').checked}))});}));}
- return{init,created,setData,reset,accepts,rank,rankOrder,icon,pickIcon,similar,findColor,recovery,shortcuts,get title(){return title;}};
+ return{init,created,setData,reset,accepts,rank,rankOrder,colourMatch:colorMatch,icon,pickIcon,similar,findColor,recovery,shortcuts,get title(){return title;}};
 })();

@@ -1,8 +1,7 @@
 const SmartSearch=(()=>{
  let worker,modelReady=false,serial=0,pending=new Map(),enabled=localStorage.getItem('local-ai-enabled')!=='false',indexTimer,queryTimer,queryVersion=0;
- let visualQuery='',matches=null,matchedQuery='',status='Local search ready',indexing=false,workChanged=false;
+ let matches=null,matchedQuery='',status='Local search ready',indexing=false,workChanged=false;
  let workerIdleTimer,waitingForVisualRetry=false;
- let visualMatches=null,visualMode=false,visualVersion=0;
  const indexingPause=delay=>new Promise(resolve=>setTimeout(resolve,delay));
  function releaseIdleWorker(){
    clearTimeout(workerIdleTimer);
@@ -102,7 +101,7 @@ const SmartSearch=(()=>{
      }
    }
  }
- function stop(){resetVisualSearch();enabled=false;localStorage.setItem('local-ai-enabled','false');modelReady=false;workChanged=true;clearTimeout(indexTimer);clearTimeout(workerIdleTimer);for(const item of pending.values())item.reject(Error('Visual search paused'));pending.clear();worker?.terminate();worker=null;updateVisualButton();render();updateStatus('Visual search off · text and automatic tags remain searchable');}
+ function stop(){enabled=false;localStorage.setItem('local-ai-enabled','false');modelReady=false;workChanged=true;clearTimeout(indexTimer);clearTimeout(workerIdleTimer);for(const item of pending.values())item.reject(Error('Visual search paused'));pending.clear();worker?.terminate();worker=null;updateVisualButton();render();updateStatus('Visual search off · text and automatic tags remain searchable');}
  function updateVisualButton(){
    const button=$('#visual-search');
    if(!button)return;
@@ -110,15 +109,8 @@ const SmartSearch=(()=>{
    button.setAttribute('aria-pressed','false');
    button.setAttribute('aria-busy','false');
  }
- function resetVisualSearch(){
-   visualVersion++;
-   visualMode=false;
-   visualMatches=null;
-   visualQuery='';
- }
  function schedule(){
   clearTimeout(queryTimer);
-  resetVisualSearch();
   const query=$('#search').value.trim();
   const version=++queryVersion;
   matches=null;matchedQuery='';
@@ -138,14 +130,11 @@ const SmartSearch=(()=>{
    }
   },90);
  }
- async function toggleVisualSearch(){ return; }
  function includes(a,query){
-   return a.searchText.includes(query)||(matchedQuery.toLowerCase()===query&&matches?.has(a.id))||
-     (visualMatches?.query===query&&visualMatches.ids.has(a.id));
+   return a.searchText.includes(query)||(matchedQuery.toLowerCase()===query&&matches?.has(a.id));
  }
  function resultIds(query){
-   const lexical=matchedQuery.toLowerCase()===query&&matches?[...matches]:[];
-   return visualMatches?.query===query?[...new Set([...lexical,...visualMatches.ids])]:lexical;
+   return matchedQuery.toLowerCase()===query&&matches?[...matches]:[];
  }
  let lastIndexState;
  function updateActivityLabel(){
@@ -155,7 +144,7 @@ const SmartSearch=(()=>{
    const labels={manual:'Paused manually',battery:'Waiting for power',thermal:'Waiting for Mac to cool',active:'Waiting for 1 minute of idle time'};
    const remaining=Math.max(0,state.total-state.indexed);
    const label=button.querySelector('.ai-activity-label');
-   if(label)label.textContent=visualQuery||labels[reason]||(indexing?'Indexing images…':state.running?'Reading files…':remaining?'AI · '+remaining+' left':enabled&&waitingForVisualRetry?'AI · Retry pending':'AI · Ready');
+   if(label)label.textContent=labels[reason]||(indexing?'Indexing images…':state.running?'Reading files…':remaining?'AI · '+remaining+' left':enabled&&waitingForVisualRetry?'AI · Retry pending':'AI · Ready');
    button.title=remaining+' files left for local analysis'+(modelReady?' · '+state.visualRemaining+' left for visual search':'');
  }
  function init(){

@@ -285,7 +285,7 @@ const NoteTrackers = (() => {
     strip.append(btn('Cancel',()=>dialog.close()),btn('Save settings',async()=>{
       let sequence = block.nextField;
       const fields = [...rows.children].map(row=>({
-        key:row.dataset.key || 'f'+sequence++,label:row.firstChild.value.trim(),type:row.children[1].value
+        key:row.dataset.key || 'f'+sequence++,label:row.firstChild.value.trim(),type:row.children[1].querySelector('select')?.value || 'text'
       })).filter(item=>item.label);
       const code = currency.value.trim().toUpperCase();
       if (code && !/^[A-Z]{3}$/.test(code)) { feedback.textContent = 'Use a three-letter currency code.'; return; }

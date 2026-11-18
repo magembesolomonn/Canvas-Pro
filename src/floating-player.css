@@ -1,0 +1,116 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+body { display: flex; align-items: stretch; justify-content: stretch; -webkit-app-region: drag; }
+
+.floating-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #000;
+  box-shadow: none;
+}
+.floating-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: none;
+  opacity: 1;
+}
+.floating-wash {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 55%, rgba(0, 0, 0, 0.5));
+}
+.floating-top {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.floating-corner,
+.floating-round {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 1px solid #ffffff1f;
+  border-radius: 50%;
+  background: #15161f66;
+  color: #fff;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  backdrop-filter: blur(8px);
+}
+.floating-corner { width: 36px; height: 36px; }
+.floating-round { width: 46px; height: 46px; }
+.floating-play { width: 62px; height: 62px; background: #ffffff2e; border-color: #ffffff38; }
+.floating-corner:hover,
+.floating-round:hover { background: #ffffff2e; }
+.floating-corner svg,
+.floating-round svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.floating-play svg { width: 24px; height: 24px; }
+.floating-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -46%);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  pointer-events: none;
+}
+.floating-seek {
+  position: absolute;
+  bottom: 18px;
+  left: 18px;
+  right: 18px;
+  width: calc(100% - 36px);
+  height: 4px;
+  margin: 0;
+  border: 0;
+  border-radius: 4px;
+  background: linear-gradient(to right, #fff var(--position, 0%), #ffffff80 var(--position, 0%));
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+.floating-seek::-webkit-slider-runnable-track { height: 4px; background: transparent; }
+.floating-seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0; height: 0; }
+body.light-mode .floating-card { box-shadow: none; }
+body.light-mode .floating-wash { background: linear-gradient(transparent 55%, rgba(0, 0, 0, 0.5)); }
+body.light-mode .floating-corner,
+body.light-mode .floating-round { background: #2b2b3a52; border-color: #ffffff50; }
+
+
+/* Controls fade with the pointer: hidden when it leaves, visible when it
+   returns. No timers, so there is no stale state after a window swap. */
+.floating-top, .floating-center, .floating-seek {
+  opacity: 0;
+  transition: opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.floating-card:hover .floating-top,
+.floating-card:hover .floating-center,
+.floating-card:hover .floating-seek,
+.floating-card.controls-visible .floating-top,
+.floating-card.controls-visible .floating-center,
+.floating-card.controls-visible .floating-seek,
+.floating-card:focus-within .floating-top,
+.floating-card:focus-within .floating-center,
+.floating-card:focus-within .floating-seek {
+  opacity: 1;
+}
+
+/* Faded controls must not capture clicks meant for the video underneath. */
+.floating-card:not(:hover):not(:focus-within):not(.controls-visible) .floating-top,
+.floating-card:not(:hover):not(:focus-within):not(.controls-visible) .floating-center,
+.floating-card:not(:hover):not(:focus-within):not(.controls-visible) .floating-seek { pointer-events: none; }

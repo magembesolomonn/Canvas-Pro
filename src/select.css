@@ -128,7 +128,7 @@
   background: var(--surface-menu, #28292d);
   border: 1px solid var(--line);
   border-radius: 10px;
-  box-shadow: var(--shadow-popover);
+  box-shadow: none;
   color: var(--text);
 }
 
@@ -210,5 +210,5 @@
 /* Light appearance: the field is white with a hairline and the card is white.
    The fills themselves come from the app's tokens. */
 body.light-mode .select-popover {
-  box-shadow: var(--shadow-popover);
+  box-shadow: none;
 }

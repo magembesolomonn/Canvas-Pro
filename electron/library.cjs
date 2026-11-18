@@ -28,6 +28,10 @@ class Library {
     // looked at yet"; an empty string records a file that could not be
     // decoded, so a review does not retry it forever.
     if(!this.db.prepare('PRAGMA table_info(assets)').all().some(c=>c.name==='phash'))this.db.exec('ALTER TABLE assets ADD COLUMN phash TEXT');
+    // Fingerprinting walks the remaining images in batches; without a partial
+    // index each batch rescans the whole assets table.
+    this.db.exec(`CREATE INDEX IF NOT EXISTS assets_phash_pending ON assets(imported DESC) WHERE phash IS NULL AND trash=0;
+      CREATE INDEX IF NOT EXISTS asset_analysis_version ON asset_analysis(version);`);
     if(!this.db.prepare('PRAGMA table_info(folders)').all().some(c=>c.name==='id'))this.db.exec('ALTER TABLE folders ADD COLUMN id TEXT');for(const folder of this.db.prepare('SELECT name FROM folders WHERE id IS NULL').all())this.db.prepare('UPDATE folders SET id=? WHERE name=?').run(crypto.randomUUID(),folder.name);this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS folders_id ON folders(id)');
     // The Movies tracker and the RSS reader were removed. Their tables are
     // dropped so existing libraries do not keep orphaned data around.
@@ -51,15 +55,28 @@ class Library {
     if(bookmark==='social'||bookmark==='recipe')clause("EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND json_extract(m.json,'$.linkPreview.type')=?)",bookmark);
     if(excludeBookmarks)clause("NOT EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND json_extract(m.json,'$.linkPreview.type') IN ('social','recipe'))");
     if(other)clause('a.ext NOT IN (SELECT value FROM json_each(?))',JSON.stringify(knownExtensions));
-    if(query||matches.length){
-      if(!this.searchFunctions){
-        this.db.function('canvas_fold',{deterministic:true},value=>String(value??'').toLowerCase());
-        this.searchFunctions=true;
+    // An empty needle makes instr() true for every row, so text and semantic
+    // results are separate predicates rather than one OR chain.
+    const text=String(query??'').trim();
+    if(text||matches.length){
+      const predicates=[],values=[];
+      if(text){
+        if(!this.searchFunctions){
+          this.db.function('canvas_fold',{deterministic:true},value=>String(value??'').toLowerCase());
+          this.searchFunctions=true;
+        }
+        predicates.push(`instr(canvas_fold(a.name||' '||a.notes||' '||a.url||' '||a.tags||' '||a.folders),?)>0`);
+        values.push(text);
+        predicates.push(`EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND instr(canvas_fold(m.json),?)>0)`);
+        values.push(text);
+        predicates.push(`EXISTS(SELECT 1 FROM asset_analysis s WHERE s.id=a.id AND instr(canvas_fold(s.summary),?)>0)`);
+        values.push(text);
       }
-      const lookup=`EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND instr(canvas_fold(m.json),?)>0)
-        OR EXISTS(SELECT 1 FROM asset_analysis s WHERE s.id=a.id AND instr(canvas_fold(s.summary),?)>0)`;
-      clause(`(instr(canvas_fold(a.name||' '||a.notes||' '||a.url||' '||a.tags||' '||a.folders),?)>0
-        OR ${lookup} OR a.id IN (SELECT value FROM json_each(?)))`,query,query,query,JSON.stringify(matches));
+      if(matches.length){
+        predicates.push('a.id IN (SELECT value FROM json_each(?))');
+        values.push(JSON.stringify(matches));
+      }
+      clause('('+predicates.join(' OR ')+')',...values);
     }
     const condition=' WHERE '+where.join(' AND ');
     const order={new:'a.imported DESC,a.rowid DESC',old:'a.imported ASC,a.rowid ASC',name:'a.name COLLATE NOCASE,a.rowid DESC',size:'a.size DESC,a.imported DESC,a.rowid DESC'};
@@ -163,6 +180,8 @@ class Library {
       for await (const chunk of fs.createReadStream(dest,{signal})) hash.update(chunk);
       signal?.throwIfAborted();
       const digest = hash.digest('hex');
+      // The collection may have been renamed while the bytes were copying;
+      // follow its id so the file lands in the name it has now.
       if(destination)folder=this.db.prepare('SELECT name FROM folders WHERE id=?').get(destination.id)?.name||null;
       const exists = this.db.prepare('SELECT id, stored, folders, trash, missing FROM assets WHERE hash=?').get(digest);
       if (exists) {
@@ -178,7 +197,7 @@ class Library {
         }
         const changes = {};
         if (exists.trash && !exists.missing) changes.trash = false;
-        if (folder) changes.folders = [...JSON.parse(exists.folders), folder];
+        if (folder) changes.folders = [...new Set([...JSON.parse(exists.folders), folder])];
         this.update(exists.id, changes);
         return { duplicate: exists.id };
       }

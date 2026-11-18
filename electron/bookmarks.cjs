@@ -81,13 +81,13 @@ class Bookmarks{
    const title=info.title.replace(/^.*?review of /i,'').match(/^(.+?)\s*\((\d{4})\)/);
    if(title){info.title=title[1];info.details={year:title[2]};}
  }
- try{if(true){const response=await this.fetcher(pageURL,{signal:controller.signal,credentials:'omit',...(instagramEmbed?{headers:{'User-Agent':'Canvas Pro'}}:{})});const type=response.headers.get('content-type')||'';if(/text\/html|application\/xhtml\+xml/i.test(type)){const html=(await limited(response,3*1024*1024)).toString('utf8'),parsed=metadata(html,response.url||pageURL),smart=await smartPage(html,response.url||pageURL);article=smart.article;delete smart.article;
+ try{const response=await this.fetcher(pageURL,{signal:controller.signal,credentials:'omit',...(instagramEmbed?{headers:{'User-Agent':'Canvas Pro'}}:{})});const type=response.headers.get('content-type')||'';if(/text\/html|application\/xhtml\+xml/i.test(type)){const html=(await limited(response,3*1024*1024)).toString('utf8'),parsed=metadata(html,response.url||pageURL),smart=await smartPage(html,response.url||pageURL);article=smart.article;delete smart.article;
  if(platform.film)posterURLs=smart.posterURLs||[];
  if(platform.social){
    socialCandidates=[...(smart.postImageURLs||[]),smart.imageURL,parsed.imageURL,captureMetadata.previewImage];
    if(response.url&&classifyURL(response.url)==='social')socialURL=new URL(response.url);
  }
- delete smart.posterURLs;delete smart.postImageURLs;info={...info,...Object.fromEntries(Object.entries(parsed).filter(([,v])=>v)),...Object.fromEntries(Object.entries(smart).filter(([,v])=>v!==''&&v!==undefined))};}else if(/^image\//i.test(type)){info.imageURL=asset.url;coverResponse=response;}else{await response.body?.cancel();}}
+ delete smart.posterURLs;delete smart.postImageURLs;info={...info,...Object.fromEntries(Object.entries(parsed).filter(([,v])=>v)),...Object.fromEntries(Object.entries(smart).filter(([,v])=>v!==''&&v!==undefined))};}else if(/^image\//i.test(type)){info.imageURL=asset.url;coverResponse=response;}else{await response.body?.cancel();}
  }catch(e){info.state='fallback';info.error=e.message;}
  try{const source=socialURL||platform.url;if(host==='open.spotify.com'&&(!info.imageURL||!info.title||info.title===asset.name.replace(/\.url$/,''))){try{const response=await this.fetcher('https://open.spotify.com/oembed?url='+encodeURIComponent(asset.url),{signal:controller.signal,credentials:'omit'}),data=JSON.parse((await limited(response,256*1024)).toString('utf8'));info.title=data.title||info.title;info.imageURL=data.thumbnail_url||info.imageURL;}catch{}}
  if(platform.social){

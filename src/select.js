@@ -155,7 +155,7 @@ const AppSelect=(()=>{
   }
 
   function openList(){
-   if(state.open)return;
+   if(state.open||trigger.disabled)return;
    state.open=true;
    trigger.setAttribute('aria-expanded','true');
    root.classList.add('is-open');
@@ -268,6 +268,14 @@ const AppSelect=(()=>{
   // The native element keeps the value, so the code that focuses it should
   // land on the control the user can see.
   select.focus=()=>api.trigger.focus();
+  // A disabled native select must look and behave disabled in the visible
+  // control too, including when the attribute changes later.
+  const syncDisabled=()=>{
+   api.trigger.disabled=select.disabled;
+   api.trigger.setAttribute('aria-disabled',String(select.disabled));
+  };
+  syncDisabled();
+  new MutationObserver(syncDisabled).observe(select,{attributes:true,attributeFilter:['disabled']});
   // And when the value changes without the list, the list follows.
   select.addEventListener('change',()=>{
    api.setValues(multiple?[...select.selectedOptions].map(option=>option.value):(select.value?[select.value]:[]));

@@ -5,6 +5,9 @@ const on = (channel, fn) => {
   return () => ipcRenderer.removeListener(channel, handler);
 };
 contextBridge.exposeInMainWorld('library', {
+  floating:(op,data)=>ipcRenderer.invoke('floating-player',op,data),
+  onFloatingRestore:fn=>on('floating-restore',fn),
+  onFloatingClose:fn=>on('floating-close',fn),
   previewZoomActive:active=>ipcRenderer.send('preview-zoom-active',active),
   noteImportThumbnail:extensions=>ipcRenderer.invoke('note-import-thumbnail',extensions),
   notesEmoji:(id,emoji)=>ipcRenderer.invoke('notes-emoji',id,emoji),

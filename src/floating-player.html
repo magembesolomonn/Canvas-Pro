@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Floating player</title><link rel="stylesheet" href="floating-player.css"></head>
+<body>
+ <div class="floating-card">
+  <video id="video" class="floating-video" playsinline muted></video>
+  <div class="floating-wash"></div>
+  <div class="floating-top">
+   <button id="close" class="floating-corner" aria-label="Close floating player" title="Close"></button>
+   <button id="expand" class="floating-corner" aria-label="Return to Canvas Pro" title="Return to Canvas Pro"></button>
+  </div>
+  <div class="floating-center">
+   <button id="back" class="floating-round" aria-label="Back 10 seconds" title="Back 10 seconds"></button>
+   <button id="play" class="floating-round floating-play" aria-label="Pause" title="Pause"></button>
+   <button id="forward" class="floating-round" aria-label="Forward 10 seconds" title="Forward 10 seconds"></button>
+  </div>
+  <input id="seek" class="floating-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Playback position">
+ </div>
+ <script src="floating-player.js"></script>
+</body></html>

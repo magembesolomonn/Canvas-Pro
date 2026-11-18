@@ -35,11 +35,20 @@
   let input = null;
   let list = null;
   let mode = 'commands';
+  // A search is kept for 15s after the palette closes, so ⌘K can bring the
+  // same results straight back. After the window it resets to Quick actions.
+  let rememberedQuery = '';
+  let rememberedAt = 0;
+  let rememberedScroll = 0;
+  let rememberTimer = 0;
+  let restoreScroll = 0;
   let sections = [];
   let entries = [];
   let active = -1;
   let sequence = 0;
   let paintTimer = 0;
+  let pendingPaint = false;
+  let notesPromise = null;
   let restoreFocus = null;
 
   const click = selector => document.querySelector(selector)?.click();
@@ -81,12 +90,6 @@
     if ((navStats?.counts.trash || 0) > 0) {
       items.push({ id: 'empty-trash', label: 'Empty Trash…', icon: 'trash', group: 'Actions', run: () => click('#empty-trash') });
     }
-    for (const [pane, title] of (window.SettingsUI?.titles || new Map())) {
-      items.push({
-        id: 'settings-' + pane, label: 'Settings · ' + title, icon: 'settings', group: 'Settings',
-        run: () => window.SettingsUI.open(pane)
-      });
-    }
     return items;
   }
 
@@ -96,9 +99,16 @@
     }));
   }
 
+  function parseQuery(raw) {
+    const text = raw.trim();
+    const colour = /^(?:color|colour)\s*[:=]?\s*(#[0-9a-f]{3}|#[0-9a-f]{6}|[0-9a-f]{6})$/i.exec(text);
+    if (colour) return { query: colour[1].startsWith('#') ? colour[1] : '#' + colour[1], colour: true, tag: false };
+    if (/^#[0-9a-f]{3}$|^#[0-9a-f]{6}$/i.test(text)) return { query: text, colour: true, tag: false };
+    return { query: (text.startsWith('#') ? text.slice(1) : text).trim().toLowerCase(), tag: text.startsWith('#'), colour: false };
+  }
+
   async function fileHits(rawQuery) {
-    const tagOnly = rawQuery.startsWith('#');
-    const query = (tagOnly ? rawQuery.slice(1) : rawQuery).trim().toLowerCase();
+    const { query, tag, colour } = parseQuery(rawQuery);
     if (!query) return [];
     const score = new Map();
     let extra = [];
@@ -121,7 +131,10 @@
       const tags = asset.tags || [];
       const text = asset.searchText || SmartCards.enrichSearch(asset);
       let value = score.get(asset.id) || 0;
-      if (tagOnly) {
+      if (colour) {
+        if (!WorkbenchUI?.colourMatch?.(asset, query)) continue;
+        value += 3;
+      } else if (tag) {
         if (!tags.some(tag => String(tag).toLowerCase().includes(query))) continue;
         value += 2;
       } else if (text.includes(query)) {
@@ -153,6 +166,23 @@
 
     const sections = [];
     const commandItems = rank(commands(), q);
+
+    if (parseQuery(q).colour) {
+      const swatch = el('div', 'command-colours');
+      for (const [label, hex] of [['Red', '#e5484d'], ['Orange', '#f76b15'], ['Yellow', '#f5d90a'], ['Green', '#30a46c'], ['Blue', '#0090ff'], ['Purple', '#8e4ec6']]) {
+        const chip = el('button', 'command-colour');
+        chip.type = 'button';
+        chip.title = label + ' · ' + hex;
+        chip.setAttribute('aria-label', 'Find files close to ' + label);
+        chip.style.background = hex;
+        chip.onclick = () => { input.value = hex; paint(); input.focus(); };
+        swatch.append(chip);
+      }
+      sections.push({ header: 'Colours', custom: swatch });
+    }
+
+    // Commands come first: the palette is a command surface, so actions stay
+    // above the file grid while a query is typed.
     if (commandItems.length) sections.push({ header: 'Commands', items: commandItems });
 
     const files = await fileHits(q);
@@ -160,8 +190,9 @@
       sections.push({ header: 'Files', grid: 'files', items: files.map(asset => ({
         id: 'file-' + asset.id,
         label: asset.name,
+        detail: asset.smart?.excerpt || asset.smart?.caption || asset.notes || asset.captureMetadata?.textExcerpt || (asset.tags?.length ? asset.tags.join(', ') : ''),
         asset,
-        run: () => { setView('all'); select(asset.id); revealGallerySelection(); }
+        run: () => window.openPaletteAsset?.(asset) || Promise.resolve()
       })) });
       sections.push({ similar: files[0].id });
     }
@@ -172,7 +203,8 @@
     if (canvasItems.length) sections.push({ header: 'Canvases', items: canvasItems });
 
     try {
-      const notes = await api.notesList();
+      notesPromise ||= api.notesList().catch(() => []);
+      const notes = await notesPromise;
       const noteItems = rank(notes.filter(n => (n.title || 'Untitled note').toLowerCase().includes(q)).map(n => ({
         id: 'note-' + n.id, label: n.title || 'Untitled note', icon: 'pencil', hint: 'Note', run: () => NotesWorkspace.open(n.id)
       })), q);
@@ -211,7 +243,7 @@
         header: 'Visually similar', grid: 'files',
         items: matches.map(asset => ({
           id: 'similar-' + asset.id, label: asset.name, asset,
-          run: () => { setView('all'); select(asset.id); revealGallerySelection(); }
+          run: () => window.openPaletteAsset?.(asset) || Promise.resolve()
         }))
       };
       render();
@@ -220,40 +252,49 @@
 
   function fileCard(entry, index) {
     const asset = entry.asset;
+    const result = el('div', 'command-result');
     const card = el('button', 'command-card');
     card.type = 'button';
+    card.id = 'command-entry-' + index;
     card.dataset.index = String(index);
     card.setAttribute('role', 'option');
     card.setAttribute('aria-label', entry.label);
     card.setAttribute('aria-selected', 'false');
+    card.title = entry.detail || entry.label;
     card.append(thumb(asset, 'command-thumb'));
     const foot = el('span', 'command-card-foot');
     foot.append(el('span', 'command-card-name', entry.label));
-    if (asset.tags?.length) {
-      const tagBox = el('span', 'command-card-tags');
-      for (const tag of asset.tags.slice(0, 2)) tagBox.append(el('span', 'command-tag', tag));
-      foot.append(tagBox);
-    }
-    card.append(foot);
+    result.append(card, foot);
     card.onpointerenter = () => { active = index; mark(); };
     card.onclick = () => run(index);
-    return card;
+    return result;
   }
 
   function mark() {
+    if (restoreScroll && list) { list.scrollTop = restoreScroll; restoreScroll = 0; }
     for (const node of list.querySelectorAll('.command-row, .command-card')) {
       node.setAttribute('aria-selected', String(Number(node.dataset.index) === active));
+    }
+    if (input) {
+      if (active >= 0) input.setAttribute('aria-activedescendant', 'command-entry-' + active);
+      else input.removeAttribute('aria-activedescendant');
     }
     list.querySelector('.command-row[aria-selected="true"], .command-card[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }
 
   function render() {
+    // A late async section (visually similar, or a slow file search) must not
+    // steal the selection from someone who has already moved down the list.
+    // If they have not moved, the first result stays selected: it is the one
+    // Enter should run.
+    const previous = active > 0 ? entries[active]?.id : null;
     list.replaceChildren();
     entries = [];
     let pendingSimilar = null;
     for (const section of sections) {
       if (section.similar) { pendingSimilar = section.similar; continue; }
       list.append(el('div', 'command-group-title', section.header));
+      if (section.custom) { list.append(section.custom); continue; }
       if (section.grid === 'files') {
         const grid = el('div', 'command-grid');
         for (const entry of section.items) {
@@ -269,6 +310,7 @@
         const index = entries.length;
         entries.push(entry);
         const row = el('div', 'command-row');
+        row.id = 'command-entry-' + index;
         row.dataset.index = String(index);
         row.setAttribute('role', 'option');
         row.setAttribute('aria-selected', 'false');
@@ -286,22 +328,28 @@
     if (!sections.length || !entries.length && !list.querySelector('.command-grid')) {
       list.append(el('div', 'command-empty', mode === 'shortcuts' ? 'No matching shortcuts.' : 'Nothing found. Try a file, note, canvas or command.'));
     }
-    active = entries.length ? 0 : -1;
+    const restored = previous ? entries.findIndex(entry => entry.id === previous) : -1;
+    active = restored >= 0 ? restored : (entries.length ? 0 : -1);
     mark();
     if (pendingSimilar) loadSimilar(pendingSimilar, sequence);
   }
 
-  function paint() {
+  function paint(delay = 90) {
     clearTimeout(paintTimer);
+    paintTimer = 0;
+    pendingPaint = true;
     const current = ++sequence;
-    paintTimer = setTimeout(() => {
-      const query = input.value.trim();
-      build(query).then(items => {
+    const settle = () => {
+      paintTimer = 0;
+      build(input.value.trim()).then(items => {
         if (current !== sequence || !dialog?.open) return;
         sections = items;
+        pendingPaint = false;
         render();
-      }).catch(() => {});
-    }, 90);
+      }).catch(() => { pendingPaint = false; });
+    };
+    if (delay > 0) paintTimer = setTimeout(settle, delay);
+    else settle();
   }
 
   function move(delta) {
@@ -314,13 +362,6 @@
   function run(index) {
     const entry = entries[index];
     if (entry) runEntry(entry);
-  }
-
-  function runById(id) {
-    for (const section of sections) {
-      const entry = section.items?.find(item => item.id === id);
-      if (entry) return runEntry(entry);
-    }
   }
 
   function runEntry(entry) {
@@ -336,9 +377,10 @@
   }
 
   function open(nextMode = 'commands') {
+    notesPromise = null;
     mode = nextMode === 'shortcuts' ? 'shortcuts' : 'commands';
     if (dialog?.open) {
-      const placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, notes, canvases and commands';
+      const placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, colour, notes, canvases and commands';
       input.placeholder = placeholder;
       input.setAttribute('aria-label', placeholder);
       dialog.setAttribute('aria-label', mode === 'shortcuts' ? 'Keyboard shortcuts' : 'Command palette');
@@ -360,7 +402,7 @@
     input.type = 'search';
     input.autocomplete = 'off';
     input.spellcheck = false;
-    input.placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, notes, canvases and commands';
+    input.placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, colour, notes, canvases and commands';
     input.setAttribute('aria-label', input.placeholder);
     head.append(glyphBox, input);
     list = el('div', 'command-list');
@@ -374,6 +416,14 @@
     dialog.append(head, list, foot);
     dialog.addEventListener('close', () => {
       clearTimeout(paintTimer);
+      const query = input?.value.trim() || '';
+      rememberedQuery = mode === 'commands' ? query : '';
+      rememberedAt = query ? Date.now() : 0;
+      rememberedScroll = query && list ? list.scrollTop : 0;
+      clearTimeout(rememberTimer);
+      if (rememberedQuery) rememberTimer = setTimeout(() => {
+        rememberedQuery = ''; rememberedAt = 0; rememberedScroll = 0;
+      }, 15000);
       if (restoreFocus?.isConnected) restoreFocus.focus({ preventScroll: true });
       restoreFocus = null;
       dialog?.remove();
@@ -381,15 +431,29 @@
     });
     document.body.append(dialog);
     dialog.showModal();
+    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
     input.addEventListener('input', paint);
     input.addEventListener('keydown', event => {
       if (event.key === 'ArrowDown') { event.preventDefault(); move(1); }
       else if (event.key === 'ArrowUp') { event.preventDefault(); move(-1); }
-      else if (event.key === 'Enter') { event.preventDefault(); run(active); }
+      else if (event.key === 'Enter') {
+        event.preventDefault();
+        if (pendingPaint) { paint(0); return; }
+        run(active);
+      }
       else if (event.key === 'Escape') { event.preventDefault(); dialog.close(); }
       event.stopPropagation();
     });
-    paint();
+    // Restore a recent search before the first paint so the same files stay
+    // in view when the palette is reopened with ⌘K.
+    const fresh = rememberedQuery && Date.now() - rememberedAt < 15000;
+    if (fresh && mode === 'commands') {
+      input.value = rememberedQuery;
+      restoreScroll = rememberedScroll;
+    } else {
+      rememberedQuery = ''; rememberedAt = 0; rememberedScroll = 0;
+    }
+    paint(0);
     input.focus();
     return dialog;
   }
@@ -397,6 +461,19 @@
   function close() {
     if (dialog?.open) dialog.close();
   }
+  function toggle() {
+    if (dialog?.open) close();
+    else open('commands');
+  }
+  document.addEventListener('keydown', event => {
+    if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== 'k') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    // Closing a preview here matters: the capture-phase handler would
+    // otherwise swallow the app's own handler that closes it.
+    if (!dialog?.open && typeof closePreview === 'function' && !$('#preview').hidden) closePreview();
+    toggle();
+  }, true);
 
-  window.CommandPalette = { open, close, shortcuts: () => open('shortcuts'), SHORTCUTS };
+  window.CommandPalette = { open, close, toggle, shortcuts: () => open('shortcuts'), SHORTCUTS };
 })();

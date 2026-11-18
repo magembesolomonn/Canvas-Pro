@@ -192,6 +192,7 @@
 
   function flash(panel) {
     clearTimeout(flashTimer);
+    for (const other of panels.values()) other.handle.classList.remove('is-flashing');
     panel.handle.classList.add('is-flashing');
     flashTimer = setTimeout(() => panel.handle.classList.remove('is-flashing'), 900);
   }

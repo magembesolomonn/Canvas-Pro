@@ -92,7 +92,7 @@
   position: absolute; left: 0; bottom: 100%; z-index: 3;
   display: flex; align-items: center; gap: 6px; padding: 6px;
   border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--panel) 92%, transparent);
-  box-shadow: 0 5px 18px #0002; backdrop-filter: blur(12px) saturate(130%);
+  box-shadow: none; backdrop-filter: blur(12px) saturate(130%);
   opacity: 0; pointer-events: none; transform: translateY(3px);
 }
 .note-format-toolbar.is-visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
@@ -324,12 +324,6 @@
   padding: 10px 20px 0;
   overflow: auto;
 }
-.note-dialog-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 11px;
-  color: var(--muted);
-}
 .note-dialog-body select {
   width: 100%;
   height: 28px;
@@ -355,13 +349,6 @@
   padding: 14px 20px 16px;
   margin-top: 16px;
   border-top: 1px solid var(--line);
-}
-/* The note title inside a sheet: a title, not a page heading. */
-.note-dialog-title {
-  margin: 0 0 12px;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.1px;
 }
 /* Light mode: the sheet is white, its heading and button strips are
    #F4F4F4, and nothing else. */
@@ -394,10 +381,9 @@ body.light-mode .note-dialog-actions {
   border-radius: 7px;
   background: #ffffff0a;
 }
-/* A soft ring, the way macOS marks a focused field. */
+/* A focused field is marked with its border, not a glow. */
 .note-dialog-search:focus-within {
   border-color: color-mix(in srgb, var(--focus, var(--settings-accent)) 70%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus, var(--settings-accent)) 20%, transparent);
 }
 .note-dialog-search .sf-symbol,
 .note-dialog-search-icon {
@@ -442,7 +428,7 @@ body.light-mode .note-dialog-search input:focus-visible {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface-menu);
-  box-shadow: var(--shadow-popover);
+  box-shadow: none;
   backdrop-filter: blur(18px) saturate(120%);
 }
 .note-block-menu-search {
@@ -456,7 +442,8 @@ body.light-mode .note-dialog-search input:focus-visible {
   outline: none;
 }
 .note-block-menu-search:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus, var(--settings-accent)) 22%, transparent);
+  outline: 1px solid var(--focus, var(--settings-accent));
+  outline-offset: 1px;
 }
 .note-block-menu-search::placeholder {
   color: var(--muted);
@@ -515,9 +502,6 @@ body.light-mode .note-block-menu-search {
   background: var(--bg-secondary);
   border: 1px solid #00000014;
 }
-body.light-mode .note-block-menu-search:focus {
-  box-shadow: 0 0 0 3px #0000001a;
-}
 body.light-mode .note-block-menu-list {
   gap: 2px;
 }
@@ -537,10 +521,7 @@ body.light-mode .note-dialog-close:hover {
 body.light-mode .note-dialog-search {
   background: #00000008;
 }
-body.light-mode .note-dialog-search:focus-within {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
-}
+body.light-mode .note-dialog-search:focus-within { border-color: var(--focus); }
 .note-tracker-dialog { width: min(550px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; }
 /* Everything under the heading sits inside the sheet's margins, and the
    actions sit in a strip at the foot of it, so every sheet in the app is
@@ -708,7 +689,7 @@ body.light-mode .tracker-record-panel .dialog-actions { background: var(--bg-pri
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface-menu);
-  box-shadow: var(--shadow-popover);
+  box-shadow: none;
   backdrop-filter: blur(18px) saturate(120%);
   color: var(--text);
 }
@@ -890,7 +871,7 @@ body.light-mode .calendar-now:hover {
 /* The slash menu is a plain panel with small items. */
 .note-block-menu {
   border-radius: var(--note-radius-panel);
-  box-shadow: 0 8px 24px #00000038, 0 0 0 1px #ffffff0f;
+  box-shadow: none;
 }
 .note-block-menu-list button {
   border-radius: 5px;

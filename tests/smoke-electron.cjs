@@ -87,7 +87,8 @@ require(process.env.ASSET_LIBRARY_MAIN||'../electron/main.cjs');
     $('#search').focus();const searchOutline=getComputedStyle($('#search')).outlineStyle;
     return {waveHeight,fallbackVisible,inspectorFallback,inspectorArtwork,naturalRatio,dimensions,searchOutline};
   })()`);console.log('PREVIEW_POLISH',JSON.stringify(polish));
-  if(polish.waveHeight>64||!polish.fallbackVisible||!polish.inspectorFallback||!polish.inspectorArtwork||!polish.naturalRatio||!/^\d+ × \d+$/.test(polish.dimensions)||polish.searchOutline!=='none')throw new Error('Audio, inspector, dimensions or search styling regression');
+  // The full audio player uses a tall centred waveform; compact cards stay short.
+  if(polish.waveHeight>200||!polish.fallbackVisible||!polish.inspectorFallback||!polish.inspectorArtwork||!polish.naturalRatio||!/^\d+ × \d+$/.test(polish.dimensions)||polish.searchOutline!=='none')throw new Error('Audio, inspector, dimensions or search styling regression');
   await evalJS(`setView('all');const fixture=assets.find(a=>a.ext==='wav');select(fixture.id);openPreview()`);
 
   const keyboard=await evalJS(`(()=>{const canvas=document.querySelector('.full-player canvas');canvas.focus();canvas.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));return {closed:document.querySelector('#preview').hidden};})()`);console.log('KEYBOARD',JSON.stringify(keyboard));if(!keyboard.closed)throw new Error('Escape failed after waveform focus');

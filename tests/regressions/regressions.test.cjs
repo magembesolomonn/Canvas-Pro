@@ -6,7 +6,7 @@ const metadata=JSON.parse(run(process.execPath,'metadata-reproduction.cjs'));
 const ui=run(require(path.join(root,'node_modules/electron')),'ui-reproduction.cjs');
 function record(name){const line=ui.split('\n').find(line=>line.startsWith(name+' '));assert.ok(line,'Missing '+name+' diagnostic result');return JSON.parse(line.slice(name.length+1));}
 const tags=record('TAGS'),bulk=record('BULK'),repeat=record('SPACE_REPEAT'),mhtml=record('MHTML');
-fs.writeFileSync(path.join(__dirname,'evidence','import-results.json'),JSON.stringify(imported,null,2)+'\n');fs.writeFileSync(path.join(__dirname,'evidence','metadata-results.json'),JSON.stringify(metadata,null,2)+'\n');fs.writeFileSync(path.join(__dirname,'evidence','ui-results.log'),ui);
+fs.mkdirSync(path.join(__dirname,'evidence'),{recursive:true});fs.writeFileSync(path.join(__dirname,'evidence','import-results.json'),JSON.stringify(imported,null,2)+'\n');fs.writeFileSync(path.join(__dirname,'evidence','metadata-results.json'),JSON.stringify(metadata,null,2)+'\n');fs.writeFileSync(path.join(__dirname,'evidence','ui-results.log'),ui);
 test('P1: managed bytes must match the recorded import hash',()=>assert.equal(imported.recordedHash,imported.actualHash,'Source changed after hashing; the managed copy no longer matches its identity.'));
 test('P2: a successful metadata retry must replace an unavailable cached result',()=>assert.equal(metadata.second.artwork,true,'The backend retry succeeded but the renderer still returned its first failure.'));
 test('P2: bulk actions must handle a selection allowed by Select All',()=>assert.equal(bulk.error,null,bulk.error));
