@@ -7774,10 +7774,10 @@ body .media-player .player-controls .volume:active::-webkit-slider-thumb {
   background: var(--player-track);
 }
 
-/* One viewer capsule for audio and video. Flexbox owns the row: fixed-size
-   buttons and times, the seek takes every remaining pixel, and the padding
-   is even on all four sides. */
-body .media-player.full-player:is(.video-player, .audio-player) .player-controls {
+/* Audio gets a centred capsule. Full-screen video keeps the flat, edge-to-edge
+   scrim: a rounded floating bar would read as a second window on the picture
+   and override the scrim's zero radius. */
+body .media-player.full-player.audio-player .player-controls {
   position: absolute;
   inset-inline: 0;
   bottom: 12px;
