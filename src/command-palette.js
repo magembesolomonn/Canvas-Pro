@@ -1,7 +1,7 @@
 // One ⌘K surface for commands, navigation and everything in the library.
 // Results are assembled from the app's own indexes: the local smart index
-// (which already knows names, tags, notes and AI captions), the live catalog,
-// canvases, notes and collections. File hits are shown as a grid of previews,
+// (which already knows names, tags and AI captions), the live catalog,
+// canvases and collections. File hits are shown as a grid of previews,
 // with a second grid of visually similar frames when a vector is available.
 (() => {
   'use strict';
@@ -48,7 +48,6 @@
   let sequence = 0;
   let paintTimer = 0;
   let pendingPaint = false;
-  let notesPromise = null;
   let restoreFocus = null;
 
   const click = selector => document.querySelector(selector)?.click();
@@ -64,7 +63,6 @@
       { id: 'import', label: 'Import files…', icon: 'importing', keys: '⌘ O', group: 'Actions', run: () => click('#import') },
       { id: 'import-folder', label: 'Import folder…', icon: 'folder', group: 'Actions', run: () => click('#import-folder') },
       { id: 'new-collection', label: 'New collection', icon: 'folder', group: 'Actions', run: () => SidebarUI.inlineCreate('collections') },
-      { id: 'new-note', label: 'New note', icon: 'pencil', group: 'Actions', run: () => SidebarUI.inlineCreate('notes') },
       { id: 'new-canvas', label: 'New canvas…', icon: 'canvas', group: 'Actions', run: () => click('#add-canvas') },
       { id: 'duplicate-review', label: 'Duplicate review…', icon: 'search', group: 'Actions', run: () => click('#settings-duplicate-review') },
       { id: 'backup', label: 'Back up library…', icon: 'export', group: 'Actions', run: () => click('#settings-backup') },
@@ -154,7 +152,7 @@
     }
     const q = query.toLowerCase();
     if (!q) {
-      const quick = ['import', 'new-collection', 'new-note', 'new-canvas', 'duplicate-review', 'shortcuts']
+      const quick = ['import', 'new-collection', 'new-canvas', 'duplicate-review', 'shortcuts']
         .map(id => commands().find(item => item.id === id)).filter(Boolean);
       const open = ['view-all', 'view-favorites', 'settings', 'search']
         .map(id => commands().find(item => item.id === id)).filter(Boolean);
@@ -201,15 +199,6 @@
       id: 'canvas-' + b.id, label: b.name, icon: 'canvas', hint: 'Canvas', run: () => CanvasWorkspace.open(b.id)
     })), q);
     if (canvasItems.length) sections.push({ header: 'Canvases', items: canvasItems });
-
-    try {
-      notesPromise ||= api.notesList().catch(() => []);
-      const notes = await notesPromise;
-      const noteItems = rank(notes.filter(n => (n.title || 'Untitled note').toLowerCase().includes(q)).map(n => ({
-        id: 'note-' + n.id, label: n.title || 'Untitled note', icon: 'pencil', hint: 'Note', run: () => NotesWorkspace.open(n.id)
-      })), q);
-      if (noteItems.length) sections.push({ header: 'Notes', items: noteItems });
-    } catch {}
 
     const folderItems = rank(folders.filter(name => name.toLowerCase().includes(q)).map(name => ({
       id: 'collection-' + name, label: name, icon: 'folder', hint: 'Collection', run: () => setView('folder', name)
@@ -326,7 +315,7 @@
       }
     }
     if (!sections.length || !entries.length && !list.querySelector('.command-grid')) {
-      list.append(el('div', 'command-empty', mode === 'shortcuts' ? 'No matching shortcuts.' : 'Nothing found. Try a file, note, canvas or command.'));
+      list.append(el('div', 'command-empty', mode === 'shortcuts' ? 'No matching shortcuts.' : 'Nothing found. Try a file, canvas or command.'));
     }
     const restored = previous ? entries.findIndex(entry => entry.id === previous) : -1;
     active = restored >= 0 ? restored : (entries.length ? 0 : -1);
@@ -377,10 +366,9 @@
   }
 
   function open(nextMode = 'commands') {
-    notesPromise = null;
     mode = nextMode === 'shortcuts' ? 'shortcuts' : 'commands';
     if (dialog?.open) {
-      const placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, colour, notes, canvases and commands';
+      const placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, colour, canvases and commands';
       input.placeholder = placeholder;
       input.setAttribute('aria-label', placeholder);
       dialog.setAttribute('aria-label', mode === 'shortcuts' ? 'Keyboard shortcuts' : 'Command palette');
@@ -402,7 +390,7 @@
     input.type = 'search';
     input.autocomplete = 'off';
     input.spellcheck = false;
-    input.placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, colour, notes, canvases and commands';
+    input.placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, colour, canvases and commands';
     input.setAttribute('aria-label', input.placeholder);
     head.append(glyphBox, input);
     list = el('div', 'command-list');

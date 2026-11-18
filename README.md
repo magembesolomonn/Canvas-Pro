@@ -46,15 +46,11 @@ The library is in Electron's application-data directory (normally `~/Library/App
 - The sidebar lists Library, Favourites, Tags and Trash. There is no Untagged or Uncategorized view: filter the library by tag or collection instead.
 - **Names:** a file whose name says nothing — image.jpeg, Screenshot 2026-11-11 at 10.23.45, IMG_1234 — is renamed once the local analysis has read it. The text recognised in the picture is used first, then what the model sees in it, and only then the kind of file and the day it arrived. The managed original keeps its own name on disk; the library shows the real one.
 
-## Notes, quotes and appearance
-
-Notes live in their own workspace. A note is a list of blocks: paragraphs, headings, bulleted items, checklist items, toggles, tables, trackers, library images and links to other pages or files. Press **Enter** in an empty bullet, checklist item or toggle to return to a plain paragraph. Type **/** in an empty paragraph for the block menu, or **@** to link to a page or file. There is no row of add buttons; the menu is the way in.
+## Quotes and appearance
 
 Pasted text is saved as a quote and shown on a card with the whole excerpt, shrinking slightly and only then adding an ellipsis. Every card draws one of eight muted paper tints, chosen from the item's identifier so a card keeps its colour. The full preview uses the same tint.
 
-Tracker tables use the app's own calendar for date and month fields: a popover with the usual arrows, months and days, in the app's material, instead of the browser's date control. The stored value stays in the format the tracker keeps ("YYYY-MM" and "YYYY-MM-DD").
-
-The note page sits on the window's own background in both light and dark appearance, so there is no second slab of colour behind the text. File Details shows the preview, the name, notes, tags, collections and properties; the star is on the card and in the right-click menu, and **Copy Path** is in the right-click menu.
+File Details shows the preview, the name, notes, tags, collections and properties; the star is on the card and in the right-click menu, and **Copy Path** is in the right-click menu.
 
 There is no chat assistant and no star rating. The star on a card marks a Favourite; finding similar images, colour palettes, automatic tags and text search come from the on-device model in Settings → Experimental.
 

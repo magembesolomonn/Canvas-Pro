@@ -136,8 +136,7 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
     margin-inline: 0;
     font-size: 13px;
   }
-  body.hide-sidebar .sidebar nav button > :is(.badge,span:not(.sf-symbol):not(.emoji-icon):not(.note-emoji)) { display: initial; }
-  body.hide-sidebar .sidebar :is(#notes-tree,#new-note) { display: block; }
+  body.hide-sidebar .sidebar nav button > :is(.badge,span:not(.sf-symbol):not(.emoji-icon)) { display: initial; }
   body.hide-sidebar .sidebar .sidebar-section > summary {
     margin: 21px 10px 7px;
     min-height: 0;

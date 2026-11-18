@@ -12,10 +12,6 @@ async function handleContextAction(command){
  case 'similar':await WorkbenchUI.similar(ids[0]);break;
  case 'canvas-rename':CanvasWorkspace.rename(command.boardId);break;
  case 'canvas-delete':await CanvasWorkspace.removeBoard(command.boardId);break;
- case 'note-rename':NotesWorkspace.menuAction('rename',command.noteId);break;
- case 'note-icon':NotesWorkspace.menuAction('icon',command.noteId);break;
- case 'note-remove-icon':NotesWorkspace.menuAction('remove-icon',command.noteId);break;
- case 'note-delete':NotesWorkspace.menuAction('delete',command.noteId);break;
  case 'canvas-add':await CanvasWorkspace.addAssets(command.boardId,ids,null,true);break;
  case 'canvas-new':CanvasWorkspace.choose({ids,forceNew:true});break;
  case 'canvas-collection':CanvasWorkspace.choose({collectionName:command.name});break;

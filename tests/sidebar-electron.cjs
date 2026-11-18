@@ -11,7 +11,7 @@ let win;
 const run = code => win.webContents.executeJavaScript(code);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
-  // A busy machine needs longer than three seconds to open a note and let
+  // A busy machine needs longer than three seconds to settle the sidebar and let
   // its toolbar settle.
   for (let i=0; i<400; i++) { if (await check()) return; await pause(20); }
   console.error(await run("JSON.stringify({mode:document.body.className,hover:$('.sidebar-hover-pill').outerHTML,focus:document.activeElement.id})"));
@@ -29,11 +29,9 @@ function key(keyCode,modifiers=[]) {
   await until(()=>run("!!$('#navigation button') && !$('.sidebar-active-pill').hidden"));
   // The sections follow one another with an even gap, and Collections sits
   // right after the Library.
-  const sectionSpacing = await run("(()=>{const library=$('#navigation').getBoundingClientRect(),collections=$('[data-section=collections] > summary').getBoundingClientRect(),media=$('[data-section=media] > summary').getBoundingClientRect(),canvas=$('[data-section=canvas] > summary').getBoundingClientRect(),notes=$('#notes-tree > summary').getBoundingClientRect();return {libraryGap:collections.top-library.bottom,sectionGap:media.top-collections.bottom,notesGap:notes.top-canvas.bottom,margin:getComputedStyle($('#notes-tree')).marginTop};})()");
-  assert.equal(sectionSpacing.margin,'0px');
+  const sectionSpacing = await run("(()=>{const library=$('#navigation').getBoundingClientRect(),collections=$('[data-section=collections] > summary').getBoundingClientRect(),media=$('[data-section=media] > summary').getBoundingClientRect();return {libraryGap:collections.top-library.bottom,sectionGap:media.top-collections.bottom};})()");
   assert.ok(sectionSpacing.libraryGap < 36, `Collections is too far from the Library: ${sectionSpacing.libraryGap}px`);
   assert.ok(sectionSpacing.sectionGap < 36, `The section after Collections is too far: ${sectionSpacing.sectionGap}px`);
-  assert.ok(sectionSpacing.notesGap < 36, `The Notes section is too far from the Canvas section: ${sectionSpacing.notesGap}px`);
   const initial = await run("$('.sidebar-active-pill').style.transform");
   await run("$('#navigation button:nth-child(2)').click()");
   await until(()=>run("view==='favorites' && $('.sidebar-active-pill').style.transform!=="+JSON.stringify(initial)));
@@ -74,35 +72,6 @@ function key(keyCode,modifiers=[]) {
   await run("document.querySelector('#folders .inline-create input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
   console.log('SIDEBAR_PILLS_FULL_HIDE_CMDS_SECTIONS_OK');
 
-  await run("$('#new-note').click();const input=document.querySelector('#note-pages .inline-create input');input.value='Sidebar note';input.closest('form').requestSubmit()");
-  await until(()=>run("!$('#notes-editor').inert && !!$('#note-pages [aria-current]')"));
-  await pause(220);
-  assert.equal(await run("$('.sidebar-active-pill').hidden"),false);
-  assert.ok(await run("$('#notes-tree').open"));
-  await run("$('#notes-tree > summary').click()");
-  await pause(150);
-  assert.equal(await run("$('#notes-tree').open"),true,'Notes section must stay open');
-  assert.equal(await run("$('.sidebar-active-pill').hidden"),false,'The active note stays highlighted');
-  assert.equal(await run("$('#open-notes')"),null);
-  await run("$('#notes-tree > summary').click()");
-  await pause(150);
-  assert.equal(await run("$('#notes-tree').open"),true);
-  // The editor is inert until the note has finished opening; focusing an
-  // inert field does nothing, so wait for it to be ready.
-  await until(()=>run("!$('#notes-editor').inert && !!$('.note-block-paragraph textarea')"));
-  await run("$('.note-block-paragraph textarea').focus()");
-  await until(()=>run("getComputedStyle($('.note-format-toolbar')).opacity==='1'"));
-  assert.equal(await run("$('.note-format-toolbar select').value"),'paragraph');
-  await run("$('.note-format-bold').click()");
-  assert.equal(await run("$('.note-block-paragraph textarea').style.fontWeight"),'700');
-  await run("const format=$('.note-format-toolbar select');format.value='heading-1';format.dispatchEvent(new Event('change',{bubbles:true}))");
-  await until(()=>run("!!$('.note-block-heading input')"));
-  assert.equal(await run("$('.note-block-heading input').style.fontSize"),'32px');
-  console.log('NOTES_COLLAPSE_AND_FORMATTING_OK');
-  // Leave the notes view: sections stay open now, so the library header (and
-  // the button that reopens the drawer) is only on screen outside a note.
-  await run("$('#navigation button').click()");
-  await until(()=>run("view==='all' && !document.body.classList.contains('notes-active')"));
   await run("$('#gallery').focus()");
   key('B',['meta']);
   await until(()=>run("document.body.classList.contains('hide-sidebar') && $('.sidebar').inert"));

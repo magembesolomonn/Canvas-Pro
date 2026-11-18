@@ -42,11 +42,7 @@ const SidebarUI = (() => {
   }
 
   function activeTarget() {
-    let selected = sidebar.querySelector('#note-pages [aria-current="page"]') ||
-      sidebar.querySelector('nav button.active');
-    // A selected note is not a visible navigation target once its section is
-    // collapsed. Clearing the surface prevents a stale floating highlight.
-    if (selected?.closest('#notes-tree:not([open])')) return null;
+    let selected = sidebar.querySelector('nav button.active');
     if (selected && !visible(selected)) {
       const group = selected.closest('details');
       const summary = group?.querySelector(':scope > summary');
@@ -255,7 +251,7 @@ const SidebarUI = (() => {
     }, true);
     for (const section of sidebar.querySelectorAll('.sidebar-section')) {
       // Always open, and the heading does nothing when clicked. The add button
-      // inside the heading still creates a new canvas, collection or note.
+      // inside the heading still creates a new canvas or collection.
       section.open = true;
       section.querySelector(':scope > summary')?.addEventListener('click', event => {
         if (!event.target.closest('.section-add')) event.preventDefault();
@@ -328,7 +324,7 @@ const SidebarUI = (() => {
     const input = el('input');
     input.type = 'text';
     input.maxLength = 120;
-    input.placeholder = section === 'collections' ? 'Collection name' : 'Note title';
+    input.placeholder = 'Collection name';
     input.setAttribute('aria-label', input.placeholder);
     const finish = () => form.remove();
     form.onsubmit = event => {
@@ -343,8 +339,6 @@ const SidebarUI = (() => {
           const folder = CanvasWorkspace.folderRecords.find(item => item.name === value);
           if (folder) await WorkbenchUI.created('folder:' + folder.id, 'collection');
         });
-      } else {
-        safe(() => NotesWorkspace.create(value));
       }
     };
     input.onkeydown = event => {

@@ -352,7 +352,7 @@ nav .badge {
   color: #a1a1a1;
 }
 /* A long name gives way to the count instead of pushing it out of the card. */
-nav button > span:not(.badge):not(.sf-symbol):not(.emoji-icon):not(.note-emoji):not(.settings-nav-icon) {
+nav button > span:not(.badge):not(.sf-symbol):not(.emoji-icon):not(.settings-nav-icon) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1253,7 +1253,7 @@ dialog select {
   padding-block: 8px;
   padding-inline-start: 10px;
   /* A field in a sheet is the same field as everywhere else, so the canvas
-     sheet and the new-note sheet are made of the same parts. */
+     sheet and the other dialogs are made of the same parts. */
   background-color: #ffffff05;
   border: 1px solid #ffffff14;
   border-radius: var(--radius-input);
@@ -7320,7 +7320,7 @@ body.light-mode .command-palette kbd {
   color: var(--muted);
 }
 
-/* Grid results (files, canvases, notes) */
+/* Grid results (files and canvases) */
 .command-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -7640,7 +7640,6 @@ body .media-player.audio-player .player-controls.volume-open .volume {
 
 /* Circles and capsules stay optical circles: a superellipse would deform
    their ends. */
-.note-dialog-close,
 .select-chip-remove,
 .floating-round,
 input[type="range"]::-webkit-slider-thumb,

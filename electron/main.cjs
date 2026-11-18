@@ -52,12 +52,10 @@ function closeFloating(){
  if(!floatingWindow.isDestroyed())floatingWindow.close();
  floatingWindow=null;
 }
-let notesStore;
-const getNotesStore=()=>notesStore??=new (require('./notes-store.cjs').NotesStore)(library.db);
 let pendingLibrarySwitch=null;
 let previewZoomActive=false;
-let canvasDirty=false,notesDirty=false;const canvasFlushWaiters=new Map();
-function flushWorkspaces(){if((!canvasDirty&&!notesDirty)||!win||win.isDestroyed())return Promise.resolve();const token=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{canvasFlushWaiters.delete(token);reject(new Error('Workspace changes could not be saved. Please retry before closing.'));},8000);canvasFlushWaiters.set(token,{resolve:()=>{clearTimeout(timer);resolve();},reject:error=>{clearTimeout(timer);reject(error);}});win.webContents.send('canvas-flush-request',token);});}
+let canvasDirty=false;const canvasFlushWaiters=new Map();
+function flushWorkspaces(){if(!canvasDirty||!win||win.isDestroyed())return Promise.resolve();const token=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{canvasFlushWaiters.delete(token);reject(new Error('Workspace changes could not be saved. Please retry before closing.'));},8000);canvasFlushWaiters.set(token,{resolve:()=>{clearTimeout(timer);resolve();},reject:error=>{clearTimeout(timer);reject(error);}});win.webContents.send('canvas-flush-request',token);});}
 app.on('second-instance',()=>{if(app.isReady())ensureWindow();});
 const thumbPending = new Map();
 const thumbnailMisses = new Set();
@@ -375,12 +373,12 @@ function createWindow() {
   const target=win;
   target.webContents.on('render-process-gone',(_event,details)=>{
     if(shutdownStarted||target.isDestroyed()||details.reason==='clean-exit')return;
-    canvasDirty=false;notesDirty=false;for(const [token,waiter]of canvasFlushWaiters){canvasFlushWaiters.delete(token);waiter.reject(new Error('The app view stopped before the save completed. Reopen the view to inspect your last saved changes.'));}
+    canvasDirty=false;for(const [token,waiter]of canvasFlushWaiters){canvasFlushWaiters.delete(token);waiter.reject(new Error('The app view stopped before the save completed. Reopen the view to inspect your last saved changes.'));}
     const oldPreview=webPreview;webPreview=null;oldPreview?.close().catch(()=>{});
-    dialog.showMessageBox(target,{type:'warning',title:'Canvas Pro',message:'The app view stopped unexpectedly.',detail:'Reload to reopen your library. Saved files, notes and canvas changes are kept; edits that had not finished saving may be lost.',buttons:['Reload view','Close window'],defaultId:0,cancelId:1}).then(({response})=>{if(target.isDestroyed()||shutdownStarted)return;if(response===0)target.loadFile(path.join(__dirname,'../src/index.html'));else target.close();}).catch(()=>{if(!target.isDestroyed())target.close();});
+    dialog.showMessageBox(target,{type:'warning',title:'Canvas Pro',message:'The app view stopped unexpectedly.',detail:'Reload to reopen your library. Saved files and canvas changes are kept; edits that had not finished saving may be lost.',buttons:['Reload view','Close window'],defaultId:0,cancelId:1}).then(({response})=>{if(target.isDestroyed()||shutdownStarted)return;if(response===0)target.loadFile(path.join(__dirname,'../src/index.html'));else target.close();}).catch(()=>{if(!target.isDestroyed())target.close();});
   });
   win.webContents.on('will-navigate', e => e.preventDefault());
-  win.on('close',event=>{if((!canvasDirty&&!notesDirty)||shutdownStarted)return;event.preventDefault();const target=win;flushWorkspaces().then(()=>{if(!target.isDestroyed())target.close();}).catch(error=>dialog.showErrorBox('Workspace could not be saved',error.message));});
+  win.on('close',event=>{if(!canvasDirty||shutdownStarted)return;event.preventDefault();const target=win;flushWorkspaces().then(()=>{if(!target.isDestroyed())target.close();}).catch(error=>dialog.showErrorBox('Workspace could not be saved',error.message));});
   win.on('closed',()=>{webPreview?.close();webPreview=null;});
   win.loadFile(path.join(__dirname, '../src/index.html'));
   win.webContents.on('did-finish-load',()=>{setTimeout(flushLibraryChanges,150);});
@@ -517,10 +515,6 @@ app.whenReady().then(async () => {
       if(u.hostname==='ai'){const file=localModel.file(decodeURIComponent(u.pathname));return file?await fileResponse(file,request):new Response('',{status:404});}
       const id = u.pathname.slice(1);
       if (!/^[a-f0-9-]{36}$/.test(id)) return new Response('', { status: 400 });
-      if(u.hostname==='note-cover'){
-        const image=getNotesStore().cover(id,u.searchParams.has('small'));
-        return image?new Response(image,{headers:{'Content-Type':'image/jpeg','Cache-Control':'no-store'}}):new Response(null,{status:404});
-      }
       if(u.hostname==='thumb'&&u.searchParams.has('cached')){
         if(library.deleting.has(id))return new Response(null,{status:404});
         const base=path.join(library.root,'thumbnails',id);
@@ -615,91 +609,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('update-check',event=>{trusted(event);return getUpdater().check();});
   ipcMain.handle('update-download',event=>{trusted(event);return getUpdater().download();});
   ipcMain.handle('update-install',event=>{trusted(event);return getUpdater().install();});
-  ipcMain.handle('notes-emoji',(event,id,emoji)=>{trusted(event);return getNotesStore().setEmoji(id,emoji);});
-  ipcMain.handle('notes-menu',(event,id)=>{trusted(event);const note=getNotesStore().get(id),items=[{label:note.title.trim()||'Untitled note',enabled:false},{type:'separator'},{id:'rename',label:'Rename Note…',click:()=>win.webContents.send('context-action',{action:'note-rename',noteId:id})},{id:'icon',label:'Choose Icon…',click:()=>win.webContents.send('context-action',{action:'note-icon',noteId:id})}];if(note.emoji)items.push({id:'remove-icon',label:'Remove Icon',click:()=>win.webContents.send('context-action',{action:'note-remove-icon',noteId:id})});items.push({id:'delete',label:'Delete Note…',click:()=>win.webContents.send('context-action',{action:'note-delete',noteId:id})});const menu=Menu.buildFromTemplate(items);if(process.env.ASSET_TEST_MODE){global.notesMenu=menu;return;}menu.popup({window:win});});
   ipcMain.handle('show-emoji-picker',event=>{trusted(event);if(process.platform==='darwin'){win.focus();app.showEmojiPanel();}});
-  ipcMain.handle('notes-list',event=>{trusted(event);return getNotesStore().list();});
-  ipcMain.handle('notes-get',(event,id)=>{trusted(event);return getNotesStore().get(id);});
-  ipcMain.handle('notes-create',(event,template,parent,title)=>{trusted(event);return getNotesStore().create(template,parent,title);});
-  ipcMain.handle('notes-save',(event,id,draft)=>{trusted(event);return getNotesStore().save(id,draft);});
-  ipcMain.handle('note-tracker',(event,operation,noteId,trackerId,data)=>{
-    trusted(event);
-    const {NoteTrackers,tracker}=require('./note-trackers.cjs');
-    const notes=getNotesStore(), store=new NoteTrackers(notes);
-    if(operation==='new')return tracker('blank');
-    if(operation==='list')return store.list(noteId,trackerId,data);
-    if(operation==='get')return store.get(noteId,trackerId,data);
-    if(operation==='save')return store.save(noteId,trackerId,data);
-    if(operation==='thumbnail')return store.setThumbnail(noteId,trackerId,data.id,data.assetId);
-    if(operation==='move')return store.move(noteId,trackerId,data.id,data.status);
-    if(operation==='delete')return store.remove(noteId,trackerId,data);
-    if(operation==='convert'){
-      const draft=notes.get(noteId), table=draft.blocks[data];
-      if(table?.type!=='table')throw Error('Select a plain table.');
-      const block=tracker('blank'), [head,...rows]=table.rows;
-      if(head[0].length>120||head.slice(1).some(label=>label.length>80)||rows.some(row=>row[0].trim().length>200))
-        throw Error('Shorten long column headings and record titles before converting this table.');
-      block.title=head[0]||'Tracker';
-      block.fields=head.slice(1).map((label,i)=>({key:'f'+i,label:label||'Column '+(i+2),type:'text'}));
-      draft.blocks[data]=block;
-      library.db.exec('SAVEPOINT convert_tracker');
-      try{
-        notes.save(noteId,draft);
-        for(const [title,...values] of rows){
-          if(!title.trim()&&!values.some(value=>value.trim()))continue;
-          store.save(noteId,block.id,{title:title.trim()||'Untitled record',properties:Object.fromEntries(values.map((value,i)=>['f'+i,value]))});
-        }
-        library.db.exec('RELEASE convert_tracker');
-        return notes.get(noteId);
-      }catch(error){
-        library.db.exec('ROLLBACK TO convert_tracker; RELEASE convert_tracker');
-        throw error;
-      }
-    }
-    throw Error('Unknown tracker action.');
-  });
-  ipcMain.handle('note-movie-link',async(event,value)=>{
-    trusted(event);
-    const url=new URL(value);
-    if(!/^https?:$/.test(url.protocol)||!/(^|\.)(imdb\.com|letterboxd\.com|rottentomatoes\.com|themoviedb\.org)$/i.test(url.hostname))
-      throw Error('Paste an IMDb, Letterboxd, Rotten Tomatoes or TMDB title link.');
-    const {ids:[id]}=await bookmarks.save(url.href,null);
-    notifyLibraryChanged([id]);
-    const info=await bookmarks.get(id);
-    return {id,url:url.href,title:info?.state==='ready'?info.title:'',year:Number(info?.details?.year)||null,
-      genre:info?.details?.genre||'',type:info?.type==='series'?'Series':info?.type==='movie'?'Movie':'',cover:!!info?.cover};
-  });
-  ipcMain.handle('notes-reorder',(event,id,target)=>{trusted(event);return getNotesStore().reorder(id,target);});
-  ipcMain.on('notes-dirty',(event,dirty)=>{trusted(event);notesDirty=dirty===true;});
-  ipcMain.handle('notes-remove',async(event,id)=>{
-    trusted(event);
-    const note=getNotesStore().get(id);
-    const answer=await dialog.showMessageBox(win,{type:'warning',message:'Delete “'+(note.title||'Untitled note')+'”?',detail:'The note and its featured image will be removed from this library.',buttons:['Cancel','Delete Note'],defaultId:0,cancelId:0});
-    if(answer.response!==1)return false;
-    getNotesStore().remove(id);
-    return true;
-  });
-  ipcMain.handle('notes-cover',async(event,id,source)=>{
-    trusted(event);
-    if(source===true){getNotesStore().setCover(id,null,null);return false;}
-    let file;
-    if(typeof source==='string'){
-      if(library.asset(source).trash)throw Error('This image is in Trash.');
-      file=await thumbnail(source,true);
-      if(!file)throw Error('This image could not be opened.');
-    }else{
-      const chosen=await dialog.showOpenDialog(win,{title:'Choose featured image',properties:['openFile'],filters:[{name:'Images',extensions:['jpg','jpeg','png','webp','heic','gif','tif','tiff']}]});
-      if(chosen.canceled)return null;
-      file=chosen.filePaths[0];
-      const stat=await fs.promises.stat(file);
-      if(!stat.isFile()||stat.size>30*1024*1024)throw Error('Choose an image smaller than 30 MB.');
-    }
-    const image=await nativeImage.createThumbnailFromPath(file,{width:1600,height:900});
-    if(image.isEmpty())throw Error('This image could not be opened.');
-    if(shutdownStarted||event.sender.isDestroyed())return null;
-    getNotesStore().setCover(id,image.toJPEG(86),image.resize({width:96}).toJPEG(78));
-    return true;
-  });
   ipcMain.handle('canvas-create',(event,name)=>{trusted(event);return canvasStore.create(name);});
   ipcMain.handle('canvas-get',(event,id)=>{trusted(event);return canvasStore.get(id);});
   ipcMain.handle('canvas-rename',(event,id,name)=>{trusted(event);return canvasStore.rename(id,name);});
@@ -713,7 +623,7 @@ app.whenReady().then(async () => {
     if(!previewZoomActive)event.sender.setIgnoreMenuShortcuts(false);
   });
   ipcMain.on('canvas-dirty',(event,dirty)=>{trusted(event);canvasDirty=!!dirty;});
-  ipcMain.on('canvas-flushed',(event,token,error)=>{trusted(event);const pending=canvasFlushWaiters.get(token);if(!pending)return;canvasFlushWaiters.delete(token);if(error)pending.reject(new Error(String(error)));else{canvasDirty=false;notesDirty=false;pending.resolve();}});
+  ipcMain.on('canvas-flushed',(event,token,error)=>{trusted(event);const pending=canvasFlushWaiters.get(token);if(!pending)return;canvasFlushWaiters.delete(token);if(error)pending.reject(new Error(String(error)));else{canvasDirty=false;pending.resolve();}});
   ipcMain.handle('canvas-clipboard-write',(event,items)=>{trusted(event);if(!Array.isArray(items)||items.length>10000)throw new Error('Invalid canvas selection.');const buffer=Buffer.from(JSON.stringify(items.map(normalizeCanvasItem)));if(buffer.length>5*1024*1024)throw new Error('Copy fewer canvas items at once.');return clipboard.writeText('CanvasProItems\n'+buffer.toString('utf8'));});
   ipcMain.handle('canvas-clipboard-read',async event=>{trusted(event);const text=await clipboard.readText();if(!text.startsWith('CanvasProItems\n')||text.length>5*1024*1024)return null;try{const items=JSON.parse(text.slice(15));return Array.isArray(items)&&items.length<=10000?items.map(normalizeCanvasItem):null;}catch{return null;}});
   ipcMain.handle('canvas-drop-paths',async(event,id,paths,point)=>{trusted(event);canvasStore.summary(id);if(!Array.isArray(paths)||paths.some(p=>typeof p!=='string'||!path.isAbsolute(p)))throw new Error('Choose valid files.');const ids=[],external=[];for(const file of paths){const candidate=path.basename(file).slice(0,36);let asset;try{asset=library.asset(candidate);}catch{}if(asset&&path.resolve(file)===path.resolve(library.root,asset.stored))ids.push(asset.id);else external.push(file);}const result=external.length?await importPaths(external,null):{ids:[],errors:[]};const combined=[...new Set([...ids,...result.ids])];return {...(combined.length?canvasStore.addAssets(id,combined,point):{board:canvasStore.summary(id),items:[]}),importResult:result};});
@@ -914,22 +824,6 @@ app.whenReady().then(async () => {
     trusted(event);
     const r = await dialog.showOpenDialog(win, { properties: directory ? ['openDirectory', 'multiSelections'] : ['openFile', 'multiSelections'] });
     return r.canceled ? null : importPaths(r.filePaths, folder);
-  });
-  ipcMain.handle('note-import-thumbnail',async(event,extensions)=>{
-    trusted(event);
-    const images=(Array.isArray(extensions)?extensions:[]).filter(ext=>typeof ext==='string'&&/^[a-z0-9]{1,8}$/.test(ext)).slice(0,40);
-    if(!images.length)throw Error('No supported image formats.');
-    const chosen=await dialog.showOpenDialog(win,{
-      title:'Import a thumbnail',defaultPath:app.getPath('downloads'),
-      properties:['openFile'],filters:[{name:'Images',extensions:images}]
-    });
-    if(chosen.canceled)return null;
-    const file=chosen.filePaths[0];
-    if(!images.includes(path.extname(file).slice(1).toLowerCase())||!(await fs.promises.stat(file)).isFile())
-      throw Error('Choose a supported image file.');
-    const result=await importPaths([file],null);
-    if(!result.ids.length)throw Error(result.errors[0]||'The image was not imported.');
-    return library.asset(result.ids[0]);
   });
   ipcMain.handle('import-url',(event,url,folder)=>{trusted(event);return importURL(url,folder);});
   ipcMain.handle('import-paths', (event, paths, folder) => {
