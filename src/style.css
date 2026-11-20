@@ -7963,12 +7963,11 @@ body .media-player .player-controls .seek:focus-visible {
 .infinite-page {
   position: absolute;
   top: 0;
-  display: flex;
-  flex-direction: column;
 }
 .infinite-row {
+  position: absolute;
+  left: 0;
   display: flex;
-  flex: none;
   gap: 3px;
   /* 172px including the 3px padding: the JS wrap period relies on this
      exact pitch, so keep the row total (not its content box) at 172. */
