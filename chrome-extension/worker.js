@@ -100,10 +100,10 @@ async function collect(tab,mode='images',frameId){
  await chrome.storage.session.set({['collection:'+id]:{base,items,tabId:tab.id,mode,created:Date.now()}});await chrome.storage.session.set({activeCollection:id});return {count:items.length};
 }
 async function fullPage(tab){
-  const [{result}]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>({width:Math.max(document.documentElement.scrollWidth,document.body?.scrollWidth||0,innerWidth),height:Math.max(document.documentElement.scrollHeight,document.body?.scrollHeight||0,innerHeight),vw:innerWidth,vh:innerHeight,devicePixelRatio:window.devicePixelRatio||1,scrollX,scrollY,scrollBehavior:document.documentElement.style.scrollBehavior})});
+  const [{result}]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>({width:Math.max(document.documentElement.scrollWidth,document.body?.scrollWidth||0,innerWidth),height:Math.max(document.documentElement.scrollHeight,document.body?.scrollHeight||0,innerHeight),vw:innerWidth,vh:innerHeight,devicePixelRatio:window.devicePixelRatio||1,scrollX,scrollY,overflow:document.documentElement.style.overflow,scrollBehavior:document.documentElement.style.scrollBehavior})});
   if(!result?.width||!result?.height)throw new Error('Could not measure this page.');
   const maxHeight=16000;const height=Math.min(result.height,maxHeight);
-  await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{window.__canvasFullPage={overflow:document.documentElement.style.overflow,behavior:document.documentElement.style.scrollBehavior};document.documentElement.style.scrollBehavior='auto';}});
+  await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{document.documentElement.style.scrollBehavior='auto';}});
   const [active]=await chrome.tabs.query({active:true,windowId:tab.windowId});if(active?.id!==tab.id)throw new Error('Return to the page you want to capture and try again.');
   const steps=[];for(let y=0;y<height;y+=Math.max(1,result.vh-20)){steps.push(Math.min(y,height-result.vh));if(y+result.vh>=height)break;}
   let canvas,ctx,scale;
@@ -122,13 +122,14 @@ async function fullPage(tab){
       bmp.close();
     }
   }finally{
-    await chrome.scripting.executeScript({target:{tabId:tab.id},func:(x,y,orig)=>{document.documentElement.style.overflow=orig?.overflow||'';document.documentElement.style.scrollBehavior=orig?.behavior||'';window.scrollTo(x,y);},args:[result.scrollX,result.scrollY,{overflow:'',behavior:result.scrollBehavior}]});
+    await chrome.scripting.executeScript({target:{tabId:tab.id},func:(x,y,orig)=>{document.documentElement.style.overflow=orig?.overflow||'';document.documentElement.style.scrollBehavior=orig?.behavior||'';window.scrollTo(x,y);},args:[result.scrollX,result.scrollY,{overflow:result.overflow,behavior:result.scrollBehavior}]});
   }
   if(!canvas)throw new Error('Could not capture this page.');
   const buffer=new Uint8Array(await (await canvas.convertToBlob({type:'image/png'})).arrayBuffer());
-   canvas=null;ctx=null;
+  const outWidth=canvas.width,outHeight=canvas.height;
+  canvas=null;ctx=null;
   let binary='';for(let i=0;i<buffer.length;i+=32768)binary+=String.fromCharCode(...buffer.subarray(i,i+32768));
-  return sendCapture([{kind:'screenshot',title:(tab.title||'Web page')+' full page',pageTitle:tab.title,pageUrl:tab.url,dataUrl:'data:image/png;base64,'+btoa(binary),width:canvas.width,height:canvas.height}],undefined,tab.id);
+  return sendCapture([{kind:'screenshot',title:(tab.title||'Web page')+' full page',pageTitle:tab.title,pageUrl:tab.url,dataUrl:'data:image/png;base64,'+btoa(binary),width:outWidth,height:outHeight}],undefined,tab.id);
 }
 
 async function runAction(action,tabId){const tab=await tabFor(tabId);if(action==='viewport')return screenshot(tab);if(action==='region')return region(tab);if(action==='fullpage')return fullPage(tab);if(action==='collect')return collect(tab);if(action==='videos')return collect(tab,'videos');if(action==='content')return sendCapture([await inspect(tab.id,'content')],undefined,tab.id);if(action==='bookmark')return sendCapture([{...await inspect(tab.id,'media'),kind:'bookmark'}],undefined,tab.id);throw new Error('Unknown capture action');}

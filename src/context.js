@@ -1,11 +1,12 @@
 let actionTarget=null;
+const fileCount=(n)=>n+' '+(n===1?'file':'files');
 function showActionDialog(mode,ids=[],name=''){
  stopHover();const icon=$('#action-form .creation-icon');if(icon)icon.hidden=mode!=='new-collection';const titles={tags:'Add tags',rename:'Rename file','new-collection':'New collection','rename-collection':'Rename collection'};actionTarget={mode,ids:[...ids],name};$('#action-title').textContent=titles[mode];$('#action-description').textContent=mode==='tags'?'Add tags to '+ids.length+' selected '+(ids.length===1?'file.':'files.'):mode==='new-collection'?'Create a collection and add the selected files.':mode==='rename-collection'?'Files and their metadata stay in this collection.':'Change the display name in your library.';const input=$('#action-value');input.value=mode==='rename'?(assetById.get(ids[0])?.name||''):name;input.maxLength=mode==='tags'?2000:mode==='rename'?255:120;input.placeholder=mode==='tags'?'Tags, separated by commas':'Name';input.setAttribute('aria-label',mode==='tags'?'Tags':'Name');$('#action-error').textContent='';$('#action-dialog').showModal();input.focus();input.select();
 }
 async function deleteSelectedPermanently(ids=selection.values()){
  stopHover();if(!$('#preview').hidden)closePreview();notify('Waiting for deletion confirmation…');try{const result=await api.deletePermanently(ids);if(result.cancelled){notify('Deletion cancelled');return;}for(const id of result.ids||[]){mediaMetadata.delete(id);mediaInFlight.delete(id);}await refreshCurrent();notify(result.deleted+' '+(result.deleted===1?'file':'files')+' permanently deleted.');}finally{}
 }
-async function emptyTrash(){stopHover();if(!$('#preview').hidden)closePreview();const result=await api.emptyTrash();if(result.cancelled)return;mediaMetadata.clear();mediaInFlight.clear();await refreshCurrent();if(result.deleted)notify('Trash emptied · '+result.deleted+' files permanently deleted.');}
+async function emptyTrash(){stopHover();if(!$('#preview').hidden)closePreview();const result=await api.emptyTrash();if(result.cancelled){notify('Deletion cancelled');return;}mediaMetadata.clear();mediaInFlight.clear();await refreshCurrent();if(result.deleted)notify('Trash emptied · '+fileCount(result.deleted)+' permanently deleted.');}
 async function handleContextAction(command){
  const ids=command.ids||[];if(!$('#preview').hidden&&['tags','rename','new-collection','collection','remove-collection','trash','restore','delete-permanently'].includes(command.action))closePreview();switch(command.action){
  case 'choose-icon':await WorkbenchUI.pickIcon(command.key);break;
@@ -19,7 +20,7 @@ async function handleContextAction(command){
  case 'preview':selection.clear();for(const id of ids)selection.ids.add(id);selected=ids[0];selection.focus=selected;selection.anchor=selected;paintSelection();renderInspector();openPreview();break;
  case 'tags':case 'rename':case 'new-collection':showActionDialog(command.action,ids);break;
  case 'collection':case 'remove-collection':case 'trash':case 'restore':{
-  const operation=command.action==='collection'?{type:'collection',folder:command.folder}:command.action==='remove-collection'?{type:'removeCollection',folder:command.folder}:{type:'trash',trash:command.action==='trash'};await api.bulkUpdate(ids,operation);await refreshCurrent();notify(command.action==='trash'?'Moved '+ids.length+' files to Trash.':command.action==='restore'?'Restored '+ids.length+' files.':'Updated '+ids.length+' files.');break;}
+  const operation=command.action==='collection'?{type:'collection',folder:command.folder}:command.action==='remove-collection'?{type:'removeCollection',folder:command.folder}:{type:'trash',trash:command.action==='trash'};await api.bulkUpdate(ids,operation);await refreshCurrent();notify(command.action==='trash'?'Moved '+fileCount(ids.length)+' to Trash.':command.action==='restore'?'Restored '+fileCount(ids.length)+'.':'Updated '+fileCount(ids.length)+'.');break;}
  case 'copy':await api.copyFiles(ids);notify(ids.length+' files copied.');break;
  case 'export':{const count=await api.exportFiles(ids);if(count)notify(count+' copies exported.');break;}
  case 'share':await api.shareFiles(ids);break;
@@ -49,7 +50,7 @@ function renderEmptyState(){
   else if(view==='favorites'&&!(pagedCatalog?navStats?.counts.favorites:assets.some(a=>!a.trash&&a.favorite))){icon.append(glyph('star'));heading.textContent='No favourites yet';description.textContent='Click the star on a file, or choose Add to Favourites from its right-click menu.';}
   else if(view==='tags'&&!(pagedCatalog?navStats?.counts.tags:assets.some(a=>!a.trash&&a.tags.length))){icon.append(glyph('tag'));heading.textContent='No tags yet';description.textContent='Add tags to your files to find them here.';}
   else if(view==='folder'&&!(pagedCatalog?navStats?.members?.get(collection):assets.some(a=>!a.trash&&a.folders.includes(collection)))){icon.append(glyph('folder'));heading.textContent='This collection is empty';description.textContent='Files you put in this collection appear here, and stay in your library.';}
-  else if((pagedCatalog?navStats?.counts.all:assets.length)){icon.append(glyph('search'));heading.textContent='No matching files';description.textContent='Try a different search, collection, or file type.';button.textContent='Import files';small.hidden=true;}
+  else if((pagedCatalog?navStats?.counts.all:assets.length)){icon.append(glyph('search'));heading.textContent='No matching files';description.textContent='Try a different search, collection, or file type.';button.textContent='Clear filters';button.onclick=()=>{$('#search').value='';$('#type').value='all';tagFilter=null;render();};small.hidden=true;}
   else{icon.append(glyph('grid'));heading.textContent='Bring your files together';description.textContent='Drop files or folders here, import them, or copy in Finder and press \u2318V.';small.textContent='Images \u00b7 videos \u00b7 PDFs \u00b7 design files \u00b7 and everything else';}
   empty.hidden=visible.length>0;
 }

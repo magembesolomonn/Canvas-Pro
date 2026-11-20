@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 if (process.platform !== 'darwin') throw new Error('Build this app on macOS.');
 const root = path.resolve(__dirname, '..');
@@ -23,7 +24,16 @@ const plist = path.join(output, 'Contents/Info.plist');
 for (const [key, value] of Object.entries({CFBundleIconFile:'AssetLibrary.icns',CFBundleName:'Canvas Pro',CFBundleDisplayName:'Canvas Pro',CFBundleIdentifier:'local.assetlibrary.desktop',CFBundleShortVersionString:pkg.version,CFBundleVersion:'1'})) {
   execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} ${value}`, plist]);
 }
-for (const helper of ['media-tool','analysis-tool']) execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', path.join(appDir, 'bin',helper)]);
+// Record what went into this bundle so packaging can prove the native helpers
+// came from the current source tree. Ad-hoc signing changes helper bytes, so a
+// plain source-vs-dist byte comparison is not meaningful.
+const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const helpers = ['media-tool','analysis-tool','text-tool','symbols-tool'];
+const nativeManifest = {};
+for (const helper of helpers) nativeManifest[helper] = { sourceHash: sha256(path.join(root, 'bin', helper)) };
+for (const helper of ['media-tool','analysis-tool','symbols-tool']) execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', path.join(appDir, 'bin',helper)]);
+for (const helper of helpers) nativeManifest[helper].signedHash = sha256(path.join(appDir, 'bin', helper));
+fs.writeFileSync(path.join(appDir, 'native-manifest.json'), JSON.stringify(nativeManifest, null, 2) + '\n');
 execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', output], { stdio: 'inherit' });
 execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', output], { stdio: 'inherit' });
 console.log('Created ' + output);

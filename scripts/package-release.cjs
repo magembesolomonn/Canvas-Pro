@@ -5,6 +5,11 @@ const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 if (process.platform !== 'darwin') throw new Error('Package this release on macOS.');
 const root = path.resolve(__dirname, '..');
+// Same resolution as scripts/sign-update.cjs: never package a release that
+// cannot be signed. No key bytes are read or copied here, only the path.
+const updateKey = process.env.CANVAS_UPDATE_KEY || process.argv[3] || path.join(root, 'audits/update-signing.key');
+if (!fs.existsSync(updateKey) || !fs.statSync(updateKey).isFile())
+  throw new Error('Update signing key not found: ' + updateKey + '. Set CANVAS_UPDATE_KEY to an Ed25519 private key path, or pass the path as the second argument, before packaging.');
 const pkg = require(path.join(root, 'package.json'));
 const manifest = require(path.join(root, 'chrome-extension/manifest.json'));
 const bundle = path.join(root, 'dist/Canvas Pro.app');
@@ -17,9 +22,42 @@ function verifyTree(source, target) {
     else if (entry.isFile() && (!fs.existsSync(to) || !fs.readFileSync(from).equals(fs.readFileSync(to)))) throw new Error('The dist app is stale: ' + from);
   }
 }
-for (const name of ['src', 'electron', 'chrome-extension']) verifyTree(path.join(root, name), path.join(appSource, name));
+// Reverse walk: a file deleted from the source must not survive in a release.
+function verifyNoExtraFiles(source, target) {
+  for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+    const from = path.join(source, entry.name), to = path.join(target, entry.name);
+    if (entry.isDirectory()) {
+      if (!fs.existsSync(from) || !fs.statSync(from).isDirectory())
+        throw new Error('The dist app contains a file that is not in the source tree: ' + to);
+      verifyNoExtraFiles(from, to);
+    } else if (entry.isFile() && !fs.existsSync(from)) {
+      throw new Error('The dist app contains a file that is not in the source tree: ' + to);
+    }
+  }
+}
+for (const name of ['src', 'electron', 'chrome-extension']) {
+  verifyTree(path.join(root, name), path.join(appSource, name));
+  verifyNoExtraFiles(path.join(root, name), path.join(appSource, name));
+}
+// Native helpers are re-signed inside the bundle, so their bytes legitimately
+// differ from bin/. The build manifest records both hashes at build time; check
+// those instead of comparing signed bytes.
+function verifyNativeHelpers() {
+  const manifestPath = path.join(appSource, 'native-manifest.json');
+  if (!fs.existsSync(manifestPath)) throw new Error('The dist app was built without a native manifest. Rebuild it with npm run build:mac.');
+  const recorded = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  for (const [name, hashes] of Object.entries(recorded)) {
+    const source = path.join(root, 'bin', name), built = path.join(appSource, 'bin', name);
+    if (!hashes?.sourceHash || !hashes?.signedHash || !fs.existsSync(built))
+      throw new Error('Invalid native manifest entry for ' + name + '. Rebuild the app.');
+    if (sha256(source) !== hashes.sourceHash) throw new Error('The native helper changed after the dist app was built: ' + source + '. Rebuild the app.');
+    if (sha256(built) !== hashes.signedHash) throw new Error('The dist app has a stale native helper: ' + name + '. Rebuild the app.');
+  }
+}
+verifyNativeHelpers();
 execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', bundle], { stdio: 'inherit' });
-for (const file of [path.join(bundle, 'Contents/MacOS/Electron'), path.join(appSource, 'bin/media-tool'), path.join(appSource, 'bin/analysis-tool')]) {
+for (const file of [path.join(bundle, 'Contents/MacOS/Electron'), path.join(appSource, 'bin/media-tool'), path.join(appSource, 'bin/analysis-tool'), path.join(appSource, 'bin/symbols-tool')]) {
   if (execFileSync('/usr/bin/lipo', ['-archs', file], { encoding: 'utf8' }).trim() !== 'arm64') throw new Error('Expected an Apple Silicon binary: ' + file);
 }
 const helperBuild=execFileSync('/usr/bin/otool',['-l',path.join(appSource,'bin/media-tool')],{encoding:'utf8'});const helperMinimum=helperBuild.match(/\bminos\s+(\d+(?:\.\d+)*)/)?.[1];if(!helperMinimum||Number(helperMinimum.split('.')[0])>13)throw new Error('Rebuild media-tool for macOS 13 before packaging.');
@@ -74,6 +112,11 @@ try {
 } finally { fs.rmSync(stage, { recursive: true, force: true }); }
 execFileSync('/usr/bin/zip', ['-q', '-X', '-r', zip, '.', '-x', '*/.DS_Store', '.DS_Store'], { cwd: path.join(root, 'chrome-extension') });
 const sums = [dmg, zip].map(file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') + '  ' + path.basename(file));
-fs.writeFileSync(path.join(release, 'SHA256SUMS.txt'), sums.join('\n') + '\n');
+const sumsFile = path.join(release, 'SHA256SUMS.txt');
+fs.writeFileSync(sumsFile, sums.join('\n') + '\n');
+// Installed builds require a signed checksum manifest. Sign it here so a
+// release can never be published in a state the app refuses to install; the
+// private key stays outside the app bundle.
+execFileSync(process.execPath, [path.join(root, 'scripts/sign-update.cjs'), sumsFile, updateKey], { stdio: 'inherit' });
 fs.copyFileSync(zip, path.join(root, 'Canvas Pro Capture.zip'));
 console.log('Release ready: ' + release);

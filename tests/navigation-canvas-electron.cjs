@@ -28,6 +28,19 @@ async function poll(check){
  if(win.webContents.isLoading())await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
  const run=code=>win.webContents.executeJavaScript(code);
  const loaded=()=>run('catalogKey===JSON.stringify(catalogQuery())&&!catalogLoading');
+ // Switching views restores the saved scroll position asynchronously, so the
+ // value read straight after `loaded` can still be the pre-restore one. Wait
+ // for the position to stop moving before asserting on it.
+ const settledScroll=async()=>{
+  let previous=null;
+  for(let i=0;i<120;i++){
+   const value=await run("$('#gallery').scrollTop");
+   if(previous!==null&&Math.abs(value-previous)<1)return value;
+   previous=value;
+   await new Promise(resolve=>setTimeout(resolve,25));
+  }
+  return run("$('#gallery').scrollTop");
+ };
  await poll(loaded);
  assert.equal(await run('assets.length'),120);
  await run("$('#gallery').scrollTop=$('#gallery').scrollHeight;renderWindow()");
@@ -40,10 +53,10 @@ async function poll(check){
  const folderTop=await run("$('#gallery').scrollTop");
  await run("setView('all')");
  await poll(loaded);
- assert.ok(Math.abs(await run("$('#gallery').scrollTop")-allTop)<3);
+ assert.ok(Math.abs(await settledScroll()-allTop)<3);
  await run("setView('folder','References')");
  await poll(loaded);
- assert.ok(Math.abs(await run("$('#gallery').scrollTop")-folderTop)<3);
+ assert.ok(Math.abs(await settledScroll()-folderTop)<3);
  await run("setView('tags')");
  await poll(loaded);
  assert.equal(await run("$('#empty h2').textContent"),'No tags yet');
@@ -73,6 +86,10 @@ async function poll(check){
   await click(x+14,y+14,1);
   await click(x+14,y+14,2);
   await poll(()=>run(`CanvasWorkspace.editing?.id==='${itemId}'`));
+  // Re-entering edit mode by double-click puts the caret where the click
+  // landed, so collapse it to the end before typing. Otherwise the text is
+  // inserted at the click point and the "ends with" assertion is a coin flip.
+  await run("(()=>{const selection=window.getSelection();selection.selectAllChildren(document.activeElement);selection.collapseToEnd();})()");
   await run("document.execCommand('insertText',false,' edited');document.activeElement.blur()");
   assert.match(await run(`CanvasWorkspace.doc.items.get('${itemId}').data.text`),/ edited$/);
  }
@@ -105,7 +122,15 @@ async function poll(check){
   const placement=items[0]||[...CanvasWorkspace.doc.items.values()].find(item=>item.assetId===target);
   const reveal=async()=>{
    const button=[...$('#inspector').querySelectorAll('button')].find(button=>button.textContent==='Show in library');
+   // Click the real control, then wait for the reveal it starts. The reveal
+   // loads the paged catalogue before selecting, so polling for the result is
+   // the only way to know it finished.
    button.click();
+   const deadline=Date.now()+8000;
+   while(Date.now()<deadline){
+    if(selected===target&&layout?.byId.get(target))break;
+    await new Promise(resolve=>setTimeout(resolve,25));
+   }
    await new Promise(resolve=>requestAnimationFrame(resolve));
    const gallery=$('#gallery'),position=layout.byId.get(target);
    return {selected:selected===target,inViewport:!!position&&position.y>=gallery.scrollTop&&position.y<gallery.scrollTop+gallery.clientHeight};

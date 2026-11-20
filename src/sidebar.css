@@ -20,8 +20,9 @@
      sidebar meets the icons and then the names. The 8px of padding, pulled
      back out with an equal margin, gives the chosen fill room around the
      icon without moving the icon or the name. */
-  padding-inline: 8px;
+  padding-inline: 8px 16px;
   margin-inline: -8px;
+  /* Counts and add buttons stay right-aligned but clear the sidebar edge. */
   /* Body: 13px at 160%. */
   font-size: 13px;
 }
@@ -53,7 +54,7 @@ body.light-mode .sidebar nav button.active {
   list-style: none;
 }
 .sidebar .sidebar-section > summary::-webkit-details-marker { display: none; }
-.sidebar .sidebar-section > summary .section-add { margin-left: auto; cursor: pointer; }
+.sidebar .sidebar-section > summary .section-add { margin-left: auto; cursor: default; }
 /* Keep the window controls legible while sidebar content scrolls behind them. */
 .sidebar .window-space {
   position: sticky; top: 0; z-index: 4;
@@ -88,14 +89,15 @@ body.hide-sidebar .sidebar {
   transform: translateX(-100%);
   opacity: 0;
 }
-body.hide-sidebar .library-header { padding-left: 104px; }
+body.hide-sidebar .library-header { padding-left: var(--traffic-light-inset); }
 body.hide-sidebar #show-sidebar { display: inline-flex; }
 .sidebar-backdrop,.sidebar-drawer-edge,.sidebar-drawer-handle { display: none; }
-@media (prefers-reduced-motion: no-preference) {
-  .sidebar .sidebar-pill { transition: transform var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard); }
-}
 @media (max-width: 1040px) {
   body,body.hide-sidebar { --sidebar: 0px; }
+  /* The sidebar is a fixed drawer here, so its grid track must collapse too.
+     Leaving the 20px island gutter in place shifts the whole toolbar and the
+     gallery right for no visual reason. */
+  body,body.hide-sidebar { --sidebar-track: 0px; }
   body > main { grid-column: 2; grid-row: 1; }
   body > #inspector { grid-column: 3; grid-row: 1; }
   body .sidebar,body.hide-sidebar .sidebar {
@@ -118,7 +120,7 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
     visibility: visible;
     pointer-events: auto;
   }
-  body .library-header,body.hide-sidebar .library-header { padding-left: 104px; }
+  body .library-header,body.hide-sidebar .library-header { padding-left: var(--traffic-light-inset); }
   body #show-sidebar,body.hide-sidebar #show-sidebar { display: inline-flex; }
   body.hide-sidebar .sidebar .window-space {
     /* Same 56px band as the toolbar, so the drawer toggle sits on the

@@ -1,11 +1,13 @@
 const fs=require('node:fs'),path=require('node:path');
 const {embedURL,webURL}=require('./bookmarks.cjs');
+const {assertPublicHost}=require('./browser-fetch.cjs');
+const {networkBypassEnabled}=require('./test-mode.cjs');
 
 function hostOf(value){try{return new URL(value).hostname.toLowerCase().replace(/^www\./,'');}catch{return '';}}
 
 class WebPreview{
-  constructor({electron,window,library,onSaved,resolveLink}){
-    Object.assign(this,{electron,window,library,onSaved,resolveLink});
+  constructor({electron,window,library,onSaved,resolveLink,allowPrivatePreview=false}){
+    Object.assign(this,{electron,window,library,onSaved,resolveLink,allowPrivatePreview});
     this.view=null;this.token=null;this.id=null;this.cached=null;this.closed=false;
     this.saving=null;this.generation=0;this.pendingToken=null;
   }
@@ -48,6 +50,10 @@ class WebPreview{
     if(!['url','webloc'].includes(a.ext)&&!a.url)throw new Error('Select a saved web source.');
     const source=this.resolveLink?await this.resolveLink(id):webURL(a.url);
     const target=embedURL(source);
+    // Both loadURL calls below must start from a public address. The test
+    // harness may load its local fixture server, as its other fetches do.
+    if(!this.allowPrivatePreview&&!networkBypassEnabled(process.env,process.defaultApp))
+      await assertPublicHost(new URL(target).hostname.replace(/^\[|\]$/g,''));
     this.allowedHosts=new Set([hostOf(source),hostOf(target)].filter(Boolean));
     if(this.closed||generation!==this.generation)return {cancelled:true};
     this.pendingToken=null;
@@ -55,6 +61,9 @@ class WebPreview{
     this.token=token;this.id=id;
     if(this.cached?.id===id&&!this.cached.view.webContents.isDestroyed()){
       this.view=this.cached.view;this.cached=null;
+      // The cached view may be sitting on a page the user clicked into. A
+      // reopened bookmark must show its saved source, not that last URL.
+      this.view.webContents.loadURL(target,target!==source?{httpReferrer:'https://com.canvaspro.app/'}:{}).catch(error=>this.status({error:error.message}));
     }else{
       this.destroyCached();
       this.view=new this.electron.WebContentsView({webPreferences:{

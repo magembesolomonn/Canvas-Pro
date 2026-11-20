@@ -9,11 +9,17 @@ if (!token) {
   process.exit(1);
 }
 const tag = process.argv[2];
-const files = process.argv.slice(3).filter(file => fs.existsSync(file) && fs.statSync(file).isFile());
-if (!tag || !files.length) {
+const requested = process.argv.slice(3);
+if (!tag || !requested.length) {
   console.error('Usage: GITHUB_TOKEN=... node scripts/publish-release.cjs <tag> <asset>...');
   process.exit(1);
 }
+const missing = requested.filter(file => !fs.existsSync(file) || !fs.statSync(file).isFile());
+if (missing.length) {
+  console.error('Missing release asset' + (missing.length === 1 ? '' : 's') + ': ' + missing.join(', '));
+  process.exit(1);
+}
+const files = requested;
 const repo = 'magembesolomonn/Canvas-Pro';
 const api = 'https://api.github.com/repos/' + repo;
 const headers = {
@@ -44,7 +50,7 @@ async function request(url, options = {}) {
       body: JSON.stringify({
         tag_name: tag,
         name: tag,
-        body: 'Security, accessibility and performance fixes from the 2026-11-16 audit.\n\n- Pinned and verified yt-dlp/ffmpeg downloads\n- Optional signed release checksums (no Apple ID required)\n- Fixed DNS/SSRF guards and capture fetches\n- Accessibility fixes in gallery, menus, popup and theme preferences\n- Cached/batched database work and scoped browser reinjection\n',
+        body: 'Canvas Pro ' + tag + '\n\nPrebuilt desktop app, browser extension and SHA-256 checksums for this release. Verify downloads against SHA256SUMS.txt before installing.\n',
         draft: false,
         prerelease: false
       })

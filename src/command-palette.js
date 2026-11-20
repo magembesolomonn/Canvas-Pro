@@ -23,6 +23,7 @@
     ['Copy / paste', '⌘ C / ⌘ V'],
     ['Trash selection', '⌘ Delete'],
     ['Preview / close', 'Space / Escape'],
+    ['Infinite canvas view', '⌥ O'],
     ['Navigate the library', 'Arrow keys'],
     ['Canvas select / hand / text', 'V / H / T'],
     ['Canvas rectangle / ellipse', 'R / O'],
@@ -57,25 +58,81 @@
     if (at < 0) return 0;
     return at === 0 ? 2 : 1;
   };
+  const setSelect = (selector, value) => {
+    const node = document.querySelector(selector);
+    if (!node || node.value === value) return;
+    node.value = value;
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const setZoom = value => {
+    const node = document.querySelector('#zoom');
+    if (!node) return;
+    node.value = String(Math.max(140, Math.min(360, value)));
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const openPane = pane => window.SettingsUI?.open(pane);
+  const isChecked = selector => !!document.querySelector(selector)?.checked;
+  const toggleSetting = selector => document.querySelector(selector)?.click();
 
   function commands() {
     const items = [
       { id: 'import', label: 'Import files…', icon: 'importing', keys: '⌘ O', group: 'Actions', run: () => click('#import') },
       { id: 'import-folder', label: 'Import folder…', icon: 'folder', group: 'Actions', run: () => click('#import-folder') },
-      { id: 'new-collection', label: 'New collection', icon: 'folder', group: 'Actions', run: () => SidebarUI.inlineCreate('collections') },
+      { id: 'new-collection', label: 'New collection', icon: 'folderAdd', group: 'Actions', run: () => SidebarUI.inlineCreate('collections') },
       { id: 'new-canvas', label: 'New canvas…', icon: 'canvas', group: 'Actions', run: () => click('#add-canvas') },
-      { id: 'duplicate-review', label: 'Duplicate review…', icon: 'search', group: 'Actions', run: () => click('#settings-duplicate-review') },
-      { id: 'backup', label: 'Back up library…', icon: 'export', group: 'Actions', run: () => click('#settings-backup') },
-      { id: 'health', label: 'Library health…', icon: 'health', group: 'Actions', run: () => click('#check-library') },
-      { id: 'activity', label: 'Import activity…', icon: 'activity', group: 'Actions', run: () => click('#show-activity') },
+      { id: 'duplicate-review', label: 'Duplicate review…', icon: 'duplicates', group: 'Actions', hint: 'Settings Library', keywords: 'duplicates copies', run: () => click('#settings-duplicate-review') },
+      { id: 'backup', label: 'Back up library…', icon: 'export', group: 'Actions', hint: 'Settings Library', keywords: 'backup save', run: () => click('#settings-backup') },
+      { id: 'health', label: 'Library health…', icon: 'health', group: 'Actions', hint: 'Settings Maintenance', keywords: 'check repair', run: () => click('#check-library') },
+      { id: 'activity', label: 'Import activity…', icon: 'activity', group: 'Actions', hint: 'Settings Importing', keywords: 'imports progress', run: () => click('#show-activity') },
       { id: 'search', label: 'Search the library', icon: 'search', keys: '⌘ F', group: 'Actions', run: () => { if (view !== 'all') setView('all'); $('#search').focus(); } },
       { id: 'sidebar', label: 'Toggle sidebar', icon: 'sidebar', keys: '⌘ B', group: 'View', run: () => click('#toggle-sidebar') },
-      { id: 'inspector', label: 'Toggle file details', icon: 'sidebar', keys: '⌘ I', group: 'View', run: () => click('#toggle-inspector') },
+      { id: 'inspector', label: 'Toggle file details', icon: 'inspector', keys: '⌘ I', group: 'View', run: () => click('#toggle-inspector') },
+      { id: 'infinite-view', label: 'Infinite canvas view', icon: 'canvas', keys: '⌥ O', group: 'View', hint: 'Settings Galleries', keywords: 'cosmos endless pan zoom', run: () => window.toggleInfiniteCanvas?.() },
       { id: 'settings', label: 'Open Settings', icon: 'settings', keys: '⌘ ,', group: 'View', run: () => click('#show-settings') },
       { id: 'shortcuts', label: 'Keyboard shortcuts', icon: 'keyboard', keys: '⌘ /', group: 'View', run: () => open('shortcuts') },
-      { id: 'appearance-light', label: 'Use light appearance', icon: 'appearance', group: 'View', run: () => api.appearanceSet({ theme: 'light' }) },
-      { id: 'appearance-dark', label: 'Use dark appearance', icon: 'appearance', group: 'View', run: () => api.appearanceSet({ theme: 'dark' }) },
-      { id: 'appearance-system', label: 'Use system appearance', icon: 'appearance', group: 'View', run: () => api.appearanceSet({ theme: 'system' }) }
+      { id: 'appearance-light', label: 'Theme: Light', icon: 'appearance', group: 'Commands', hint: 'Settings Appearance', keywords: 'appearance light mode', run: () => api.appearanceSet({ theme: 'light' }) },
+      { id: 'appearance-dark', label: 'Theme: Dark', icon: 'appearance', group: 'Commands', hint: 'Settings Appearance', keywords: 'appearance dark mode', run: () => api.appearanceSet({ theme: 'dark' }) },
+      { id: 'appearance-system', label: 'Theme: System', icon: 'appearance', group: 'Commands', hint: 'Settings Appearance', keywords: 'appearance automatic', run: () => api.appearanceSet({ theme: 'system' }) },
+
+      // Library settings.
+      { id: 'library-new', label: 'New Library…', icon: 'folder', group: 'Commands', hint: 'Settings Library', run: () => api.switchLibrary('new') },
+      { id: 'library-open', label: 'Open Library…', icon: 'folder', group: 'Commands', hint: 'Settings Library', run: () => api.switchLibrary('open') },
+      { id: 'library-show', label: 'Show library folder', icon: 'folder', group: 'Commands', hint: 'Settings Library', run: () => api.showLibrary() },
+      { id: 'settings-search', label: 'Search settings…', icon: 'settings', group: 'Commands', hint: 'Settings', run: () => { openPane(); requestAnimationFrame(() => document.querySelector('#settings-search')?.focus()); } },
+
+      // Galleries and view options.
+      { id: 'layout-masonry', label: 'Gallery layout: masonry', icon: 'layout', group: 'Commands', hint: 'Settings Galleries View', keywords: 'balanced columns', run: () => setGalleryLayout('masonry') },
+      { id: 'layout-waterfall', label: 'Gallery layout: waterfall', icon: 'layout', group: 'Commands', hint: 'Settings Galleries View', keywords: 'fill columns in order', run: () => setGalleryLayout('waterfall') },
+      { id: 'layout-justified', label: 'Gallery layout: justified', icon: 'layout', group: 'Commands', hint: 'Settings Galleries View', keywords: 'fit items into rows', run: () => setGalleryLayout('justified') },
+      { id: 'file-names', label: showFileNamesEnabled() ? 'Hide file names' : 'Show file names', icon: 'heading', group: 'Commands', hint: 'Settings Galleries View', run: () => setShowFileNames(!showFileNamesEnabled()) },
+      { id: 'zoom-in', label: 'Make thumbnails larger', icon: 'plusMagnifier', group: 'Commands', hint: 'View Thumbnail size', run: () => setZoom(Number(document.querySelector('#zoom')?.value || 230) + 30) },
+      { id: 'zoom-out', label: 'Make thumbnails smaller', icon: 'minusMagnifier', group: 'Commands', hint: 'View Thumbnail size', run: () => setZoom(Number(document.querySelector('#zoom')?.value || 230) - 30) },
+      { id: 'zoom-reset', label: 'Reset thumbnail size', icon: 'resetZoom', group: 'Commands', hint: 'View Thumbnail size', run: () => setZoom(230) },
+      ...['all', 'image', 'video', 'pdf', 'audio', 'social', 'recipe', 'link', 'other'].map((value, index) => ({
+        id: 'type-' + value,
+        label: 'Show file type: ' + ['All types', 'Images', 'Videos', 'Documents', 'Audio', 'Social posts', 'Recipes', 'Web links', 'Design & other'][index],
+        icon: 'filter', group: 'Commands', hint: 'View File type', run: () => setSelect('#type', value)
+      })),
+      ...[['new', 'Newest first'], ['old', 'Oldest first'], ['name', 'Name A–Z'], ['size', 'Largest first']].map(([value, label]) => ({
+        id: 'sort-' + value, label: 'Sort by: ' + label, icon: 'sort', group: 'Commands', hint: 'View Sort order', run: () => setSelect('#sort', value)
+      })),
+
+      // About, extensions and feedback.
+      { id: 'updates-check', label: 'Check for updates', icon: 'reload', group: 'Commands', hint: 'Settings About Update', run: () => window.SettingsUI?.checkUpdates() },
+      { id: 'licenses', label: 'Third-party notices…', icon: 'about', group: 'Commands', hint: 'Settings About', run: () => { openPane('about'); requestAnimationFrame(() => click('#settings-licenses-toggle')); } },
+      { id: 'extension', label: 'Browser capture extension…', icon: 'extensions', group: 'Commands', hint: 'Settings Extensions', run: () => click('#show-extension') },
+      { id: 'feedback', label: 'Beta testing and feedback…', icon: 'feedback', group: 'Commands', hint: 'Settings Feedback', run: () => click('#settings-beta') },
+
+      // Search and local models.
+      { id: 'semantic-toggle', label: isChecked('#settings-semantic') ? 'Turn off semantic search' : 'Turn on semantic search', icon: 'sparkles', group: 'Commands', hint: 'Settings Search & models local AI', run: () => toggleSetting('#settings-semantic') },
+      { id: 'visual-model', label: 'Install visual model…', icon: 'sparkles', group: 'Commands', hint: 'Settings Search & models CLIP', run: () => toggleSetting('#settings-visual-model') },
+      { id: 'index-pause', label: 'Pause background indexing', icon: 'pauseCircle', group: 'Commands', hint: 'Settings Search & models AI', run: () => api.smartPause(true) },
+      { id: 'index-resume', label: 'Resume background indexing', icon: 'playCircle', group: 'Commands', hint: 'Settings Search & models AI', run: () => api.smartPause(false) },
+      { id: 'index-idle', label: 'Index only while idle and plugged in', icon: 'retry', group: 'Commands', hint: 'Settings Search & models AI', run: () => api.smartIdlePolicy(true) },
+      { id: 'index-anytime', label: 'Index whenever the app is open', icon: 'retry', group: 'Commands', hint: 'Settings Search & models AI', run: () => api.smartIdlePolicy(false) },
+      { id: 'index-retry', label: 'Retry failed indexing', icon: 'retry', group: 'Commands', hint: 'Settings Search & models AI', run: () => api.workbench('retry-index') },
+      { id: 'model-clip', label: 'Install visual similarity model…', icon: 'sparkles', group: 'Commands', hint: 'Settings Search & models CLIP', run: async () => { const state = await api.modelState('clip'); if (!state.ready) await api.modelDownload('clip'); else openPane('search-models'); } },
+      { id: 'model-florence', label: 'Install description model…', icon: 'sparkles', group: 'Commands', hint: 'Settings Search & models Florence', run: async () => { const state = await api.modelState('florence-2'); if (!state.ready) await api.modelDownload('florence-2'); else openPane('search-models'); } }
     ];
     for (const [view, label, icon] of [
       ['all', 'Library', 'archive'], ['favorites', 'Favourites', 'star'],
@@ -214,7 +271,13 @@
 
   function rank(items, query) {
     if (!query) return items.slice();
-    return items.map(item => ({ item, score: labelScore(item.label, query) }))
+    return items.map(item => {
+      const score = labelScore(item.label, query);
+      if (score) return { item, score: score + 1 };
+      const words = Array.isArray(item.keywords) ? item.keywords.join(' ') : (item.keywords || '');
+      const extra = `${item.hint || ''} ${words}`.toLowerCase();
+      return { item, score: extra.includes(query) ? 1 : 0 };
+    })
       .filter(entry => entry.score)
       .sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label))
       .map(entry => entry.item)
@@ -224,7 +287,7 @@
   function loadSimilar(id, token) {
     api.workbench('similar', { id }).then(ids => {
       if (token !== sequence || !dialog?.open) return;
-      const matches = (ids || []).map(hit => assetById.get(hit.id)).filter(asset => asset && !asset.trash).slice(0, 8);
+      const matches = (ids || []).filter(hit => hit.score >= 0.2).map(hit => assetById.get(hit.id)).filter(asset => asset && !asset.trash).slice(0, 8);
       if (!matches.length) return;
       const at = sections.findIndex(section => section.similar === id);
       if (at < 0) return;
@@ -304,7 +367,7 @@
         row.setAttribute('role', 'option');
         row.setAttribute('aria-selected', 'false');
         const icon = el('span', 'command-icon');
-        icon.append(glyph(entry.icon || 'file'));
+        icon.append(glyph(entry.icon || 'file', { size: 17 }));
         const text = el('span', 'command-label', entry.label);
         row.append(icon, text);
         if (entry.hint) row.append(el('span', 'command-meta', entry.hint));

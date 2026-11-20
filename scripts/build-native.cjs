@@ -9,7 +9,8 @@ const moduleCache = '/private/tmp/asset-swift-module-cache';
 const tools = {
   media: ['native/Media.swift', 'bin/media-tool'],
   analysis: ['native/Analyze.swift', 'bin/analysis-tool'],
-  text: ['native/Text.swift', 'bin/text-tool']
+  text: ['native/Text.swift', 'bin/text-tool'],
+  symbols: ['native/Symbols.swift', 'bin/symbols-tool', false]
 };
 const requested = process.argv.slice(2);
 const selected = requested.length ? requested : Object.keys(tools);
@@ -23,7 +24,7 @@ for (const name of selected) {
   execFileSync('swiftc', [
     '-target', 'arm64-apple-macosx13.0',
     '-O',
-    '-parse-as-library',
+    ...(tool[2] === false ? [] : ['-parse-as-library']),
     path.join(root, source),
     '-o', path.join(root, output),
     '-module-cache-path', moduleCache

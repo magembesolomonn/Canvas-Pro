@@ -84,4 +84,4 @@ function token(ids) {
   return crypto.createHash('sha256').update(signature(ids)).digest('hex').slice(0, 32);
 }
 
-module.exports = { HASHED_EXTENSIONS, HASHED_SQL, DEFAULT_DISTANCE, hashFile, distance, bands, signature, token };
+module.exports = { HASHED_SQL, DEFAULT_DISTANCE, hashFile, distance, bands, signature, token };

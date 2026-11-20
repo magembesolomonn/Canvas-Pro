@@ -6,6 +6,24 @@ const extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','imag
 function clean(value){let name=String(value||'').replace(/[\x00-\x1f/\\:*?"<>|]/g,' ').trim().slice(0,180)||'Web capture';while(Buffer.byteLength(name)>160)name=Array.from(name).slice(0,-1).join('');return name;}
 function webURL(value){const u=new URL(value);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)throw new Error('This media uses a browser-only or protected stream. Save the page or capture a screenshot instead.');return u.href;}
 async function assertFetchable(value,allowPrivate=false){const url=new URL(webURL(value));if(!allowPrivate)await assertPublicHost(url.hostname.replace(/^\[|\]$/g,''));return url.href;}
+// net.fetch follows redirects by default, so a public media URL could 302 to a
+// private address after assertFetchable ran. Follow redirects ourselves and run
+// the same guard on every hop. This does not use previewFetch, whose short
+// timeout would abort large video downloads.
+async function guardedFetch(fetcher,value,allowPrivate,options={}){
+  let url=await assertFetchable(value,allowPrivate);
+  for(let redirects=0;redirects<=5;redirects++){
+    const response=await fetcher(url,{...options,redirect:'manual'});
+    const location=response.headers?.get?.('location');
+    if([301,302,303,307,308].includes(response.status)&&location){
+      await response.body?.cancel?.();
+      url=await assertFetchable(new URL(location,url).href,allowPrivate);
+      continue;
+    }
+    return response;
+  }
+  throw new Error('Too many media redirects.');
+}
 function instagramTrack(value){
  const url=new URL(webURL(value));
  if(url.protocol!=='https:'||!/(?:^|\.)(?:cdninstagram\.com|fbcdn\.net)$/.test(url.hostname)||!/\.mp4$/i.test(url.pathname))throw new Error('Invalid Instagram media track.');
@@ -47,12 +65,16 @@ class CaptureBridge {
    }});
   }finally{this.controllers.delete(controller);}
  }
- else{const controller=new AbortController();this.controllers.add(controller);const timer=setTimeout(()=>controller.abort(),300000);try{const mediaURL=await assertFetchable(item.mediaUrl,this.allowPrivateCapture);const response=await this.fetcher(mediaURL,{signal:controller.signal,credentials:'omit',...(item.audioUrl?{redirect:'error'}:{}),...(item.pageUrl?{referrer:item.pageUrl,referrerPolicy:'strict-origin-when-cross-origin'}:{})});if(!response.ok)throw new Error('Website blocked this download ('+response.status+'). Try a screenshot or save the page.');const type=(response.headers.get('content-type')||'').split(';')[0].trim();let ext=extensions[type];if(!ext&&type==='application/octet-stream'){const candidate=path.extname(new URL(item.mediaUrl).pathname).slice(1).toLowerCase();if(['mp4','m4v','3gp','webm','mov','avif','jpg','jpeg','png','gif','webp','mp3','m4a','pdf'].includes(candidate))ext=candidate;}if(!ext||((item.kind==='video')&&!['mp4','m4v','3gp','webm','mov'].includes(ext)))throw new Error('This video is streamed or protected rather than a downloadable file. Save the page instead.');const limit=item.kind==='video'?1024*1024*1024:100*1024*1024;if(Number(response.headers.get('content-length'))>limit)throw new Error('Media exceeds the '+(limit/1024/1024)+' MB capture limit');job.currentTotal=Number(response.headers.get('content-length'))||0;this.status(job);file=path.join(tempDir,clean(item.title).replace(/\.[a-z0-9]{1,6}$/i,'')+'.'+ext);let size=0,last=0;const count=new Transform({transform:(chunk,_encoding,callback)=>{size+=chunk.length;if(size>limit)return callback(new Error('Media exceeds the capture size limit'));job.bytes+=chunk.length;job.currentBytes=size;if(Date.now()-last>300){last=Date.now();this.status(job);}callback(null,chunk);}});await pipeline(Readable.fromWeb(response.body),count,fs.createWriteStream(file),{signal:controller.signal});
+ else{const controller=new AbortController();this.controllers.add(controller);const timer=setTimeout(()=>controller.abort(),300000);try{const options={signal:controller.signal,credentials:'omit',...(item.pageUrl?{referrer:item.pageUrl,referrerPolicy:'strict-origin-when-cross-origin'}:{})};
+  // Instagram's separate audio track keeps redirect:'error' so neither fetch
+  // follows a hop. Other media uses the redirect-guarded fetcher above.
+  const response=item.audioUrl?await this.fetcher(await assertFetchable(item.mediaUrl,this.allowPrivateCapture),{...options,redirect:'error'}):await guardedFetch(this.fetcher,item.mediaUrl,this.allowPrivateCapture,options);if(!response.ok)throw new Error('Website blocked this download ('+response.status+'). Try a screenshot or save the page.');const type=(response.headers.get('content-type')||'').split(';')[0].trim();let ext=extensions[type];if(!ext&&type==='application/octet-stream'){const candidate=path.extname(new URL(item.mediaUrl).pathname).slice(1).toLowerCase();if(['mp4','m4v','3gp','webm','mov','avif','jpg','jpeg','png','gif','webp','mp3','m4a','pdf'].includes(candidate))ext=candidate;}if(!ext||((item.kind==='video')&&!['mp4','m4v','3gp','webm','mov'].includes(ext)))throw new Error('This video is streamed or protected rather than a downloadable file. Save the page instead.');const limit=item.kind==='video'?1024*1024*1024:100*1024*1024;if(Number(response.headers.get('content-length'))>limit)throw new Error('Media exceeds the '+(limit/1024/1024)+' MB capture limit');job.currentTotal=Number(response.headers.get('content-length'))||0;this.status(job);file=path.join(tempDir,clean(item.title).replace(/\.[a-z0-9]{1,6}$/i,'')+'.'+ext);let size=0,last=0;const count=new Transform({transform:(chunk,_encoding,callback)=>{size+=chunk.length;if(size>limit)return callback(new Error('Media exceeds the capture size limit'));job.bytes+=chunk.length;job.currentBytes=size;if(Date.now()-last>300){last=Date.now();this.status(job);}callback(null,chunk);}});await pipeline(Readable.fromWeb(response.body),count,fs.createWriteStream(file),{signal:controller.signal});
  if(item.audioUrl)await this.joinInstagramTracks(item,job,file,tempDir,controller.signal);
  }finally{clearTimeout(timer);this.controllers.delete(controller);}}
  job.phase='importing';this.status(job);const destination=job.folderId?this.library.folderRecords().find(f=>f.id===job.folderId):null;if(job.folderId&&!destination)throw new Error('The destination collection no longer exists.');const result=await this.library.importFile(file,destination?.name||job.folder);const id=result.imported||result.duplicate;if(id){const metadata={...item,mediaUrl:(extractable?source:item.mediaUrl)||'',sourceUrl:source||''};delete metadata.dataUrl;if(item.text)metadata.textExcerpt=item.text.slice(0,2000);delete metadata.text;this.library.setCaptureMetadata(id,metadata);if(!this.library.asset(id).url&&item.pageUrl)this.library.update(id,{url:item.pageUrl});if(item.width&&item.height)this.library.setAspectRatios([[id,item.width/item.height]]);}return result;
  }finally{await fs.promises.rm(tempDir,{recursive:true,force:true});}}
   async joinInstagramTracks(item,job,file,tempDir,signal){
+    // redirect:'error' means there is no redirect chain to re-validate here.
     const audioURL=await assertFetchable(item.audioUrl,this.allowPrivateCapture);
     const response=await this.fetcher(audioURL,{signal,credentials:'omit',redirect:'error'});
     if(!response.ok||!response.body)throw new Error('Instagram audio download failed ('+response.status+').');

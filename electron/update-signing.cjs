@@ -9,10 +9,11 @@ MCowBQYDK2VwAyEAEMQrU8esJ8K8rbIb6BqYYn2Gc1QdxXb1yLx8Sjcitqc=
 -----END PUBLIC KEY-----
 `;
 
-// Set to the released app's Developer ID Team ID once the build is signed
-// with a Developer ID certificate and notarized. Empty disables this extra
-// check; the Ed25519 checksum signature is always required.
-const EXPECTED_TEAM_ID = '';
+// A general release must be signed with a Developer ID certificate and
+// notarized by Apple; whether to do so is a release decision. Set this to the
+// released app's Developer ID Team ID to enable the extra check. Empty is the
+// default and disables it; the Ed25519 checksum signature is always required.
+const EXPECTED_TEAM_ID = process.env.EXPECTED_TEAM_ID || '';
 
 function verifyUpdateSignature(data, signature) {
   return crypto.verify(null, Buffer.from(data), crypto.createPublicKey(PUBLIC_KEY), Buffer.from(signature));

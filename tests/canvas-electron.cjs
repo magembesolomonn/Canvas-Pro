@@ -23,9 +23,20 @@ let lib,server;
  const external=path.join(process.env.AGAGWU_DATA_DIR,'External portrait.png');fs.writeFileSync(external,electron.nativeImage.createFromPath(path.join(__dirname,'fixtures/Portrait.png')).resize({width:333}).toPNG());await run(`(async()=>{const result=await api.canvasDropPaths('${blankId}',[${JSON.stringify(external)}],{x:300,y:50});await refresh();await CanvasWorkspace.acceptAdded('${blankId}',result);CanvasWorkspace.fit();})()`);await poll(()=>run("[...CanvasWorkspace.doc.items.values()].some(i=>i.data.label==='External portrait.png'&&!i.data.autoSize&&Math.abs(i.data.width/i.data.height-2/3)<.02)"));console.log('CANVAS_EXTERNAL_IMAGE_ASPECT_OK');
  // New tools use real pointer gestures and round-trip through the persisted board.
  const toolPoint=await run("(()=>{const r=CanvasWorkspace.rect();return {x:r.x+r.width*.55,y:r.y+r.height*.45}})()");
- for(const [tool,offset] of [['draw',0],['arrow',55],['sticky',110],['list',165]]){
+ // Each gesture starts on empty board. The old offsets stepped only 55px, so
+ // the list gesture began inside the sticky note drawn just before it and the
+ // pointer landed on that note's text editor instead of the canvas. A 2x2 grid
+ // keeps every gesture clear of the items already placed.
+ const boardRect=await run("(()=>{const r=CanvasWorkspace.rect();return {x:r.x,y:r.y};})()");
+ const toolSpots={
+  draw:{x:boardRect.x+120,y:boardRect.y+140},
+  arrow:{x:boardRect.x+520,y:boardRect.y+140},
+  sticky:{x:boardRect.x+120,y:boardRect.y+460},
+  list:{x:boardRect.x+520,y:boardRect.y+460}
+ };
+ for(const tool of ['draw','arrow','sticky','list']){
   await run(`document.querySelector('[data-canvas-tool="${tool}"]').click()`);
-  const start={x:toolPoint.x-140+offset,y:toolPoint.y-100};
+  const start=toolSpots[tool];
   await drag(start,{x:start.x+45,y:start.y+32});
   if(['sticky','list'].includes(tool)){
    await poll(()=>run(`CanvasWorkspace.editing?.doc.items.get(CanvasWorkspace.editing.id)?.data.shape==='${tool}'`));

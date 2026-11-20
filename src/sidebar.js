@@ -9,9 +9,11 @@ const SidebarUI = (() => {
   function syncAccessibility() {
     if (!sidebar) return;
     const previewOpen = !$('#preview').hidden;
-    sidebar.inert = previewOpen || (narrow.matches ? !drawerOpen : compact);
-    $('main').inert = previewOpen || drawerOpen;
-    $('#inspector').inert = previewOpen || drawerOpen;
+    // The viewer keeps the sidebar and File Details on screen, so only the
+    // gallery under it is inert. A hidden or drawer-closed sidebar is inert.
+    sidebar.inert = (narrow.matches ? !drawerOpen : compact);
+    $('main').inert = previewOpen || drawerOpen || document.body.classList.contains('infinite-mode');
+    $('#inspector').inert = drawerOpen;
   }
 
   function visible(element) {
@@ -333,6 +335,10 @@ const SidebarUI = (() => {
       if (!value) return finish();
       finish();
       if (section === 'collections') {
+        if (folders.includes(value)) {
+          notify('A collection with that name already exists.');
+          return;
+        }
         safe(async () => {
           await api.addFolder(value);
           await refreshCurrent();
@@ -348,6 +354,7 @@ const SidebarUI = (() => {
     };
     form.append(input);
     nav.prepend(form);
+    Motion.revealFromTrigger(form, section === 'collections' ? document.querySelector('#add-folder') : document.activeElement);
     input.focus();
     return input;
   }

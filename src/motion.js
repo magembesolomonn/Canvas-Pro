@@ -27,6 +27,25 @@ const Motion = (() => {
     return { frames, duration };
   }
 
+  // A cubic-bezier can only approximate an ease-out; it cannot carry the
+  // spring's momentum or its slight overshoot. Feeding the sampled spring
+  // points to CSS `linear()` (supported by Chromium in Electron) reproduces
+  // the real curve while keeping this file dependency-free. Sample values
+  // are pinned to the 0→1 easing range at the ends; any overshoot in between
+  // is kept and left for CSS to clamp (harmless for opacity, a subtle pop
+  // for scale).
+  function springEasing(velocity = 0.05, samples = 18) {
+    const { frames, duration } = springFrames(0, 1, velocity, samples);
+    if (!frames || frames.length < 2) return { easing: '', duration };
+    const first = frames[0].value, last = frames[frames.length - 1].value;
+    const span = last - first;
+    const points = frames.map(({ value }) => {
+      const normalized = span === 0 ? 0.5 : (value - first) / span;
+      return Number.isFinite(normalized) ? normalized.toFixed(4) : '0';
+    });
+    return { easing: `linear(${points.join(', ')})`, duration };
+  }
+
   function animateNumber({ from, to, velocity = 0, render, onFinish }) {
     if (reduced() || Math.abs(from - to) < 0.5) {
       render(to);
@@ -38,7 +57,9 @@ const Motion = (() => {
     let raf = 0, cancelled = false;
     const step = now => {
       if (cancelled) return;
-      const p = Math.min(1, (now - start) / duration);
+      // The first rAF timestamp can predate performance.now() inside the same
+      // frame; clamping keeps the sample index valid and the spring alive.
+      const p = Math.max(0, Math.min(1, (now - start) / duration));
       // Interpolate linearly between sampled spring points. The spring model
       // already supplies the curvature; easing again here made numbers land
       // late and overshoot twice.
@@ -53,18 +74,48 @@ const Motion = (() => {
     return { cancel() { cancelled = true; cancelAnimationFrame(raf); } };
   }
 
-  function fadeScaleIn(element, origin, { fromScale = 0.97, fromOpacity = 0.82, duration = 140 } = {}) {
+  // Trigger-anchored reveal: a menu, dialog or popover grows out of the
+  // control that opened it instead of expanding from its own centre. The
+  // one shared helper keeps the spatial relationship identical everywhere.
+  function revealFromTrigger(element, trigger, options = {}) {
     if (reduced() || !element) return null;
+    const bounds = element.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return null;
+    const now = performance.now();
+    // Two listeners can observe the same open (a pointer handler and the
+    // popover's toggle event). One reveal per surface per moment is enough.
+    if (element._revealAt && now - element._revealAt < 150) return null;
+    element._revealAt = now;
+
+    const source = trigger?.getBoundingClientRect?.() || (typeof trigger?.left === 'number' ? trigger : null);
+    let x = bounds.width / 2, y = Math.min(24, bounds.height * 0.18);
+    if (source) {
+      x = (source.left ?? 0) + (source.width ?? 0) / 2 - bounds.left;
+      y = (source.top ?? 0) + (source.height ?? 0) / 2 - bounds.top;
+    }
+    // Keep the origin on (or just outside) the surface so a distant trigger
+    // gives direction without stretching the material into an extreme skew.
+    x = Math.max(-12, Math.min(bounds.width + 12, x));
+    y = Math.max(-12, Math.min(bounds.height + 12, y));
+    const origin = `${x}px ${y}px`, scale = options.scale ?? 0.94, opacity = options.opacity ?? 0.55;
+
+    // Reveal with the sampled spring so the surface settles with the same
+    // character as the app's other spring-driven motion. If construction
+    // ever yields an empty/malformed string, keep the old bezier working.
+    const spring = springEasing();
+    const easing = /^linear\(\s*-?\d*\.?\d+(?:\s*,\s*-?\d*\.?\d+)+\s*\)$/.test(spring.easing)
+      ? spring.easing
+      : 'cubic-bezier(.22, 1, .36, 1)';
+
     for (const animation of element.getAnimations()) animation.cancel();
-    const bounds = element.getBoundingClientRect(), source = origin?.getBoundingClientRect?.() || origin;
-    const x = source ? Math.max(0, Math.min(bounds.width, (source.left ?? 0) + (source.width ?? 0) / 2 - bounds.left)) : bounds.width / 2;
-    const y = source ? Math.max(0, Math.min(bounds.height, (source.top ?? 0) + (source.height ?? 0) / 2 - bounds.top)) : 0;
-    const transformOrigin = `${x}px ${y}px`;
     return element.animate([
-      { transformOrigin, transform: `scale(${fromScale})`, opacity: fromOpacity },
-      { transformOrigin, transform: 'none', opacity: 1 }
-    ], { duration, easing: 'cubic-bezier(0.2, 0, 0, 1)', fill: 'both' });
+      { transformOrigin: origin, transform: `scale(${scale})`, opacity },
+      { transformOrigin: origin, transform: 'none', opacity: 1 }
+    ], { duration: options.duration ?? spring.duration, easing });
   }
 
-  return { reduced, stop, animateNumber, fadeScaleIn };
+  const fadeScaleIn = (element, origin, options = {}) =>
+    revealFromTrigger(element, origin, { scale: options.fromScale ?? 0.97, opacity: options.fromOpacity ?? 0.82, duration: options.duration ?? 140 });
+
+  return { reduced, stop, animateNumber, revealFromTrigger, fadeScaleIn };
 })();

@@ -76,10 +76,6 @@ function mountPointFromPlist(text) {
   return matches.length ? xmlText(matches[matches.length - 1][1]) : null;
 }
 
-function shellQuote(value) {
-  return "'" + String(value).replaceAll("'", "'\\''") + "'";
-}
-
 const SWAP_SCRIPT = `#!/bin/bash
 # Written by Canvas Pro. Wait for the running app to exit, then replace it.
 set -u
@@ -479,8 +475,6 @@ module.exports = {
   parseChecksums,
   releaseAssets,
   mountPointFromPlist,
-  shellQuote,
-  SWAP_SCRIPT,
   RELEASE_API,
   verifyUpdateSignature,
   EXPECTED_TEAM_ID

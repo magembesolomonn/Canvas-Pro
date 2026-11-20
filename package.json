@@ -1,6 +1,6 @@
 {
   "name": "canvas-pro",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "private": true,
   "description": "A native Mac library and browser capture companion",
   "main": "electron/main.cjs",
@@ -29,8 +29,9 @@
     "test:extension": "node --test tests/extension-media.test.cjs",
     "test:drag": "electron tests/drag-out-electron.cjs",
     "test:sidebar": "electron tests/sidebar-electron.cjs",
+    "test:traffic": "electron tests/traffic-light-electron.cjs",
     "test:video-aspect": "electron tests/video-aspect-electron.cjs",
-    "test:ui": "electron tests/audit-missing-file-electron.cjs && electron tests/bookmark-workflows-electron.cjs && electron tests/canvas-electron.cjs && electron tests/canvas-inspector-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-momentum-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/capture-canvas-view-electron.cjs && electron tests/capture-network-electron.cjs && electron tests/capture-refresh-electron.cjs && electron tests/capture-startup-electron.cjs && electron tests/capture-sync-electron.cjs && electron tests/context-trash-electron.cjs && electron tests/drag-out-electron.cjs && electron tests/formats-electron.cjs && electron tests/library-startup-failure-electron.cjs && electron tests/library-switch-electron.cjs && electron tests/navigation-canvas-electron.cjs && electron tests/paste-smoke-electron.cjs && electron tests/preferences-electron.cjs && electron tests/prototype-electron.cjs && electron tests/reliability-electron.cjs && electron tests/sidebar-electron.cjs && electron tests/smart-features-electron.cjs && electron tests/smoke-electron.cjs && electron tests/stress-electron.cjs && electron tests/video-aspect-electron.cjs",
+    "test:ui": "electron tests/audit-missing-file-electron.cjs && electron tests/bookmark-workflows-electron.cjs && electron tests/canvas-electron.cjs && electron tests/canvas-inspector-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-momentum-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/capture-canvas-view-electron.cjs && electron tests/capture-network-electron.cjs && electron tests/capture-refresh-electron.cjs && electron tests/capture-startup-electron.cjs && electron tests/capture-sync-electron.cjs && electron tests/context-trash-electron.cjs && electron tests/drag-out-electron.cjs && electron tests/formats-electron.cjs && electron tests/infinite-canvas-electron.cjs && electron tests/library-startup-failure-electron.cjs && electron tests/library-switch-electron.cjs && electron tests/navigation-canvas-electron.cjs && electron tests/paste-smoke-electron.cjs && electron tests/preferences-electron.cjs && electron tests/prototype-electron.cjs && electron tests/reliability-electron.cjs && electron tests/sidebar-electron.cjs && electron tests/traffic-light-electron.cjs && electron tests/smart-features-electron.cjs && electron tests/smoke-electron.cjs && electron tests/stress-electron.cjs && electron tests/native-macos-electron.cjs && electron tests/ui-audit-electron.cjs && electron tests/video-aspect-electron.cjs",
     "test:bookmarks": "electron tests/bookmark-workflows-electron.cjs",
     "test:canvas": "electron tests/canvas-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/canvas-inspector-electron.cjs && electron tests/canvas-momentum-electron.cjs && electron tests/navigation-canvas-electron.cjs",
     "test:libraries": "electron tests/library-switch-electron.cjs",
@@ -43,7 +44,9 @@
     "prototype": "node scripts/prototype.cjs",
     "test:prototype": "electron tests/prototype-electron.cjs",
     "build:symbols": "swiftc -module-name CanvasSymbols -module-cache-path /private/tmp/asset-swift-module-cache native/Symbols.swift -o /private/tmp/canvas-symbols && /private/tmp/canvas-symbols src/assets/symbols",
-    "shot": "electron tests/library-shot-electron.cjs"
+    "shot": "electron tests/library-shot-electron.cjs",
+    "test:native": "electron tests/native-macos-electron.cjs",
+    "test:invariants": "node --test tests/invariants.test.cjs"
   },
   "devDependencies": {
     "@electron/fuses": "^2.1.3",

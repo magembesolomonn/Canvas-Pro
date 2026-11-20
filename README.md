@@ -52,7 +52,7 @@ Pasted text is saved as a quote and shown on a card with the whole excerpt, shri
 
 File Details shows the preview, the name, notes, tags, collections and properties; the star is on the card and in the right-click menu, and **Copy Path** is in the right-click menu.
 
-There is no chat assistant and no star rating. The star on a card marks a Favourite; finding similar images, colour palettes, automatic tags and text search come from the on-device model in Settings → Experimental.
+There is no chat assistant and no star rating. The star on a card marks a Favourite; finding similar images, colour palettes, automatic tags and text search come from the on-device model in Settings → Search & models.
 
 ## Links, cards and recipes
 
@@ -86,9 +86,9 @@ Colour extraction/search, browser capture extension, multi-selection and bulk ed
 
 The existing app can be updated in place with `npm run update:mac`. Quit and reopen it afterwards. This replaces only app code, keeps rollback code under `.updates/`, and leaves the asset library intact. Recompile the native media helper with `npm run build:media` if its Swift source changes. `npm run build:mac` includes that helper in a fresh bundle.
 
-### Optional release signing
+### Release signing
 
-Updates work with an ordinary SHA-256 checksum file exactly as before — nothing extra is required, and no Apple account is involved. If you also publish an `update.sig` asset, the app verifies it before installing. To generate one, run `npm run sign:update -- <path-to-SHA256SUMS.txt> [private-key.pem] [update.sig]`; create the free local key once with `npm run generate:update-key`. The private key stays outside the app bundle (`audits/update-signing.key`, gitignored) and only the public half is embedded in `electron/update-signing.cjs`. Setting `CANVAS_REQUIRE_SIGNED_UPDATES=1` makes signatures mandatory; otherwise they are optional. `EXPECTED_TEAM_ID` in that file is empty by default and only applies if you ever sign with a Developer ID. Builds flip Electron fuses via `npm run build:fuses`; `RunAsNode` stays enabled because the browser bridge launches the app binary as Node.
+Installed builds require a signed checksum manifest before an update can be installed. `npm run package:mac` signs `SHA256SUMS.txt` automatically and writes `update.sig` next to it — upload both to the GitHub release. The private key stays outside the app bundle (`audits/update-signing.key`, gitignored) and only the public half is embedded in `electron/update-signing.cjs`; create the free local key once with `npm run generate:update-key`. To re-sign a manifest by hand, run `npm run sign:update -- <path-to-SHA256SUMS.txt> [private-key.pem] [update.sig]`. A source-run development build (`electron .`) still accepts unsigned test releases unless `CANVAS_REQUIRE_SIGNED_UPDATES=1` is set. No Apple account is involved: signatures are Ed25519 over the checksum file. `EXPECTED_TEAM_ID` in `electron/update-signing.cjs` is empty by default and only adds a Developer-ID/notarization check if you ever sign with a Developer ID. Builds flip Electron fuses via `npm run build:fuses`; `RunAsNode` stays enabled because the browser bridge launches the app binary as Node.
 
 - Paste supports Electron 45's asynchronous clipboard API, copied images, Finder files, direct web media URLs and website bookmarks. Recognized media downloads have a 100 MB limit. Other/unavailable web links are retained as `.webloc` bookmarks with their source URL; pages are never executed inside the app.
 - Audio/video cards play on hover. Video hover playback is muted; audio hover playback is audible. Leaving the card, scrolling, opening a full preview or switching app stops hover playback. Only one hover player is active.
@@ -263,7 +263,7 @@ Bookmarks now use public page metadata to distinguish articles, books, films and
 
 Reader mode saves extracted article text into the library's thumbnails folder and renders it without page scripts, advertising or popups. It works offline after extraction, with a cached cover; it does not archive every embedded image. Blocked pages can use public web archives or the reader service when that setting is enabled. Selected text and local text files have note/quote previews. Originals remain portable files.
 
-Settings → Experimental lists the models the app can use and what each one is for, and each is downloaded on its own: **Visual similarity** (CLIP ViT-B/32, 156 MB) finds images that look alike and answers a picture search; **Description** (Florence-2 base, 266 MB) writes one sentence about a picture, which names the file, leads the tag suggestions and makes the picture findable by what it shows; **Text understanding** is macOS's own NaturalLanguage framework, so documents and notes are searched in plain language with nothing to download.
+Settings → Search & models lists the models the app can use and what each one is for, and each is downloaded on its own: **Visual similarity** (CLIP ViT-B/32, 156 MB) powers Find similar and tag suggestions for images that look alike; **Description** (Florence-2 base, 266 MB) writes a caption on demand for tag suggestions, which can name the file and seed its tags; **Text understanding** is macOS's own NaturalLanguage framework, so documents and notes are searched in plain language with nothing to download.
 
 Background indexing is controlled in the same place. OCR, image classification, palettes and text search run locally; CLIP adds descriptive image search. No files or search queries are uploaded. Recognition is probabilistic and works best with English descriptions. Automatic tags are separate from your manual tags. PDFs index up to their first 15 pages. New files become searchable progressively as background indexing completes; you can pause it. Model files are verified against pinned checksums and are stored in Application Support, separately from the library. They can be downloaded again after resetting a Mac.
 

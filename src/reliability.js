@@ -1,11 +1,16 @@
 let importJobs=[],latestHealth={state:'idle'};
 const importLabels={queued:'Queued',running:'Importing',cancelling:'Stopping…',cancelled:'Cancelled',completed:'Finished',failed:'Failed',duplicate:'Already in library',importing:'Importing',skipped:'Skipped'};
+const flipAnimations=new WeakMap();
 function renderImportActivity(jobs=importJobs){
  const previousIds=new Set(importJobs.map(job=>job.id));
  importJobs=jobs;const active=jobs.filter(j=>['queued','running','cancelling'].includes(j.state)).length;
  $('#show-activity .settings-label').textContent='Import activity'+(active?' · '+active:'');
  if(!$('#activity-dialog').open)return;
  const list=$('#import-jobs');
+ // FLIP: remember where each existing row was before the list is reordered.
+ const animateOrder=matchMedia('(prefers-reduced-motion: no-preference)').matches;
+ const firstTops=new Map();
+ if(animateOrder)for(const card of list.children)firstTops.set(card,card.getBoundingClientRect().top);
  if(!jobs.length){list.replaceChildren(el('p','hint','Your imports will appear here.'));return;}
  const jobIds=new Set(jobs.map(job=>job.id)), cards=new Map();
  for(const card of [...list.children]){
@@ -31,6 +36,21 @@ function renderImportActivity(jobs=importJobs){
   const current=list.children[index];
   if(current!==card)list.insertBefore(card,current||null);
  }
+ // Animate surviving rows from their old positions to the new ones.
+ if(animateOrder)for(const card of list.children){
+  const first=firstTops.get(card);
+  if(first===undefined)continue;
+  const delta=first-card.getBoundingClientRect().top;
+  if(Math.abs(delta)<0.5)continue;
+  flipAnimations.get(card)?.cancel();
+  let settled=false;
+  const animation=Motion.animateNumber({
+   from:delta,to:0,
+   render:value=>{card.style.transform=`translateY(${value}px)`;},
+   onFinish:()=>{settled=true;card.style.transform='';flipAnimations.delete(card);}
+  });
+  if(!settled)flipAnimations.set(card,animation);
+ }
 }
 function renderHealth(state=latestHealth){
  latestHealth=state;const running=state.state==='running',result=state.result;
@@ -40,7 +60,7 @@ function renderHealth(state=latestHealth){
  if(state.state==='failed')summary.textContent='The check could not finish. '+state.error;
  else if(state.state==='cancelled')summary.textContent='Check cancelled. Your files were not changed.';
  else if(running)summary.textContent=result?.total?`Checking ${result.checked.toLocaleString()} of ${result.total.toLocaleString()} originals…`:'Starting the check…';
- else if(state.state==='completed')summary.textContent=result.issues.length?`${result.issues.length.toLocaleString()} files need attention. ${result.healthy.toLocaleString()} ${result.healthy===1?'original matches its record':'originals match their records'}.`:`All ${result.checked.toLocaleString()} originals match their records.`;
+ else if(state.state==='completed')summary.textContent=result.issues.length?`${result.issues.length===1?'1 file needs attention.':result.issues.length.toLocaleString()+' files need attention.'} ${result.healthy.toLocaleString()} ${result.healthy===1?'original matches its record':'originals match their records'}.`:`All ${result.checked.toLocaleString()} originals match their records.`;
  else summary.textContent='Ready to check your library.';
  const list=$('#health-issues');list.replaceChildren();
  const labels={missing:'Missing original',mismatch:'Hash or size differs',unsafe:'Unexpected file location',unreadable:'Could not read file',changed:'Changed during check'};
@@ -58,7 +78,7 @@ function initReliabilityUI(){
  $('#new-library').onclick=()=>safe(()=>api.switchLibrary('new'));$('#open-library').onclick=()=>safe(()=>api.switchLibrary('open'));
  $('#settings-close').onclick=()=>$('#settings-dialog').close();
  for(const [dialog,button]of [['#activity-dialog','#show-activity'],['#health-dialog','#check-library']])$(dialog).addEventListener('close',()=>{
-   if($(dialog).dataset.fromSettings==='true'){$(dialog).dataset.fromSettings='false';if(!$('#settings-dialog').open)$('#settings-dialog').showModal();$(button).focus({preventScroll:true});}
+ if($(dialog).dataset.fromSettings==='true'){$(dialog).dataset.fromSettings='false';if(!$('#settings-dialog').open)$('#settings-dialog').showModal();$(button).focus({preventScroll:true});}
  });
  $('#show-activity').onclick=()=>safe(async()=>{openSettingsTool('#activity-dialog');renderImportActivity(await api.importState());});
  $('#activity-close').onclick=()=>$('#activity-dialog').close();

@@ -16,11 +16,27 @@
   --island-surface: #212121;
   --island-line: #ffffff12;
   --island-radius: 12px;
-  --island-gap: 10px;
+  /* The window's own gutters use the shared spacing scale. */
+  --island-gap: var(--space-2);
   /* Tiles sit close together, the way a contact sheet does. */
   --gallery-gap: 8px;
-  --gallery-pad: 12px;
+  --gallery-pad: var(--space-3);
   --radius-card: 6px;
+  /* With titleBarStyle:'hiddenInset' the renderer starts at x=0 and the
+     native traffic lights float above it (x=22, ~52px wide). Any toolbar
+     that sits at the very left of the window has to clear them. The sidebar
+     normally covers that band; when it is hidden or becomes a drawer the
+     toolbar owns the space, so it switches to this inset. */
+  --traffic-light-inset: 104px;
+  --toolbar-left: 10px;
+}
+body.hide-sidebar {
+  --toolbar-left: var(--traffic-light-inset);
+}
+@media (max-width: 1040px) {
+  body {
+    --toolbar-left: var(--traffic-light-inset);
+  }
 }
 
 /* The window itself ---------------------------------------------------- */
@@ -63,14 +79,14 @@ body.hide-sidebar {
 }
 
 .sidebar {
-  /* 16px of inset on both sides, 16px under the last row. */
-  padding: 0 16px 16px;
+  /* One spacing step on both sides and under the last row. */
+  padding: 0 var(--space-4) var(--space-4);
   /* The island is solid: the window no longer has a translucent sidebar. */
   --sidebar-surface: var(--island-surface);
 }
 
 .inspector {
-  padding: 24px 18px;
+  padding: var(--space-4) var(--space-3);
 }
 
 /* The work area is the background itself. */
@@ -126,6 +142,11 @@ main {
   background: transparent;
   border-bottom: 0;
   padding: 0 10px;
+  /* Keep the traffic-light inset here rather than in a separate, less
+     specific rule: `.filter-bar.library-header` would otherwise win the
+     cascade and slide the show-sidebar button and the Library title under
+     the window controls on small windows. */
+  padding-left: var(--toolbar-left);
 }
 
 .library-header h1 {
@@ -198,9 +219,28 @@ body.light-mode .sidebar nav button.active {
   }
 }
 
-/* Reduced motion -------------------------------------------------------- */
-
-
-body.light-mode .sidebar nav button.active {
-  background: transparent;
+/* Live window resize --------------------------------------------------- */
+/* Dragging a window edge feeds resize events faster than Chromium can
+   repaint. Keeping the sidebar spring, the panel transitions and the
+   translucent layers alive during the drag makes the tile field judder and
+   leaves stale pixels along the newly exposed edges. The renderer marks the
+   window while a resize is in flight; everything here just holds still until
+   it settles. */
+body.resizing .sidebar,
+body.resizing .sidebar *,
+body.resizing .inspector,
+body.resizing .inspector *,
+body.resizing .card,
+body.resizing .card-surface,
+body.resizing button {
+  transition: none !important;
+  animation: none !important;
 }
+body.resizing .sidebar .window-space,
+body.resizing .inspector,
+body.resizing .canvas-status,
+body.resizing .preview-drag-region {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+

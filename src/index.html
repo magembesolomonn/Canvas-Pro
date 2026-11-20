@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' asset: data: blob:; media-src asset:; frame-src asset:; object-src 'none'; style-src 'self' 'sha256-IKhjRCvJlgA3VsuELN7fPr+PkBbifRzWqOb1Vk87ctU=' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' asset: data: blob:; worker-src 'self' blob:;"><title>Canvas Pro</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="sidebar.css"><link rel="stylesheet" href="islands.css"><link rel="stylesheet" href="select.css"></head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' asset: symbol: data: blob:; media-src asset:; frame-src asset:; object-src 'none'; style-src 'self' 'sha256-IKhjRCvJlgA3VsuELN7fPr+PkBbifRzWqOb1Vk87ctU=' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' asset: data: blob:; worker-src 'self' blob:;"><title>Canvas Pro</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="sidebar.css"><link rel="stylesheet" href="islands.css"><link rel="stylesheet" href="select.css"></head>
 <body>
 <a class="skip-link" href="#gallery">Skip to library</a>
 <aside class="sidebar">
- <div class="window-space"><button id="toggle-sidebar" class="icon-button sidebar-toggle" title="Toggle sidebar · ⌘B" aria-label="Toggle sidebar" aria-pressed="true"></button></div><div class="brand"><span class="brand-icon">▦</span><strong>Canvas Pro</strong></div>
+ <div class="window-space"><button id="toggle-sidebar" class="icon-button sidebar-toggle" title="Toggle sidebar · ⌘B" aria-label="Toggle sidebar" aria-pressed="true"></button></div><div class="brand"><span class="brand-icon"></span><strong>Canvas Pro</strong></div>
  <nav id="navigation"></nav>
  <details class="sidebar-section" data-section="collections" open><summary class="section-label"><span>COLLECTIONS</span><button id="add-folder" class="section-add" title="New collection" aria-label="New collection"></button></summary><nav id="folders" aria-label="Collections"></nav></details>
  <details class="sidebar-section" data-section="media" open><summary class="section-label media-label"><span>MEDIA</span></summary><nav id="media-navigation" aria-label="Media"></nav></details>
@@ -29,9 +29,18 @@
   <select id="type" hidden aria-label="File type"><option value="all">All types</option><option value="image">Images</option><option value="video">Videos</option><option value="pdf">PDFs</option><option value="audio">Audio</option><option value="social">Social posts</option><option value="recipe">Recipes</option><option value="link">Web links</option><option value="other">Design &amp; other</option></select>
   <select id="sort" hidden aria-label="Sort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="name">Name A–Z</option><option value="size">Largest first</option></select>
  </div>
+ <div id="quick-filters" class="quick-filters" role="group" aria-label="Filter by file type">
+  <button type="button" data-quick-type="all" aria-pressed="true">All</button>
+  <button type="button" data-quick-type="image" aria-pressed="false">Images</button>
+  <button type="button" data-quick-type="video" aria-pressed="false">Video</button>
+  <button type="button" data-quick-type="audio" aria-pressed="false">Audio</button>
+  <button type="button" data-quick-type="pdf" aria-pressed="false">Documents</button>
+  <button type="button" data-quick-type="link" aria-pressed="false">Links</button>
+  <button type="button" data-quick-type="other" aria-pressed="false">Other</button>
+ </div>
  <div id="tags-bar" class="tags-bar" hidden></div>
  <div id="gallery" class="gallery" tabindex="0" role="listbox" aria-multiselectable="true" aria-label="File library"><div id="gallery-layer"></div></div>
- <div id="empty" class="empty" hidden><div class="empty-icon">▧</div><h2>Bring your files together</h2><p>Drop files or folders here, import them,<br>or copy in Finder and press <kbd>⌘ V</kbd>.</p><button id="empty-import" class="primary">Import your first files</button><button id="empty-open-library" class="empty-link">Open an existing library…</button><small>Images · videos · PDFs · design files · and everything else</small></div>
+ <div id="empty" class="empty" hidden><div class="empty-icon"></div><h2>Bring your files together</h2><p>Drop files or folders here, import them,<br>or copy in Finder and press <kbd>⌘ V</kbd>.</p><button id="empty-import" class="primary">Import your first files</button><button id="empty-open-library" class="empty-link">Open an existing library…</button><small>Images · videos · PDFs · design files · and everything else</small></div>
  <section id="canvas-workspace" class="canvas-workspace" hidden aria-label="Canvas workspace">
   <div class="canvas-actions" role="toolbar" aria-label="Canvas actions">
    <button id="canvas-save-files">Save to Files</button><button id="canvas-export" title="Export canvas">Export…</button>
@@ -55,7 +64,10 @@
  </section>
 </main>
 <aside id="inspector" class="inspector"></aside>
-<div id="preview" class="preview" tabindex="-1" role="dialog" aria-modal="true" aria-label="File preview" hidden><div class="preview-drag-region" aria-hidden="true"></div><button id="close-preview" aria-label="Close preview" title="Close · Esc"></button><div class="preview-body"><div id="preview-content"></div></div><nav class="preview-bottom" aria-label="Preview navigation"><button id="previous" class="preview-arrow" aria-label="Previous file" title="Previous · Left arrow">‹</button><span id="preview-index" aria-live="polite" aria-atomic="true"></span><button id="next" class="preview-arrow" aria-label="Next file" title="Next · Right arrow">›</button></nav></div>
+<!-- The sidebar deliberately stays interactive above the preview, so this
+ dialog does not claim modal semantics: no aria-modal, no focus trap. -->
+<div id="preview" class="preview" tabindex="-1" role="dialog" aria-label="File preview" hidden><div class="preview-drag-region" aria-hidden="true"></div><button id="close-preview" aria-label="Close preview" title="Close · Esc"></button><div class="preview-body"><div id="preview-content"></div></div><nav class="preview-bottom" aria-label="Preview navigation"><button id="previous" class="preview-arrow" aria-label="Previous file" title="Previous · Left arrow"></button><span id="preview-index" aria-live="polite" aria-atomic="true"></span><button id="next" class="preview-arrow" aria-label="Next file" title="Next · Right arrow"></button></nav></div>
+<div id="hover-preview" class="hover-preview" hidden aria-hidden="true"><img alt=""><span class="hover-preview-label"></span></div>
 <div id="import-menu" class="layout-menu import-menu" popover role="menu" aria-label="Import">
 <button id="import" class="primary" type="button" role="menuitem"><span>Import files</span><kbd>⌘ O</kbd></button>
 <button id="import-folder" type="button" role="menuitem">Import folder</button>
@@ -86,8 +98,8 @@
 </div>
 <div id="toast" role="status" hidden></div>
 <dialog id="canvas-dialog" aria-labelledby="canvas-dialog-title"><form id="canvas-dialog-form"><h2 id="canvas-dialog-title">New canvas</h2><p id="canvas-dialog-description">A place for your ideas, saved on this Mac.</p><label id="canvas-target-label">Canvas<select id="canvas-target" aria-label="Canvas"></select></label><label id="canvas-name-label">Name<input id="canvas-name" required maxlength="120" placeholder="Untitled canvas"></label><p id="canvas-dialog-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="canvas-dialog-cancel">Cancel</button><button type="submit" id="canvas-dialog-save" class="primary">Create canvas</button></div></form></dialog>
-<dialog id="folder-dialog" aria-labelledby="folder-dialog-title"><form method="dialog"><h2 id="folder-dialog-title">New collection</h2><p>Group your files without duplicating originals.</p><input id="folder-name" placeholder="Collection name" maxlength="120" required><div class="dialog-actions"><button value="cancel" formnovalidate>Cancel</button><button value="create" class="primary">Create collection</button></div></form></dialog>
-<dialog id="action-dialog" aria-labelledby="action-title"><form id="action-form"><h2 id="action-title"></h2><p id="action-description"></p><input id="action-value" required autocomplete="off"><p id="action-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="action-cancel">Cancel</button><button type="submit" id="action-save" class="primary">Save</button></div></form></dialog>
+<dialog id="folder-dialog" aria-labelledby="folder-dialog-title"><form method="dialog"><h2 id="folder-dialog-title">New collection</h2><p>Group your files without duplicating originals.</p><label for="folder-name" class="sr-only">Collection name</label><input id="folder-name" placeholder="Collection name" maxlength="120" required><div class="dialog-actions"><button value="cancel" formnovalidate>Cancel</button><button value="create" class="primary">Create collection</button></div></form></dialog>
+<dialog id="action-dialog" aria-labelledby="action-title"><form id="action-form"><h2 id="action-title"></h2><p id="action-description"></p><label for="action-value" class="sr-only">Value</label><input id="action-value" required autocomplete="off"><p id="action-error" class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" id="action-cancel">Cancel</button><button type="submit" id="action-save" class="primary">Save</button></div></form></dialog>
 <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
  <div class="settings-shell">
   <aside class="settings-sidebar">
@@ -97,28 +109,28 @@
    </div>
    <nav class="settings-nav" id="settings-nav" aria-label="Settings sections">
     <div class="settings-nav-group">
-     <h3 class="settings-nav-title">Application</h3>
+     <div class="settings-nav-title">Application</div>
      <button type="button" class="settings-nav-item" data-settings-pane="library" aria-current="true"><span class="settings-nav-icon" data-settings-icon="settings" aria-hidden="true"></span><span class="settings-nav-label">Library</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="appearance"><span class="settings-nav-icon" data-settings-icon="appearance" aria-hidden="true"></span><span class="settings-nav-label">Appearance</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="shortcuts"><span class="settings-nav-icon" data-settings-icon="keyboard" aria-hidden="true"></span><span class="settings-nav-label">Shortcuts</span></button>
     </div>
     <div class="settings-nav-group">
-     <h3 class="settings-nav-title">Library</h3>
+     <div class="settings-nav-title">Library</div>
      <button type="button" class="settings-nav-item" data-settings-pane="collections"><span class="settings-nav-icon" data-settings-icon="folder" aria-hidden="true"></span><span class="settings-nav-label">Collections</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="importing"><span class="settings-nav-icon" data-settings-icon="importing" aria-hidden="true"></span><span class="settings-nav-label">Importing</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="maintenance"><span class="settings-nav-icon" data-settings-icon="health" aria-hidden="true"></span><span class="settings-nav-label">Maintenance</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="galleries"><span class="settings-nav-icon" data-settings-icon="grid" aria-hidden="true"></span><span class="settings-nav-label">Galleries</span></button>
     </div>
      <div class="settings-nav-group">
-      <h3 class="settings-nav-title">Browser</h3>
+      <div class="settings-nav-title">Browser</div>
       <button type="button" class="settings-nav-item" data-settings-pane="extensions"><span class="settings-nav-icon" data-settings-icon="extensions" aria-hidden="true"></span><span class="settings-nav-label">Extensions</span></button>
      </div>
      <div class="settings-nav-group">
-      <h3 class="settings-nav-title">Support</h3>
-      <button type="button" class="settings-nav-item" data-settings-pane="feedback"><span class="settings-nav-icon" data-settings-icon="flag" aria-hidden="true"></span><span class="settings-nav-label">Feedback</span></button>
+      <div class="settings-nav-title">Support</div>
+      <button type="button" class="settings-nav-item" data-settings-pane="feedback"><span class="settings-nav-icon" data-settings-icon="feedback" aria-hidden="true"></span><span class="settings-nav-label">Feedback</span></button>
      </div>
     <div class="settings-nav-group">
-     <h3 class="settings-nav-title">Canvas Pro</h3>
+     <div class="settings-nav-title">Canvas Pro</div>
      <button type="button" class="settings-nav-item" data-settings-pane="about"><span class="settings-nav-icon" data-settings-icon="about" aria-hidden="true"></span><span class="settings-nav-label">About</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="search-models"><span class="settings-nav-icon" data-settings-icon="search" aria-hidden="true"></span><span class="settings-nav-label">Search &amp; models</span></button>
     </div>
@@ -145,7 +157,7 @@
 
      <h3 class="settings-section-label">Duplicates</h3>
      <div class="settings-card">
-      <button id="settings-duplicate-review" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Duplicate review</strong><small>Find copies of the same picture</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
+      <button id="settings-duplicate-review" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Duplicate review</strong><small>Find copies of the same picture</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
      </div>
      <p class="settings-note">Identical files are already prevented at import. This compares the pictures themselves, so a resized or re-saved copy is found too.</p>
     </section>
@@ -184,8 +196,8 @@
     <section class="settings-pane" data-settings-pane="importing" aria-label="Importing" hidden>
      <h3 class="settings-section-label">Import</h3>
      <div class="settings-card">
-      <button id="show-activity" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong class="settings-label">Import activity</strong><small>Queue, cancel and retry imports</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
-      <button id="settings-import-files" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Import files</strong><small>Add files to this library</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
+      <button id="show-activity" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong class="settings-label">Import activity</strong><small>Queue, cancel and retry imports</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
+      <button id="settings-import-files" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Import files</strong><small>Add files to this library</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
      </div>
      <p class="settings-note">Originals are copied into the library, never moved. Exact duplicates are detected by checksum.</p>
     </section>
@@ -193,9 +205,9 @@
     <section class="settings-pane" data-settings-pane="maintenance" aria-label="Maintenance" hidden>
      <h3 class="settings-section-label">Your library</h3>
      <div class="settings-card">
-      <button id="check-library" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library health</strong><small>Check your originals for missing or changed files</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
-      <button id="settings-backup" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library backup</strong><small>Copy the whole library to another folder</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
-      <button id="show-library" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library on this Mac</strong><small>Open the folder containing your originals</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
+      <button id="check-library" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library health</strong><small>Check your originals for missing or changed files</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
+      <button id="settings-backup" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library backup</strong><small>Copy the whole library to another folder</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
+      <button id="show-library" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library on this Mac</strong><small>Open the folder containing your originals</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
      </div>
     </section>
 
@@ -206,6 +218,10 @@
       <button type="button" class="settings-row settings-row-radio" role="radio" aria-checked="false" data-layout="waterfall"><span class="settings-radio" aria-hidden="true"></span><span class="settings-copy"><strong>Waterfall</strong><small>Fill columns in order</small></span></button>
       <button type="button" class="settings-row settings-row-radio" role="radio" aria-checked="false" data-layout="justified"><span class="settings-radio" aria-hidden="true"></span><span class="settings-copy"><strong>Justified</strong><small>Fit items into rows</small></span></button>
      </div>
+     <h3 class="settings-section-label">Infinite canvas</h3>
+     <div class="settings-card">
+      <button type="button" class="settings-row settings-row-button" id="settings-infinite"><span class="settings-copy"><strong>Open infinite canvas</strong><small>An endless justified wall you can pan and zoom. ⌥O toggles it; Esc returns here.</small></span></button>
+     </div>
      <h3 class="settings-section-label">Items</h3>
      <div class="settings-card">
       <label class="settings-row settings-row-switch">
@@ -213,13 +229,13 @@
        <input type="checkbox" class="settings-switch" id="settings-file-names">
       </label>
      </div>
-     <p class="settings-note">Thumbnail size lives on the toolbar slider. Your choice is remembered per library.</p>
+     <p class="settings-note">Thumbnail size lives on the toolbar slider. Your choice is remembered across libraries.</p>
     </section>
 
     <section class="settings-pane" data-settings-pane="extensions" aria-label="Extensions" hidden>
      <h3 class="settings-section-label">Browser</h3>
      <div class="settings-card">
-      <button id="show-extension" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Browser capture extension</strong><small>Open browser-ready extension folder</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
+      <button id="show-extension" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Browser capture extension</strong><small>Open browser-ready extension folder</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
      </div>
      <p class="settings-note">Load the folder as an unpacked extension in Helium or Chrome to capture pages straight into your library.</p>
     </section>
@@ -227,7 +243,7 @@
     <section class="settings-pane" data-settings-pane="feedback" aria-label="Feedback" hidden>
      <h3 class="settings-section-label">Feedback</h3>
      <div class="settings-card">
-      <button id="settings-beta" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Beta testing and feedback</strong><small>Export a diagnostics report</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
+      <button id="settings-beta" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Beta testing and feedback</strong><small>Export a diagnostics report</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
      </div>
      <p class="settings-note">Reports include version information and never include your files or queries.</p>
     </section>
@@ -246,7 +262,7 @@
      </div>
      <h3 class="settings-section-label">Legal</h3>
      <div class="settings-card">
-      <button id="settings-licenses-toggle" class="settings-row settings-row-button" type="button" aria-expanded="false" aria-controls="settings-licenses"><span class="settings-copy"><strong>Third-party notices</strong><small>Open-source licences included with Canvas Pro</small></span><span class="settings-chevron" aria-hidden="true">&#8250;</span></button>
+      <button id="settings-licenses-toggle" class="settings-row settings-row-button" type="button" aria-expanded="false" aria-controls="settings-licenses"><span class="settings-copy"><strong>Third-party notices</strong><small>Open-source licences included with Canvas Pro</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
      </div>
      <div class="settings-card settings-card-list" id="settings-licenses" hidden></div>
      <p class="settings-note">Each project is used under its own licence. The full texts ship inside the application.</p>
@@ -273,5 +289,5 @@
  </div>
 </dialog>
 <dialog id="activity-dialog" class="reliability-dialog" aria-labelledby="activity-dialog-title"><div class="dialog-heading"><h2 id="activity-dialog-title">Import activity</h2><button id="activity-close" aria-label="Close import activity"></button></div><p>Imports continue while you browse. Recent file results appear below.</p><div id="import-jobs" class="job-list"></div></dialog>
-<dialog id="health-dialog" class="reliability-dialog" aria-labelledby="health-dialog-title"><div class="dialog-heading"><h2 id="health-dialog-title">Library health</h2><button id="health-close" aria-label="Close library health"></button></div><p>Check your originals for missing files and changes. This check only reads files and never repairs or deletes them.</p><p id="health-summary" role="status">Ready to check your library.</p><progress id="health-progress" value="0" max="1" hidden></progress><div id="health-issues" class="health-issues"></div><div class="dialog-actions"><button id="health-show-library">Show library</button><button id="health-cancel" hidden>Cancel check</button><button id="health-run" class="primary">Check originals</button></div></dialog>
-<script src="motion.js"></script><script src="select.js"></script><script src="selection.js"></script><script src="layout.js"></script><script src="media.js"></script><script src="settings.js"></script><script src="context.js"></script><script src="format-loader.js"></script><script src="reliability.js"></script><script src="view-preferences.js"></script><script src="bookmarks.js"></script><script src="smart-cards.js"></script><script src="tag-vocabulary.js"></script><script src="smart-search.js"></script><script src="tag-suggestions.js"></script><script src="canvas-model.js"></script><script src="canvas-workspace.js"></script><script src="workbench.js"></script><script src="canvas-export.js"></script><script src="sidebar.js"></script><script src="panel-resize.js"></script><script src="command-palette.js"></script><script src="app.js"></script></body></html>
+<dialog id="health-dialog" class="reliability-dialog" aria-labelledby="health-dialog-title"><div class="dialog-heading"><h2 id="health-dialog-title">Library health</h2><button id="health-close" aria-label="Close library health"></button></div><p>Check your originals for missing files and changes. The check itself only reads files; the Locate original action can repair a missing original.</p><p id="health-summary" role="status">Ready to check your library.</p><progress id="health-progress" value="0" max="1" hidden></progress><div id="health-issues" class="health-issues"></div><div class="dialog-actions"><button id="health-show-library">Show library</button><button id="health-cancel" hidden>Cancel check</button><button id="health-run" class="primary">Check originals</button></div></dialog>
+<script src="motion.js"></script><script src="select.js"></script><script src="selection.js"></script><script src="layout.js"></script><script src="infinite-canvas.js"></script><script src="symbols.js"></script><script src="media.js"></script><script src="settings.js"></script><script src="context.js"></script><script src="format-loader.js"></script><script src="reliability.js"></script><script src="view-preferences.js"></script><script src="bookmarks.js"></script><script src="smart-cards.js"></script><script src="tag-vocabulary.js"></script><script src="smart-search.js"></script><script src="tag-suggestions.js"></script><script src="canvas-model.js"></script><script src="canvas-workspace.js"></script><script src="workbench.js"></script><script src="canvas-export.js"></script><script src="sidebar.js"></script><script src="panel-resize.js"></script><script src="command-palette.js"></script><script src="app.js"></script></body></html>

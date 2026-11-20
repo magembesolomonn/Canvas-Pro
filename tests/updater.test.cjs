@@ -312,8 +312,14 @@ test('install stages the new bundle and hands the swap to a detached helper', as
     assert.ok(fs.existsSync(staged));
     assert.equal(openCommand, '/usr/bin/open');
     assert.ok(fs.readFileSync(script, 'utf8').includes('kill -0 "$pid"'));
-    await wait(400);
-    assert.ok(calls.some(call => call[0] === 'quit'));
+    // The detached helper calls quit asynchronously; wait for the event
+    // instead of guessing a fixed delay (flaky under load).
+    {
+      const start = Date.now();
+      while (!calls.some(call => call[0] === 'quit') && Date.now() - start < 4000)
+        await wait(20);
+    }
+    assert.ok(calls.some(call => call[0] === 'quit'), 'the update helper did not quit');
 
     // Run the same helper against a disposable target: it must wait for the
     // old process, move the old bundle aside, put the staged app in place and

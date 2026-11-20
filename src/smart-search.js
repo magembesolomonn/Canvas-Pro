@@ -165,9 +165,9 @@ const SmartSearch=(()=>{
  // downloaded on its own.
  const MODELS=[
   {name:'clip',title:'Visual similarity',size:'156 MB',icon:'sparkles',
-   detail:'Finds images that look like the one you picked, and answers a picture search.'},
+   detail:'Powers Find similar and tag suggestions by comparing images with CLIP vectors.'},
   {name:'florence-2',title:'Description',size:'266 MB',icon:'text',
-   detail:'Writes one sentence about each picture: names your files, suggests tags, and makes pictures findable by what they show.'},
+   detail:'Writes a caption on demand when you ask for tag suggestions: it can name a file and seed its tags.'},
   {name:'text',title:'Text understanding',size:'built into macOS',icon:'book',builtin:true,
    detail:'Understands a whole sentence in your documents and notes, so you can search in your own words.'}];
  const modelRows=new Map();
@@ -276,9 +276,9 @@ const SmartSearch=(()=>{
  // model. It is kept beside the file so its words can be found by a search,
  // and it is what names the file and suggests its tags.
  async function describe(asset){
-  if(!enabled){notify('Turn on local intelligence in Settings → Experimental first.');return '';}
+  if(!enabled){notify('Turn on local intelligence in Settings → Search & models first.');return '';}
   const model=await api.modelState('florence-2');
-  if(!model.ready){notify('Download the description model in Settings → Experimental first.');return '';}
+  if(!model.ready){notify('Download the description model in Settings → Search & models first.');return '';}
   const {caption}=await call('caption',{assetId:asset.id});
   const text=String(caption||'').trim();
   if(!text)return '';
@@ -293,7 +293,7 @@ const SmartSearch=(()=>{
  // Tag suggestions come from the model on this Mac: the picture is compared
  // with the words, and the closest ones are offered. Nothing leaves the Mac.
  async function suggestTags(asset,onTags){
-  if(!enabled||!modelReady){onTags([],'Turn on local intelligence in Settings → Experimental to get tag suggestions.');return;}
+  if(!enabled||!modelReady){onTags([],'Turn on local intelligence in Settings → Search & models to get tag suggestions.');return;}
   try{
    const {vector}=await call('image',{assetId:asset.id});
    if(!vector){onTags([],'A preview is not available for this file yet.');return;}

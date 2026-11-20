@@ -22,3 +22,83 @@ body.collector .collect-toolbar,
 body.collector .download-activity {
   top: 8px;
 }
+
+/* Light OS appearance uses the popup's light palette so the side panel reads
+   as the same product. Dark above stays the default. */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    background: #f4f4f5;
+    color: #1c1c1e;
+  }
+  body.collector {
+    background: #f4f4f5;
+  }
+  .collector-shell {
+    background: #ffffff;
+    border-color: #e2e2e4;
+    color: #1c1c1e;
+  }
+  button,
+  select {
+    border-color: #e2e2e4;
+    background: #ffffff;
+    color: #1c1c1e;
+  }
+  button:hover {
+    background: #f7f7f8;
+  }
+  button:active {
+    background: #e8e8ea;
+  }
+  button.primary {
+    background: #3a3a3c;
+    color: #ffffff;
+  }
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline-color: #7c7c80;
+  }
+  .collect-toolbar input {
+    background: #ffffff;
+    border-color: #e2e2e4;
+    color: #1c1c1e;
+  }
+  header p,
+  #count,
+  .status,
+  .image-choice small {
+    color: #6b6b70;
+  }
+  .status.error {
+    color: #b04a43;
+  }
+  .collect-toolbar,
+  .download-activity {
+    background: #f4f4f5;
+  }
+  .image-choice {
+    background: #ffffff;
+    border-color: #e2e2e4;
+  }
+  .image-choice img,
+  .image-choice video {
+    background: #f7f7f8;
+  }
+  .image-choice input {
+    accent-color: #3a3a3c;
+  }
+  #download-progress {
+    accent-color: #3a3a3c;
+  }
+  #download-progress::-webkit-progress-bar {
+    background: #e2e2e4;
+  }
+  #download-progress::-webkit-progress-value {
+    background: #3a3a3c;
+  }
+  .download-file small {
+    color: #54545a;
+  }
+}

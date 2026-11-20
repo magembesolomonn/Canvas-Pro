@@ -41,11 +41,18 @@
   color: var(--text);
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 
 .select-trigger:hover {
   background: var(--fill-hover, #ffffff0b);
+}
+
+/* The native select is the tabbable control; forward its focus to the visible
+   trigger so keyboard users can see which field is active. */
+.select:focus-within .select-trigger {
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .select-trigger:focus-visible,
@@ -160,7 +167,7 @@
   font: inherit;
   font-size: 13px;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 
 .select-item:hover,

@@ -90,7 +90,6 @@ test('the originals watcher notices a deletion and a restore',async()=>{
     const changed=[];
     watch=createOriginalsWatch({library:lib,onChange:ids=>changed.push(...ids),debounce:25});
     assert.equal(watch.watching,true);
-    await new Promise(resolve=>setTimeout(resolve,80));
     fs.unlinkSync(original);
     assert.ok(await waitFor(()=>lib.asset(id).missing===1),'the watcher did not notice the deleted original');
     fs.writeFileSync(original,'original bytes');

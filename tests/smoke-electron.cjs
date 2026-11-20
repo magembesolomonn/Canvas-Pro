@@ -1,13 +1,24 @@
 // Isolated integration tests: no user's clipboard or library is modified.
 process.env.ASSET_TEST_MODE='1';
 process.env.AGAGWU_DATA_DIR='/private/tmp/asset-library-upgrade-test-'+Date.now();
-const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
 const {app,clipboard,ClipboardItem}=require('electron');const {Library}=require('../electron/library.cjs');const {DatabaseSync}=require('node:sqlite');
 require(process.env.ASSET_LIBRARY_MAIN||'../electron/main.cjs');
+// Optional real-library fixture: explicit env override, then the product's
+// Application Support folders (main.cjs uses "Canvas Pro" and still honours
+// the legacy "Asset Library" data directory).
+function realLibraryRoot(){
+  const support=path.join(os.homedir(),'Library','Application Support');
+  const candidates=process.env.CANVAS_TEST_LIBRARY
+    ? [path.resolve(process.env.CANVAS_TEST_LIBRARY)]
+    : [path.join(support,'Canvas Pro','Library'),path.join(support,'Asset Library','Library')];
+  return candidates.find(root=>fs.existsSync(path.join(root,'library.sqlite')));
+}
 (async()=>{
   const lib=new Library(path.join(process.env.AGAGWU_DATA_DIR,'Library'));
-  const sourceRoot='/Users/solomon/Library/Application Support/Asset Library/Library';
-  if(fs.existsSync(path.join(sourceRoot,'library.sqlite'))){const source=new DatabaseSync(path.join(sourceRoot,'library.sqlite'),{readOnly:true});for(const a of source.prepare('SELECT * FROM assets LIMIT 8').all()){const r=await lib.importFile(path.join(sourceRoot,a.stored));lib.update(r.imported||r.duplicate,{name:a.name});}source.close();}
+  const sourceRoot=realLibraryRoot();
+  if(sourceRoot){const source=new DatabaseSync(path.join(sourceRoot,'library.sqlite'),{readOnly:true});for(const a of source.prepare('SELECT * FROM assets LIMIT 8').all()){const r=await lib.importFile(path.join(sourceRoot,a.stored));lib.update(r.imported||r.duplicate,{name:a.name});}source.close();}
+  else console.log('SMOKE_FIXTURE_SKIPPED real-library fixture unavailable (set CANVAS_TEST_LIBRARY to the folder containing library.sqlite); real-library MP4/m4a video/audio assertions disabled.');
   await lib.importFile(path.join(__dirname,'fixtures/test-tone.wav'));
   for(const name of ['Portrait','Square','Landscape']){const result=await lib.importFile(path.join(__dirname,'fixtures',name+'.png'));lib.update(result.imported,{name:name+' study.png'});}
   // Synthetic metadata reuses one tiny managed image; only this isolated database is populated.
@@ -22,7 +33,18 @@ require(process.env.ASSET_LIBRARY_MAIN||'../electron/main.cjs');
   const perf=await evalJS(`(()=>{const times=[];for(let i=0;i<30;i++){const t=performance.now();$('#gallery').scrollTop=i*7000;renderWindow();times.push(performance.now()-t);}$('#gallery').scrollTop=0;renderWindow();return {total:assets.length,mounted:document.querySelectorAll('.card').length,maxMs:Math.max(...times),averageMs:times.reduce((a,b)=>a+b)/times.length};})()`);
   console.log('GALLERY',JSON.stringify(perf));
   if(perf.mounted>100)throw new Error('Gallery did not virtualize');
-  const previewLayout=await evalJS(`(async()=>{setView('all');const a=assets.find(a=>a.name==='Portrait study.png');select(a.id);openPreview();const image=$('#preview-content img');if(!image.naturalWidth)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Photo preview did not load within eight seconds')),8000);image.addEventListener('load',()=>{clearTimeout(timer);resolve();},{once:true});});const wait=ms=>new Promise(r=>setTimeout(r,ms));await wait(150);const previous=$('#previous').getBoundingClientRect(),counter=$('#preview-index').getBoundingClientRect(),next=$('#next').getBoundingClientRect(),body=$('.preview-body').getBoundingClientRect(),footer=$('.preview-bottom').getBoundingClientRect();const original=selected;$('#next').click();const changed=selected!==original;$('#previous').click();const restored=selected===original;return {noHeader:!document.querySelector('.preview-top'),noFilename:!document.querySelector('#preview-name'),arrowsInFooter:$('#previous').parentElement===$('.preview-bottom')&&$('#next').parentElement===$('.preview-bottom'),horizontal:previous.right<=counter.left&&counter.right<=next.left,footerBelow:footer.top>=body.bottom-1,counter:$('#preview-index').textContent,changed,restored};})()`);console.log('PREVIEW_LAYOUT',JSON.stringify(previewLayout));if(!previewLayout.noHeader||!previewLayout.noFilename||!previewLayout.arrowsInFooter||!previewLayout.horizontal||!previewLayout.footerBelow||!previewLayout.changed||!previewLayout.restored||!previewLayout.counter.includes(' / '))throw new Error('Minimal preview layout or navigation failed');await new Promise(r=>setTimeout(r,150));fs.writeFileSync('/private/tmp/canvas-minimal-preview.png',(await win.webContents.capturePage()).toPNG());await evalJS('closePreview()');
+  const previewLayout=await evalJS(`(async()=>{setView('all');const a=assets.find(a=>a.name==='Portrait study.png');select(a.id);openPreview();const image=$('#preview-content img');if(!image.naturalWidth)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Photo preview did not load within eight seconds')),8000);image.addEventListener('load',()=>{clearTimeout(timer);resolve();},{once:true});});const wait=ms=>new Promise(r=>setTimeout(r,ms));
+// The preview reveals from its trigger, so its boxes move for a few frames
+// after the image loads. Wait for the footer to stop moving before measuring,
+// otherwise "footerBelow" is a coin flip.
+let lastFooter=null;
+for(let i=0;i<80;i++){
+ await wait(25);
+ const box=$('.preview-bottom').getBoundingClientRect();
+ if(lastFooter&&Math.abs(box.top-lastFooter)<0.5)break;
+ lastFooter=box.top;
+}
+const previous=$('#previous').getBoundingClientRect(),counter=$('#preview-index').getBoundingClientRect(),next=$('#next').getBoundingClientRect(),body=$('.preview-body').getBoundingClientRect(),footer=$('.preview-bottom').getBoundingClientRect();const original=selected;$('#next').click();const changed=selected!==original;$('#previous').click();const restored=selected===original;return {noHeader:!document.querySelector('.preview-top'),noFilename:!document.querySelector('#preview-name'),arrowsInFooter:$('#previous').parentElement===$('.preview-bottom')&&$('#next').parentElement===$('.preview-bottom'),horizontal:previous.right<=counter.left&&counter.right<=next.left,footerBelow:footer.top>=body.bottom-1,counter:$('#preview-index').textContent,changed,restored};})()`);console.log('PREVIEW_LAYOUT',JSON.stringify(previewLayout));if(!previewLayout.noHeader||!previewLayout.noFilename||!previewLayout.arrowsInFooter||!previewLayout.horizontal||!previewLayout.footerBelow||!previewLayout.changed||!previewLayout.restored||!previewLayout.counter.includes(' / '))throw new Error('Minimal preview layout or navigation failed');await new Promise(r=>setTimeout(r,150));fs.writeFileSync('/private/tmp/canvas-minimal-preview.png',(await win.webContents.capturePage()).toPNG());await evalJS('closePreview()');
   const video=await evalJS("assets.find(a=>kind(a)==='video')?.id");
   if(video){const result=await evalJS(`(async()=>{select('${video}');openPreview();const m=previewPlayer.media;await new Promise((resolve,reject)=>{if(m.readyState>=1)return resolve();m.addEventListener('loadedmetadata',resolve,{once:true});m.addEventListener('error',()=>reject(new Error('Video load failed')),{once:true});});m.currentTime=Math.min(8,m.duration/2);await new Promise(resolve=>m.addEventListener('seeked',resolve,{once:true}));const info=await getMediaInfo(assetById.get('${video}'),true);return {duration:m.duration,playing:!m.paused,seek:m.currentTime,poster:info.poster,width:info.width,height:info.height};})()`);console.log('VIDEO',JSON.stringify(result));if(!result.width||!result.height)throw new Error('Video dimensions were not extracted');await evalJS('closePreview()');}
   if(video){

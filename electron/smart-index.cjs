@@ -69,6 +69,14 @@ async function embedTexts(texts){
   }
 }
 const MODEL='clip-vit-base-patch32-q8-v1';
+// Stored vectors are 512 little-endian floats. Reading them through DataView
+// costs one method call per component; a Float32Array view is direct access.
+// SQLite buffers can begin at any byte offset, so copy when unaligned.
+function floatVector(bytes){
+  if(!bytes||bytes.byteLength!==2048)return null;
+  if(bytes.byteOffset%4===0)return new Float32Array(bytes.buffer,bytes.byteOffset,512);
+  return new Float32Array(Uint8Array.from(bytes).buffer);
+}
 const visualRetryDelays=[1,5,30,60].map(minutes=>minutes*60000);
 const colors={red:[210,55,55],orange:[225,135,40],yellow:[220,205,60],green:[65,150,75],blue:[50,110,200],purple:[135,75,175],pink:[215,125,165],brown:[125,90,55],black:[25,25,25],white:[235,235,235],grey:[135,135,135]};
 function palette(image){if(!image||image.isEmpty())return [];const {width,height}=image.getSize(),scale=Math.min(1,64/Math.max(width,height));const tiny=scale===1?image:image.resize({width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))});const bytes=tiny.toBitmap(),bins=new Map();for(let i=0;i<bytes.length;i+=4){if(bytes[i+3]<128)continue;const b=bytes[i],g=bytes[i+1],r=bytes[i+2],key=(r>>5)*64+(g>>5)*8+(b>>5),bin=bins.get(key)||[0,0,0,0];bin[0]+=r;bin[1]+=g;bin[2]+=b;bin[3]++;bins.set(key,bin);}const chosen=[];for(const bin of [...bins.values()].sort((a,b)=>b[3]-a[3])){const rgb=bin.slice(0,3).map(v=>Math.round(v/bin[3]));if(chosen.some(c=>c.rgb.reduce((n,v,i)=>n+(v-rgb[i])**2,0)<1800))continue;const hex='#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join('');let color='grey',distance=Infinity;for(const [name,value]of Object.entries(colors)){const d=value.reduce((n,v,i)=>n+(v-rgb[i])**2,0);if(d<distance){distance=d;color=name;}}chosen.push({hex,name:color,rgb});if(chosen.length===6)break;}return chosen.map(({hex,name})=>({hex,name}));}
@@ -228,12 +236,11 @@ class SmartIndex{
      while(!this.closed&&cursor<lastRow){
        const rows=select.all(cursor,lastRow,MODEL,batchSize);
        for(const row of rows){
-         const bytes=row.vector;
-         if(bytes.byteLength!==2048)continue;
-         const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+         const values=floatVector(row.vector);
+         if(!values)continue;
          let dot=0,norm=0;
          for(let i=0;i<512;i++){
-           const v=view.getFloat32(i*4,true);
+           const v=values[i];
            dot+=v*vector[i];norm+=v*v;
          }
          const similarity=dot/Math.sqrt(norm*queryNorm);
@@ -256,12 +263,11 @@ class SmartIndex{
      while(!this.closed&&cursor<lastRow){
        const rows=select.all(cursor,lastRow,TEXT_MODEL,batchSize);
        for(const row of rows){
-         const bytes=row.vector;
-         if(bytes.byteLength!==2048)continue;
-         const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+         const values=floatVector(row.vector);
+         if(!values)continue;
          let dot=0,norm=0;
          for(let i=0;i<512;i++){
-           const v=view.getFloat32(i*4,true);
+           const v=values[i];
            dot+=v*understood[i];norm+=v*v;
          }
          const similarity=dot/Math.sqrt(norm||1);
@@ -333,4 +339,4 @@ class SmartIndex{
 
  async close(){this.closed=true;clearTimeout(this.timer);this.activeController?.abort();await this.active;}
 }
-module.exports={SmartIndex,palette,expand,MODEL};
+module.exports={SmartIndex,palette,expand};

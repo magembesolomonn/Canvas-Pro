@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const dns = require('node:dns');
 const { assertPublicHost } = require('../electron/browser-fetch.cjs');
+const { networkBypassEnabled, signedUpdatesRequired } = require('../electron/test-mode.cjs');
 const { CaptureBridge } = require('../electron/capture-bridge.cjs');
 const { Library } = require('../electron/library.cjs');
 
@@ -47,4 +48,18 @@ test('capture bridge refuses private media URLs unless explicitly allowed', asyn
     library.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a launch-time environment variable cannot enable the private-network escape hatch in an installed app', () => {
+  assert.equal(networkBypassEnabled({ ASSET_TEST_MODE: '1' }, true), true);
+  assert.equal(networkBypassEnabled({ ASSET_TEST_MODE: '1' }, false), false);
+  assert.equal(networkBypassEnabled({ ASSET_TEST_MODE: '1' }, undefined), false);
+  assert.equal(networkBypassEnabled({}, true), false);
+});
+
+test('installed apps require signed updates regardless of the launch environment', () => {
+  assert.equal(signedUpdatesRequired({}, false), true);
+  assert.equal(signedUpdatesRequired({ CANVAS_REQUIRE_SIGNED_UPDATES: '0' }, false), true);
+  assert.equal(signedUpdatesRequired({}, true), false);
+  assert.equal(signedUpdatesRequired({ CANVAS_REQUIRE_SIGNED_UPDATES: '1' }, true), true);
 });

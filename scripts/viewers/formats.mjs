@@ -3,10 +3,22 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {ThreeMFLoader} from 'three/addons/loaders/3MFLoader.js';
 import {ColladaLoader} from 'three/addons/loaders/ColladaLoader.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-import {unzipSync,strFromU8} from 'fflate';
+import {strFromU8} from 'fflate';
 const models=['3ds','3mf','dae','ifc','ply','stl','glb'];
 const documents=['epub','html','htm','mhtml','mht'];
-function unpack(bytes){let total=0;return unzipSync(bytes,{filter:f=>{total+=f.originalSize;if(f.originalSize>32*1024*1024||total>100*1024*1024)throw Error('This archive is too large to preview.');return true;}});}
+// Inflate in a disposable worker so a forged ZIP header cannot lock the main
+// thread. The worker enforces both the declared-size and actual-size caps.
+function unpack(bytes,ownCleanup){
+ return new Promise((resolve,reject)=>{
+  const worker=new Worker('epub-worker.js');let settled=false;
+  const finish=(error,files)=>{if(settled)return;settled=true;clearTimeout(timer);worker.terminate();if(error)reject(error);else resolve(files);};
+  const timer=setTimeout(()=>finish(Error('EPUB decoding exceeded its time limit.')),15000);
+  ownCleanup(()=>finish(new DOMException('Preview closed','AbortError')));
+  worker.onmessage=event=>{if(event.data.type==='result')finish(null,event.data.files);else finish(Error(event.data.error));};
+  worker.onerror=event=>finish(Error(event.message||'The EPUB decoder could not be started.'));
+  worker.postMessage({bytes:bytes.buffer},[bytes.buffer]);
+ });
+}
 function safeDocument(html,resolveImage=()=>null){
  const parsed=new DOMParser().parseFromString(html,'text/html');
  parsed.querySelectorAll('script,style,link,meta,base,iframe,object,embed,form,input,button,svg,math,video,audio,source').forEach(e=>e.remove());
@@ -19,8 +31,8 @@ function safeDocument(html,resolveImage=()=>null){
 }
 function dataImage(bytes,name){const ext=name.split('.').at(-1).toLowerCase();const mime={jpg:'jpeg',jpeg:'jpeg',png:'png',gif:'gif',webp:'webp',avif:'avif'}[ext];if(!mime)return null;let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));return 'data:image/'+mime+';base64,'+btoa(binary);}
 function archivePath(base,href){const url=new URL(href,'https://archive.invalid/'+base);return decodeURIComponent(url.pathname.slice(1));}
-function epub(bytes,root){
- const files=unpack(bytes),xml=name=>new DOMParser().parseFromString(strFromU8(files[name]||new Uint8Array()),'application/xml');
+async function epub(bytes,root,ownCleanup){
+ const files=await unpack(bytes,ownCleanup),xml=name=>new DOMParser().parseFromString(strFromU8(files[name]||new Uint8Array()),'application/xml');
  const packageName=xml('META-INF/container.xml').getElementsByTagName('rootfile')[0]?.getAttribute('full-path');if(!packageName||!files[packageName])throw Error('The EPUB package could not be read.');
  const pkg=xml(packageName),manifest=new Map([...pkg.getElementsByTagName('item')].map(i=>[i.getAttribute('id'),archivePath(packageName,i.getAttribute('href'))]));
  const chapters=[...pkg.getElementsByTagName('itemref')].map(i=>manifest.get(i.getAttribute('idref'))).filter(n=>files[n]);if(!chapters.length)throw Error('This EPUB has no readable chapters.');
@@ -85,4 +97,4 @@ window.CanvasFormatEngines={supports:ext=>models.includes(ext)||documents.includ
  const stop=cleanup;cleanup=()=>{clearTimeout(timer);stop();};
  worker.onmessage=event=>{clearTimeout(timer);worker.terminate();if(disposed)return;if(event.data.error){root.append(status);status.textContent=event.data.error;return;}url=URL.createObjectURL(new Blob([event.data.png],{type:'image/png'}));const img=document.createElement('img');img.className='image-preview';img.alt=asset.name;img.src=url;root.append(img);};
  worker.onerror=()=>{clearTimeout(timer);worker.terminate();if(!disposed){root.append(status);status.textContent='EPS decoder could not be loaded.';}};worker.postMessage(bytes.buffer,[bytes.buffer]);
- }else if(asset.ext==='epub')epub(bytes,root);else if(['mhtml','mht'].includes(asset.ext))mhtml(bytes,root);else if(asset.ext==='swf'){if(!window.RufflePlayer?.newest){window.RufflePlayer={config:{publicPath:new URL('vendor/ruffle/',document.baseURI).href,allowNetworking:'none',openUrlMode:'deny'}};await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='vendor/ruffle/ruffle.js';script.onload=resolve;script.onerror=()=>reject(Error('SWF engine unavailable.'));document.head.append(script);});}if(disposed)return;const ruffle=window.RufflePlayer?.newest();if(!ruffle)throw Error('The SWF preview engine could not be loaded.');const player=ruffle.createPlayer();root.append(player);await player.ruffle().load({data:bytes,autoplay:'on',allowScriptAccess:false,allowNetworking:'none',openUrlMode:'deny'});cleanup=()=>player.remove();}else root.append(safeDocument(new TextDecoder().decode(bytes),src=>src.startsWith('data:')?src:null));}catch(e){if(disposed)return;root.replaceChildren(status);status.textContent=e.message||'This file could not be previewed.';}})();return {element:root,dispose(){disposed=true;controller.abort();cleanup();root.remove();}};}};
+ }else if(asset.ext==='epub')await epub(bytes,root,ownCleanup);else if(['mhtml','mht'].includes(asset.ext))mhtml(bytes,root);else if(asset.ext==='swf'){if(!window.RufflePlayer?.newest){window.RufflePlayer={config:{publicPath:new URL('vendor/ruffle/',document.baseURI).href,allowNetworking:'none',openUrlMode:'deny'}};await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='vendor/ruffle/ruffle.js';script.onload=resolve;script.onerror=()=>reject(Error('SWF engine unavailable.'));document.head.append(script);});}if(disposed)return;const ruffle=window.RufflePlayer?.newest();if(!ruffle)throw Error('The SWF preview engine could not be loaded.');const player=ruffle.createPlayer();root.append(player);await player.ruffle().load({data:bytes,autoplay:'on',allowScriptAccess:false,allowNetworking:'none',openUrlMode:'deny'});cleanup=()=>player.remove();}else root.append(safeDocument(new TextDecoder().decode(bytes),src=>src.startsWith('data:')?src:null));}catch(e){if(disposed)return;root.replaceChildren(status);status.textContent=e.message||'This file could not be previewed.';}})();return {element:root,dispose(){disposed=true;controller.abort();cleanup();root.remove();}};}};

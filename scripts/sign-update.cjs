@@ -3,10 +3,11 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 // Usage: node scripts/sign-update.cjs <SHA256SUMS.txt> [private-key.pem] [update.sig]
+// Set CANVAS_UPDATE_KEY to a private key path instead of the second argument.
 // The private key is generated once and stored outside the app bundle. Only the
 // public half is embedded in electron/update-signing.cjs.
 const file = process.argv[2];
-const keyFile = process.argv[3] || path.join(__dirname, '../audits/update-signing.key');
+const keyFile = process.env.CANVAS_UPDATE_KEY || process.argv[3] || path.join(__dirname, '../audits/update-signing.key');
 const signatureFile = process.argv[4] || path.join(path.dirname(file || '.'), 'update.sig');
 if (!file) {
   console.error('Usage: node scripts/sign-update.cjs <SHA256SUMS.txt> [private-key.pem] [update.sig]');

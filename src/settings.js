@@ -42,9 +42,12 @@
       const dialog = $('#settings-dialog');
       if (!dialog) return;
       for (const pane of dialog.querySelectorAll('.settings-pane')) this.panes.set(pane.dataset.settingsPane, pane);
+      for (const chevron of dialog.querySelectorAll('.settings-chevron')) {
+        if (!chevron.firstChild) chevron.append(glyph('chevronRight', { size: 14 }));
+      }
       for (const item of dialog.querySelectorAll('.settings-nav-item')) {
         const icon = item.querySelector('.settings-nav-icon');
-        if (icon) icon.append(glyph(icon.dataset.settingsIcon));
+        if (icon) icon.append(glyph(icon.dataset.settingsIcon, { size: 16 }));
         this.navItems.push(item);
         this.titles.set(item.dataset.settingsPane, item.querySelector('.settings-nav-label').textContent);
         item.addEventListener('click', () => this.show(item.dataset.settingsPane));
@@ -62,6 +65,7 @@
       this.buildShortcuts();
       this.buildLicenses();
       this.wireAppearance();
+      this.wireRadioKeys('#settings-theme', '[data-theme]');
       // The switches describe the resolved appearance, so they follow a theme
       // change made from this pane without waiting for it to be reopened.
       api.onAppearance(state => {
@@ -69,6 +73,7 @@
         if (pane && !pane.hidden) this.syncAppearance(state);
       });
       this.wireLayouts();
+      this.wireRadioKeys('#settings-layouts', '[data-layout]');
       this.wireExperimental();
 
       // A modal dialog makes everything outside it inert, so close Settings
@@ -78,6 +83,10 @@
         $('#add-folder').click();
       };
       $('#settings-import-files').onclick = () => importDialog();
+      $('#settings-infinite').onclick = () => {
+        $('#settings-dialog').close();
+        window.InfiniteCanvas?.start();
+      };
       $('#settings-check-updates').onclick = () => this.checkUpdates();
       $('#settings-licenses-toggle').onclick = event => {
         const card = $('#settings-licenses');
@@ -90,6 +99,33 @@
 
     pane(name) {
       return this.panes.get(name) || null;
+    },
+
+    // A radiogroup promises arrow-key navigation and one tab stop. The native
+    // buttons already handle click/Enter/Space; this adds the missing arrows.
+    wireRadioKeys(selector, itemSelector) {
+      const group = $(selector);
+      if (!group) return;
+      const items = () => [...group.querySelectorAll(itemSelector)];
+      const sync = () => {
+        const list = items();
+        const checked = list.find(item => item.getAttribute('aria-checked') === 'true') || list[0];
+        for (const item of list) item.tabIndex = item === checked ? 0 : -1;
+      };
+      sync();
+      group.addEventListener('keydown', event => {
+        if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        const list = items();
+        const index = list.indexOf(document.activeElement);
+        if (index < 0) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? list.length - 1
+          : (index + (event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+        list[next].focus();
+        list[next].click();
+        sync();
+      });
+      group.addEventListener('click', () => queueMicrotask(sync));
     },
 
     open(name) {
@@ -136,6 +172,17 @@
         group.hidden = !visible;
       }
       if (needle && first) this.show(first.dataset.settingsPane);
+      // With no matches the rail is empty but the old pane stayed on screen
+      // with no explanation, which looked like a broken search.
+      let empty = $('#settings-no-results');
+      if (!empty && needle && !first) {
+        empty = document.createElement('p');
+        empty.id = 'settings-no-results';
+        empty.className = 'settings-note';
+        empty.textContent = 'No settings found. Try a different search.';
+        $('#settings-scroll').append(empty);
+      }
+      if (empty) empty.hidden = !needle || !!first;
     },
 
     refresh(name) {
@@ -283,7 +330,7 @@
         const chevron = document.createElement('span');
         chevron.className = 'settings-chevron';
         chevron.setAttribute('aria-hidden', 'true');
-        chevron.textContent = '›';
+        chevron.append(glyph('chevronRight', { size: 14 }));
         button.append(copy, chevron);
         button.onclick = () => {
           $('#settings-dialog').close();
@@ -340,6 +387,9 @@
       if (this.updating) return;
       const button = $('#settings-check-updates'), status = $('#settings-update-status'), bar = $('#settings-update-progress');
       const updateApi = this.updateApi || api;
+      // The command palette can start this flow with Settings closed, so the
+      // in-pane status line is not enough: mirror every step into a toast.
+      const toast = message => { if (typeof notify === 'function') notify(message); };
       this.updating = true;
       this.pendingUpdateVersion = '';
       button.disabled = true;
@@ -347,27 +397,41 @@
         bar.hidden = true;
         bar.value = 0;
       }
-      const unsubscribe = updateApi.onUpdateProgress?.(value => this.updateProgress(value));
+      toast('Checking for updates…');
+      const unsubscribe = updateApi.onUpdateProgress?.(value => {
+        this.updateProgress(value);
+        const version = this.pendingUpdateVersion ? ' ' + this.pendingUpdateVersion : '';
+        if (value?.phase === 'download')
+          toast('Downloading Canvas Pro' + version + (Number.isFinite(value.percent) ? ' — ' + value.percent + '%' : '') + '…');
+        else if (value?.phase === 'install') toast('Installing Canvas Pro' + version + '… The app will restart.');
+      });
       try {
         status.textContent = 'Checking GitHub for updates…';
         await this.syncVersion();
         const update = await updateApi.updateCheck();
         if (!update.available) {
           status.textContent = 'Canvas Pro ' + update.currentVersion + ' is up to date.';
+          toast('Canvas Pro ' + update.currentVersion + ' is up to date.');
           return;
         }
         this.pendingUpdateVersion = update.version;
         if (!update.installable) {
-          status.textContent = 'Canvas Pro ' + update.version + ' is available, but it cannot install automatically. ' + update.reason;
+          const message = 'Canvas Pro ' + update.version + ' is available, but it cannot install automatically. ' + update.reason;
+          status.textContent = message;
+          toast(message);
           return;
         }
         status.textContent = 'Downloading Canvas Pro ' + update.version + '…';
+        toast('Downloading Canvas Pro ' + update.version + '…');
         await updateApi.updateDownload();
         status.textContent = 'Installing Canvas Pro ' + update.version + '… The app will restart.';
+        toast('Installing Canvas Pro ' + update.version + '… The app will restart.');
         await updateApi.updateInstall();
         status.textContent = 'Canvas Pro is restarting with version ' + update.version + '…';
+        toast('Canvas Pro is restarting with version ' + update.version + '…');
       } catch (error) {
         status.textContent = this.updateMessage(error);
+        toast(status.textContent);
         if (bar) bar.hidden = true;
       } finally {
         this.updating = false;

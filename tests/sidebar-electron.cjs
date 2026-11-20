@@ -52,9 +52,11 @@ function key(keyCode,modifiers=[]) {
   await run("$('#show-sidebar').click()");
   await until(()=>run("!document.body.classList.contains('hide-sidebar')"));
   await pause(240);
-  key('S',['meta']);
+  // ⌘B is the sidebar chord. ⌘S is not bound to it: it used to hide the
+  // sidebar, which is not what the save chord should do.
+  key('B',['meta']);
   await until(()=>run("document.body.classList.contains('hide-sidebar') && $('.sidebar').inert"));
-  key('S',['meta']);
+  key('B',['meta']);
   await until(()=>run("!document.body.classList.contains('hide-sidebar') && !$('.sidebar').inert"));
   await pause(240);
   await run("$('[data-section=media] > summary').click()");
