@@ -11,23 +11,6 @@
   --radius-card: 8px;
   --radius-button: 6px;
   --radius-input: 6px;
-  /* Spacing: one five-step rhythm, from a hairline of breathing room to a
-     full section break. Panels, toolbars and card footers all read from it. */
-  --space-1: 5px;
-  --space-2: 10px;
-  --space-3: 15px;
-  --space-4: 20px;
-  --space-5: 40px;
-  --space-6: 80px;
-  /* Type: a reading size, a UI size, and four display sizes. */
-  --text-xs: 13px;
-  --text-sm: 14px;
-  --text-md: 16px;
-  --text-lg: 18px;
-  --text-xl: 20px;
-  --text-2xl: 28px;
-  --text-3xl: 38px;
-  --text-4xl: 48px;
   color-scheme: dark;
   /* Surfaces. The opaque dark mode swaps these for OpenCode's palette. */
   --surface-app: #202020;
@@ -345,9 +328,6 @@ svg {
   background: color-mix(in srgb, currentColor 14%, transparent);
   color: var(--text);
 }
-.media-label {
-  margin-top: 23px;
-}
 nav {
   display: flex;
   flex-direction: column;
@@ -571,15 +551,13 @@ kbd {
   display: block;
 }
 .card.selected .card-surface {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 2px var(--accent);
+  border-color: #bdbdbd;
 }
 .card:hover .card-surface {
   border-color: #ffffff40;
 }
 .card.selected:hover .card-surface {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 2px var(--accent);
+  border-color: #bdbdbd;
 }
 .duration {
   position: absolute;
@@ -637,14 +615,6 @@ body.hide-file-names .card-meta {
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
   text-shadow: none;
-}
-.card-detail {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  letter-spacing: 0.02em;
 }
 .file-placeholder {
   width: 100%;
@@ -947,8 +917,8 @@ body.light-mode .chip button:hover {
 .properties {
   display: grid;
   grid-template-columns: 77px 1fr;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
+  gap: 10px;
+  font-size: 10px;
 }
 .properties dt {
   color: #858585;
@@ -977,41 +947,6 @@ body.light-mode .chip button:hover {
   gap: 7px;
   flex-wrap: wrap;
 }
-/* Eagle keeps its facets visible above the grid. Our first facet is type:
-   one row of chips that mirrors the hidden select and the View menu. */
-.quick-filters {
-  display: flex;
-  flex: none;
-  gap: var(--space-1);
-  padding: 0 var(--space-3) var(--space-2);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.quick-filters::-webkit-scrollbar { display: none; }
-.quick-filters button {
-  flex: none;
-  height: 26px;
-  padding: 0 var(--space-2);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--fill-field);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color var(--duration-instant) var(--ease-out), color var(--duration-instant) var(--ease-out);
-}
-.quick-filters button:hover { background: var(--fill-hover); color: var(--text); }
-.quick-filters button[aria-pressed="true"] {
-  background: var(--fill-active);
-  border-color: var(--line-field);
-  color: var(--text);
-}
-.quick-filters button:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) {
-  .quick-filters button { transition: none; }
-}
 .tags-bar button {
   font-size: 10px;
 }
@@ -1031,46 +966,6 @@ body.light-mode .tags-bar button.primary:hover {
   z-index: 10;
   display: flex;
   flex-direction: column;
-}
-/* A hover preview is a glance, not a destination: it never takes focus or
-   pointer events, and it disappears the moment the pointer leaves the tile. */
-.hover-preview {
-  position: fixed;
-  z-index: 9;
-  left: 0;
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  max-width: 480px;
-  max-height: 480px;
-  padding: var(--space-1);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  background: var(--surface-menu);
-  box-shadow: 0 12px 32px #0007;
-  pointer-events: none;
-}
-.hover-preview img {
-  display: block;
-  max-width: 100%;
-  max-height: 440px;
-  object-fit: contain;
-  border-radius: calc(var(--radius-card) - 2px);
-  background: var(--surface-field);
-}
-.hover-preview-label {
-  padding: 0 2px 2px;
-  font-size: var(--text-xs);
-  line-height: 1.2;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-body.light-mode .hover-preview {
-  background: var(--surface-menu);
-  box-shadow: 0 12px 32px #0002;
 }
 /* In the viewer the sidebar and File Details keep their place: the preview
    occupies only the middle column. Their own visibility still comes from the
@@ -1620,6 +1515,13 @@ body.hide-sidebar {
 }
 .icon-button:active {
   transform: scale(0.96);
+}
+/* Rows in the two navigation rails only change fill when chosen. A press
+   scale made the sidebar and Settings feel like they bounced under the
+   pointer, so those rows keep their geometry completely still. */
+.sidebar button:active,
+.settings-dialog button:active {
+  transform: none;
 }
 @media (prefers-reduced-motion: no-preference) {
   .stack-card {
@@ -2287,17 +2189,17 @@ dialog {
 /* Settings — a two-pane preferences window: searchable rail on the left,
    one focused pane on the right. */
 .settings-dialog {
-  /* The rail keeps its own width so the app's narrow-window rules cannot
-     squeeze it away. */
-  --settings-sidebar: 200px;
-  width: min(920px, 94vw);
-  height: min(664px, 88vh);
+  /* A roomier two-pane window: a wide rail of labelled sections and a calm
+     content column of grouped cards, as in macOS System Settings. */
+  --settings-sidebar: 240px;
+  width: min(1080px, 94vw);
+  height: min(820px, 90vh);
   max-width: none;
   max-height: none;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: var(--radius-window);
-  background: var(--panel);
+  border-radius: 18px;
+  background: var(--surface-app);
   color: var(--text);
   overflow: hidden;
   box-shadow: none;
@@ -2336,12 +2238,12 @@ dialog {
   position: relative;
   display: flex;
   align-items: center;
-  height: 32px;
-  margin: 12px 12px 8px;
-  padding: 0 12px;
+  height: 38px;
+  margin: 18px 16px 10px;
+  padding: 0 14px;
   border: 1px solid transparent;
-  border-radius: 16px;
-  background: #ffffff0a;
+  border-radius: 19px;
+  background: var(--fill-active);
 }
 .settings-search-icon {
   display: grid;
@@ -2357,8 +2259,8 @@ dialog {
   height: 15px;
 }
 .settings-search:focus-within {
-  border-color: #ffffff45;
-  background: #ffffff12;
+  border-color: var(--line-field);
+  background: var(--fill-active);
 }
 .settings-search input {
   flex: 1;
@@ -2397,8 +2299,7 @@ body.light-mode .settings-search input:focus-visible {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  /* Same inset as the app sidebar, so icon and name columns line up. */
-  padding: 0 16px 16px;
+  padding: 0 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -2406,20 +2307,18 @@ body.light-mode .settings-search input:focus-visible {
 .settings-nav-group {
   display: flex;
   flex-direction: column;
-  /* The app sidebar's item rhythm. */
-  gap: 8px;
+  gap: 6px;
 }
 .settings-nav-group + .settings-nav-group {
-  margin-top: 8px;
+  margin-top: 20px;
 }
 .settings-nav-title {
-  margin: 12px 0 8px;
+  margin: 14px 8px 6px;
   padding: 0;
-  /* Same heading treatment as the app sidebar sections. */
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 11px;
+  font-weight: 600;
   line-height: 1.6;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--section-ink);
 }
@@ -2428,19 +2327,16 @@ body.light-mode .settings-search input:focus-visible {
 .settings-nav-item {
   display: flex;
   align-items: center;
-  /* Same icon-to-name gap as .sidebar nav button. */
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  min-height: 32px;
-  padding: 7px 8px;
+  min-height: 38px;
+  padding: 8px 10px;
   margin-inline: -8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
   color: var(--text);
-  /* Body: 13px at 160%, the sidebar's line box. The shorthand carries the
-     line height; a separate declaration after it would be reset. */
-  font: 13px/1.6 var(--app-font);
+  font: 14px/1.5 var(--app-font);
   text-align: left;
   white-space: nowrap;
 }
@@ -2459,14 +2355,14 @@ body.light-mode .settings-search input:focus-visible {
 .settings-nav-icon {
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   flex: none;
   color: var(--muted);
 }
 .settings-nav-icon .sf-symbol {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 
 .settings-body {
@@ -2474,15 +2370,16 @@ body.light-mode .settings-search input:focus-visible {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, #ffffff 7%) 0, var(--panel) 260px);
+  /* The content column is the window surface; cards sit a step above it. */
+  background: var(--surface-app);
 }
 .settings-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 74px;
-  padding: 22px 26px 12px;
+  height: 88px;
+  padding: 24px 32px 12px;
   -webkit-app-region: drag;
 }
 .settings-header h2 {
@@ -2511,22 +2408,23 @@ body.light-mode .settings-search input:focus-visible {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 26px 28px;
+  padding: 0 32px 36px;
 }
 .settings-section-label {
-  margin: 24px 0 8px;
-  font-size: 11px;
+  margin: 30px 0 14px;
+  font-size: 20px;
+  line-height: 1.3;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--muted);
+  letter-spacing: -0.4px;
+  color: var(--text);
 }
 .settings-pane:first-child .settings-section-label {
-  margin-top: 4px;
+  margin-top: 18px;
 }
 .settings-card {
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel) 82%, #ffffff 5%);
+  border-radius: 16px;
+  background: var(--surface-panel);
   overflow: hidden;
 }
 .settings-card > .settings-row + .settings-row,
@@ -2536,13 +2434,14 @@ body.light-mode .settings-search input:focus-visible {
 .settings-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   width: 100%;
-  padding: 11px 15px;
+  min-height: 60px;
+  padding: 14px 20px;
   border: 0;
   background: transparent;
   color: var(--text);
-  font: 13px var(--app-font);
+  font: 14px var(--app-font);
   text-align: left;
   white-space: normal;
 }
@@ -2564,12 +2463,12 @@ body.light-mode .settings-search input:focus-visible {
   gap: 2px;
 }
 .settings-copy strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 .settings-copy small {
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--muted);
 }
 .settings-subtle {
@@ -2586,9 +2485,9 @@ body.light-mode .settings-search input:focus-visible {
   height: 14px;
 }
 .settings-note {
-  margin: 10px 2px 0;
-  font-size: 11px;
-  line-height: 1.5;
+  margin: 12px 2px 0;
+  font-size: 12px;
+  line-height: 1.55;
   color: var(--muted);
 }
 .settings-row-actions {
@@ -2617,7 +2516,7 @@ body.light-mode .settings-search input:focus-visible {
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--panel) 82%, #ffffff 5%);
+  background: var(--surface-panel);
 }
 .settings-model-icon {
   display: grid;
@@ -2660,12 +2559,12 @@ body.light-mode .settings-search input:focus-visible {
   margin-top: 10px;
 }
 .settings-button {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff12;
+  background: var(--fill-field);
   color: var(--text);
-  font: 12px var(--app-font);
+  font: 13px var(--app-font);
 }
 .settings-button:hover {
   background: #ffffff1c;
@@ -2844,13 +2743,10 @@ body.light-mode .settings-row-radio:hover {
 body.light-mode .settings-close:hover {
   background-color: #00000012;
 }
-body.light-mode .settings-search {
-  background: var(--bg-primary);
-  border-color: var(--line);
-}
+body.light-mode .settings-search,
 body.light-mode .settings-search:focus-within {
-  background: var(--bg-primary);
-  border-color: var(--focus);
+  background: var(--fill-active);
+  border-color: var(--line-field);
 }
 /* The generic light-mode fill and hairline belong to standalone controls; the
    search field is one control, so its inner input stays flat inside the pill. */
@@ -3096,8 +2992,8 @@ main {
   top: calc(-1 * (var(--island-gap) + 1px));
 }
 .sidebar .brand {
-  /* 14px between the band and the brand, the way the reference sets it. */
-  margin-top: 14px;
+  /* A little closer to the traffic lights, without sitting under them. */
+  margin-top: 6px;
 }
 .library-header {
   height: 44px;
@@ -4261,9 +4157,6 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 .canvas-tray .compact-player .player-controls .seek {
   min-width: 12px;
 }
-.canvas-tray .compact-player .loop-toggle {
-  display: none;
-}
 /* Content cards share the existing gallery, inspector and preview structure. */
 .smart-link {
   display: flex !important;
@@ -4509,9 +4402,6 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
 }
 /* Cooking view: ingredients are a checklist that remembers its state, and the
    method sits beside them rather than a screen below. */
-.smart-preview-recipe {
-  background: var(--bg);
-}
 .recipe-page {
   max-width: 940px;
   margin: 0 auto;
@@ -5320,28 +5210,6 @@ body.light-mode .inspector:has(.canvas-inspector-title) > .hint {
   border-top: 1px solid var(--line);
   margin: 13px 0 3px;
 }
-.color-nearby h3 {
-  margin: 0 0 10px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-}
-.color-nearby {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.color-near-swatch {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  border-radius: 50%;
-  border: 1px solid #9995;
-  padding: 0;
-  cursor: default;
-  box-shadow: inset 0 0 0 1px #ffffff20;
-}
 .full-player.video-player {
   position: relative;
   flex: none;
@@ -5733,62 +5601,6 @@ body.light-mode footer {
 .workbench-dialog > textarea {
   width: 100%;
   margin: 8px 0;
-}
-.tool-field {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin: 12px 0;
-  font-size: 12px;
-}
-.tool-field > input:not([type="checkbox"]),
-.tool-field > select {
-  flex: 1;
-  min-width: 140px;
-}
-
-/* Beta feedback speaks the Settings language: one card of divided rows, text
-   left and its control right, with the report field and action below it. */
-.workbench-dialog .beta-intro {
-  margin: 0 0 18px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-.beta-checklist {
-  margin: 0;
-}
-.beta-checklist .beta-check {
-  cursor: default;
-}
-.beta-checklist .beta-check .settings-copy {
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text);
-}
-.beta-checklist .beta-check input[type='checkbox'] {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-.workbench-dialog > .beta-notes {
-  width: 100%;
-  min-height: 84px;
-  margin: 18px 0 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
-  color: var(--text);
-  font: 13px var(--app-font);
-  resize: vertical;
-}
-.beta-actions {
-  margin-top: 14px;
 }
 
 /* Duplicate review ------------------------------------------------------
@@ -6736,29 +6548,6 @@ body.light-mode .filter-bar select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%23242730' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
-.search #visual-search {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-}
-.search #visual-search .sf-symbol {
-  width: 14px;
-  height: 14px;
-}
-.search #visual-search:is(:hover, [aria-pressed="true"]) {
-  background: var(--line);
-  color: var(--text);
-}
-.search:has(#visual-search:not([hidden])) kbd {
-  display: none;
-}
-
 /* Keep dialogs usable at larger text sizes and in short windows. */
 dialog {
   max-width: calc(100vw - 32px);
@@ -7277,30 +7066,6 @@ body .media-player.video-player .player-controls .seek:focus-visible::-webkit-sl
 body .media-player.video-player .player-controls .seek:active::-webkit-slider-thumb {
   opacity: 1;
 }
-body .media-player.video-player .player-controls .player-seek-hover {
-  position: absolute;
-  bottom: 11px;
-  left: var(--position, 0%);
-  width: 1px;
-  height: 26px;
-opacity: 0;
-  pointer-events: none;
-}
-body .media-player.video-player .player-controls .player-seek-preview {
-  position: absolute;
-  bottom: 39px;
-  left: var(--position, 0%);
-  transform: translateX(-50%);
-  padding: 3px 6px;
-  border-radius: 5px;
-color: #fff;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 100ms linear;
-}
 body .media-player.video-player .player-controls .volume {
   width: 0;
   opacity: 0;
@@ -7345,14 +7110,6 @@ body .media-player.compact-player.video-player .player-controls .seek::-webkit-s
   width: 8px;
   height: 8px;
   margin-top: -3px;
-}
-body .media-player.compact-player.video-player .player-controls .player-seek-hover {
-  height: 18px;
-  bottom: 7px;
-}
-body .media-player.compact-player.video-player .player-controls .player-seek-preview {
-  bottom: 27px;
-  font-size: 9px;
 }
 .media-player.video-player:fullscreen .player-controls {
   padding-bottom: 18px;
@@ -7447,10 +7204,6 @@ body .media-player.audio-player .player-controls .player-time {
 }
 body.light-mode .media-player.audio-player .player-controls .player-time {
   color: var(--text);
-}
-body .media-player.audio-player .player-controls .player-seek-preview,
-body .media-player.audio-player .player-controls .player-seek-hover {
-  display: none;
 }
 body .media-player.audio-player .player-controls .player-speed {
   width: auto;
@@ -7922,9 +7675,6 @@ body .media-player.audio-player .player-controls.volume-open .volume {
   width: 66px;
   opacity: 1;
 }
-
-/* Player seek hover preview is not used; the native thumb is the affordance. */
-.player-seek-preview, .player-seek-hover { display: none; }
 
 /* Canvas items are square: no rounded corner can reveal a dark sliver of
    board behind a light image, and no selection outline is rounded either. */

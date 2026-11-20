@@ -7,35 +7,10 @@
   'use strict';
 
   const PALETTE_ID = 'command-palette';
-  const SHORTCUTS = [
-    ['Open command palette', '⌘ K'],
-    ['Search the library', '⌘ F'],
-    ['Keyboard shortcuts', '⌘ /'],
-    ['Undo file / canvas change', '⌘ Z'],
-    ['Redo', '⇧ ⌘ Z'],
-    ['Toggle sidebar', '⌘ B / ⌘ S'],
-    ['Toggle file details', '⌘ I'],
-    ['Open Settings', '⌘ ,'],
-    ['Import files', '⌘ O'],
-    ['Select all', '⌘ A'],
-    ['Extend selection', '⇧ + arrow'],
-    ['Toggle individual selection', '⌘ + click'],
-    ['Copy / paste', '⌘ C / ⌘ V'],
-    ['Trash selection', '⌘ Delete'],
-    ['Preview / close', 'Space / Escape'],
-    ['Infinite canvas view', '⌥ O'],
-    ['Navigate the library', 'Arrow keys'],
-    ['Canvas select / hand / text', 'V / H / T'],
-    ['Canvas rectangle / ellipse', 'R / O'],
-    ['Canvas fit', '⌘ 0'],
-    ['Pan canvas', 'Space + drag'],
-    ['Palette: move / choose / close', '↑ ↓ · Return · Esc']
-  ];
 
   let dialog = null;
   let input = null;
   let list = null;
-  let mode = 'commands';
   // A search is kept for 15s after the palette closes, so ⌘K can bring the
   // same results straight back. After the window it resets to Quick actions.
   let rememberedQuery = '';
@@ -81,15 +56,12 @@
       { id: 'new-collection', label: 'New collection', icon: 'folderAdd', group: 'Actions', run: () => SidebarUI.inlineCreate('collections') },
       { id: 'new-canvas', label: 'New canvas…', icon: 'canvas', group: 'Actions', run: () => click('#add-canvas') },
       { id: 'duplicate-review', label: 'Duplicate review…', icon: 'duplicates', group: 'Actions', hint: 'Settings Library', keywords: 'duplicates copies', run: () => click('#settings-duplicate-review') },
-      { id: 'backup', label: 'Back up library…', icon: 'export', group: 'Actions', hint: 'Settings Library', keywords: 'backup save', run: () => click('#settings-backup') },
-      { id: 'health', label: 'Library health…', icon: 'health', group: 'Actions', hint: 'Settings Maintenance', keywords: 'check repair', run: () => click('#check-library') },
-      { id: 'activity', label: 'Import activity…', icon: 'activity', group: 'Actions', hint: 'Settings Importing', keywords: 'imports progress', run: () => click('#show-activity') },
       { id: 'search', label: 'Search the library', icon: 'search', keys: '⌘ F', group: 'Actions', run: () => { if (view !== 'all') setView('all'); $('#search').focus(); } },
       { id: 'sidebar', label: 'Toggle sidebar', icon: 'sidebar', keys: '⌘ B', group: 'View', run: () => click('#toggle-sidebar') },
       { id: 'inspector', label: 'Toggle file details', icon: 'inspector', keys: '⌘ I', group: 'View', run: () => click('#toggle-inspector') },
       { id: 'infinite-view', label: 'Infinite canvas view', icon: 'canvas', keys: '⌥ O', group: 'View', hint: 'Settings Galleries', keywords: 'cosmos endless pan zoom', run: () => window.toggleInfiniteCanvas?.() },
       { id: 'settings', label: 'Open Settings', icon: 'settings', keys: '⌘ ,', group: 'View', run: () => click('#show-settings') },
-      { id: 'shortcuts', label: 'Keyboard shortcuts', icon: 'keyboard', keys: '⌘ /', group: 'View', run: () => open('shortcuts') },
+      { id: 'shortcuts', label: 'Keyboard shortcuts', icon: 'keyboard', keys: '⌘ /', group: 'View', hint: 'Settings Shortcuts', run: () => openPane('shortcuts') },
       { id: 'appearance-light', label: 'Theme: Light', icon: 'appearance', group: 'Commands', hint: 'Settings Appearance', keywords: 'appearance light mode', run: () => api.appearanceSet({ theme: 'light' }) },
       { id: 'appearance-dark', label: 'Theme: Dark', icon: 'appearance', group: 'Commands', hint: 'Settings Appearance', keywords: 'appearance dark mode', run: () => api.appearanceSet({ theme: 'dark' }) },
       { id: 'appearance-system', label: 'Theme: System', icon: 'appearance', group: 'Commands', hint: 'Settings Appearance', keywords: 'appearance automatic', run: () => api.appearanceSet({ theme: 'system' }) },
@@ -121,7 +93,6 @@
       { id: 'updates-check', label: 'Check for updates', icon: 'reload', group: 'Commands', hint: 'Settings About Update', run: () => window.SettingsUI?.checkUpdates() },
       { id: 'licenses', label: 'Third-party notices…', icon: 'about', group: 'Commands', hint: 'Settings About', run: () => { openPane('about'); requestAnimationFrame(() => click('#settings-licenses-toggle')); } },
       { id: 'extension', label: 'Browser capture extension…', icon: 'extensions', group: 'Commands', hint: 'Settings Extensions', run: () => click('#show-extension') },
-      { id: 'feedback', label: 'Beta testing and feedback…', icon: 'feedback', group: 'Commands', hint: 'Settings Feedback', run: () => click('#settings-beta') },
 
       // Search and local models.
       { id: 'semantic-toggle', label: isChecked('#settings-semantic') ? 'Turn off semantic search' : 'Turn on semantic search', icon: 'sparkles', group: 'Commands', hint: 'Settings Search & models local AI', run: () => toggleSetting('#settings-semantic') },
@@ -146,12 +117,6 @@
       items.push({ id: 'empty-trash', label: 'Empty Trash…', icon: 'trash', group: 'Actions', run: () => click('#empty-trash') });
     }
     return items;
-  }
-
-  function shortcutItems() {
-    return SHORTCUTS.map(([label, keys], index) => ({
-      id: 'shortcut-' + index, label, keys, icon: 'keyboard', group: 'Shortcuts', run: () => {}
-    }));
   }
 
   function parseQuery(raw) {
@@ -203,10 +168,6 @@
   }
 
   async function build(query) {
-    if (mode === 'shortcuts') {
-      const items = rank(shortcutItems(), query.toLowerCase());
-      return items.length ? [{ header: 'Shortcuts', items }] : [];
-    }
     const q = query.toLowerCase();
     if (!q) {
       const quick = ['import', 'new-collection', 'new-canvas', 'duplicate-review', 'shortcuts']
@@ -378,7 +339,7 @@
       }
     }
     if (!sections.length || !entries.length && !list.querySelector('.command-grid')) {
-      list.append(el('div', 'command-empty', mode === 'shortcuts' ? 'No matching shortcuts.' : 'Nothing found. Try a file, canvas or command.'));
+      list.append(el('div', 'command-empty', 'Nothing found. Try a file, canvas or command.'));
     }
     const restored = previous ? entries.findIndex(entry => entry.id === previous) : -1;
     active = restored >= 0 ? restored : (entries.length ? 0 : -1);
@@ -428,13 +389,11 @@
     dialog.close();
   }
 
-  function open(nextMode = 'commands') {
-    mode = nextMode === 'shortcuts' ? 'shortcuts' : 'commands';
+  function open() {
     if (dialog?.open) {
-      const placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, colour, canvases and commands';
-      input.placeholder = placeholder;
-      input.setAttribute('aria-label', placeholder);
-      dialog.setAttribute('aria-label', mode === 'shortcuts' ? 'Keyboard shortcuts' : 'Command palette');
+      input.placeholder = 'Search files, colour, canvases and commands';
+      input.setAttribute('aria-label', input.placeholder);
+      dialog.setAttribute('aria-label', 'Command palette');
       input.value = '';
       paint();
       input.focus();
@@ -445,7 +404,7 @@
     dialog.id = PALETTE_ID;
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-label', mode === 'shortcuts' ? 'Keyboard shortcuts' : 'Command palette');
+    dialog.setAttribute('aria-label', 'Command palette');
     const head = el('div', 'command-head');
     const glyphBox = el('span', 'command-search-icon');
     glyphBox.append(glyph('search'));
@@ -453,7 +412,7 @@
     input.type = 'search';
     input.autocomplete = 'off';
     input.spellcheck = false;
-    input.placeholder = mode === 'shortcuts' ? 'Find a shortcut' : 'Search files, colour, canvases and commands';
+    input.placeholder = 'Search files, colour, canvases and commands';
     input.setAttribute('aria-label', input.placeholder);
     head.append(glyphBox, input);
     list = el('div', 'command-list');
@@ -468,7 +427,7 @@
     dialog.addEventListener('close', () => {
       clearTimeout(paintTimer);
       const query = input?.value.trim() || '';
-      rememberedQuery = mode === 'commands' ? query : '';
+      rememberedQuery = query;
       rememberedAt = query ? Date.now() : 0;
       rememberedScroll = query && list ? list.scrollTop : 0;
       clearTimeout(rememberTimer);
@@ -498,7 +457,7 @@
     // Restore a recent search before the first paint so the same files stay
     // in view when the palette is reopened with ⌘K.
     const fresh = rememberedQuery && Date.now() - rememberedAt < 15000;
-    if (fresh && mode === 'commands') {
+    if (fresh) {
       input.value = rememberedQuery;
       restoreScroll = rememberedScroll;
     } else {
@@ -514,7 +473,7 @@
   }
   function toggle() {
     if (dialog?.open) close();
-    else open('commands');
+    else open();
   }
   document.addEventListener('keydown', event => {
     if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== 'k') return;
@@ -526,5 +485,5 @@
     toggle();
   }, true);
 
-  window.CommandPalette = { open, close, toggle, shortcuts: () => open('shortcuts'), SHORTCUTS };
+  window.CommandPalette = { open, close, toggle };
 })();

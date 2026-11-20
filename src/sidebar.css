@@ -73,8 +73,8 @@ body.light-mode .sidebar nav button.active {
 body.light-mode .sidebar .window-space {
   background: var(--island-surface);
 }
-.sidebar #navigation,.sidebar [data-section="media"] { position: relative; padding-bottom: 12px; margin-bottom: 12px; }
-.sidebar #navigation::after,.sidebar [data-section="media"]::after {
+.sidebar #navigation { position: relative; padding-bottom: 12px; margin-bottom: 12px; }
+.sidebar #navigation::after {
   content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
   background: linear-gradient(to right, transparent, var(--line) 14%, var(--line) 86%, transparent);
 }

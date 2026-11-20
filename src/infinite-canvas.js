@@ -314,13 +314,22 @@ const InfiniteCanvas=(()=>{
    if(moved&&lastMove&&performance.now()-lastMove.at<120)
     pushMomentum(-projectMomentum(releaseVelocity(samples,'x')),-projectMomentum(releaseVelocity(samples,'y')));
    else if(!moved&&dragStart?.item){
-    const id=dragStart.item.dataset.id;
-    select(id);openPreview(scope());
+    // A click only picks the item. Opening is a deliberate double-click or
+    // Space, exactly as it is in the library grid.
+    select(dragStart.item.dataset.id);
    }
    dragStart=null;
   };
   stage.addEventListener('pointerup',endDrag);
   stage.addEventListener('pointercancel',endDrag);
+  stage.addEventListener('dblclick',e=>{
+   const item=e.target.closest?.('.infinite-item')||document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.infinite-item');
+   if(!item)return;
+   e.preventDefault();
+   stopMomentum();
+   select(item.dataset.id);
+   openPreview(scope());
+  });
   // Capture can be lost when a native drag or another window takes the
   // pointer. The window fallback releases the wall instead of leaving it
   // stuck in the dragging state.

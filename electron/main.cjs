@@ -560,6 +560,9 @@ app.whenReady().then(async () => {
   const canAccelerateIndex=()=>thermalState==='nominal'&&!powerMonitor.isOnBatteryPower()&&powerMonitor.getSystemIdleTime()>=60;
   smartIndex=new SmartIndex({library,thumbnail:async id=>{const a=library.asset(id);if(['url','webloc'].includes(a.ext)){const file=bookmarks.path(id);return fs.existsSync(file)?file:null;}return thumbnail(id);},nativeImage,delay:()=>canAccelerateIndex()?350:650,testMode,onWork:()=>{if(win&&!win.isDestroyed())win.webContents.send('smart-work',smartIndex?.paused?'manual':smartIndex?.powerPause);},onUpdate:value=>{if(win&&!win.isDestroyed())win.webContents.send('smart-changed',value);}});
   if(!testMode&&workbench.pref('indexPaused'))smartIndex.pause(true);
+  // Test-only hook: tests drive analysis directly because test mode pauses the
+  // background indexer. Not exposed to the renderer in production.
+  if(testMode)global.smartAnalyze=id=>smartIndex.analyze(id);
   let indexIdleTimer,updateIndexPower=()=>{};
   if(!testMode){
     updateIndexPower=()=>{
@@ -594,7 +597,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('import-state',event=>{trusted(event);return importQueue.snapshot();});
   ipcMain.handle('import-cancel',(event,id)=>{trusted(event);importQueue.cancel(id);return importQueue.snapshot();});
   ipcMain.handle('import-retry',(event,id)=>{trusted(event);return importQueue.retry(id).done;});
-  ipcMain.handle('health-state',event=>{trusted(event);return healthService.state;});
   ipcMain.handle('health-start',event=>{trusted(event);return healthService.start();});
   ipcMain.handle('health-cancel',event=>{trusted(event);return healthService.cancel();});
 
@@ -707,7 +709,6 @@ app.whenReady().then(async () => {
     floatingWindow.on('closed',()=>{
       if(floatingWindow!==floatingWindowRef)return;
       floatingWindow=null;
-      if(win&&!win.isDestroyed())win.webContents.send('floating-close');
     });
     if(testMode)global.floatingWindow=floatingWindow;
     return {opened:true};
@@ -733,35 +734,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('canvas-clipboard-write',(event,items)=>{trusted(event);if(!Array.isArray(items)||items.length>10000)throw new Error('Invalid canvas selection.');const buffer=Buffer.from(JSON.stringify(items.map(normalizeCanvasItem)));if(buffer.length>5*1024*1024)throw new Error('Copy fewer canvas items at once.');return clipboard.writeText('CanvasProItems\n'+buffer.toString('utf8'));});
   ipcMain.handle('canvas-clipboard-read',async event=>{trusted(event);const text=await clipboard.readText();if(!text.startsWith('CanvasProItems\n')||text.length>5*1024*1024)return null;try{const items=JSON.parse(text.slice(15));return Array.isArray(items)&&items.length<=10000?items.map(normalizeCanvasItem):null;}catch{return null;}});
   ipcMain.handle('canvas-drop-paths',async(event,id,paths,point)=>{trusted(event);canvasStore.summary(id);if(!Array.isArray(paths)||paths.some(p=>typeof p!=='string'||!path.isAbsolute(p)))throw new Error('Choose valid files.');const ids=[],external=[];for(const file of paths){const candidate=path.basename(file).slice(0,36);let asset;try{asset=library.asset(candidate);}catch{}if(asset&&path.resolve(file)===path.resolve(library.root,asset.stored))ids.push(asset.id);else external.push(file);}const result=external.length?await importPaths(external,null):{ids:[],errors:[]};const combined=[...new Set([...ids,...result.ids])];return {...(combined.length?canvasStore.addAssets(id,combined,point):{board:canvasStore.summary(id),items:[]}),importResult:result};});
-  ipcMain.handle('cache-video-thumb',async(event,id,data)=>{
-    trusted(event);
-    const a=library.asset(id);
-    const header='data:image/jpeg;base64,';
-    if(!['mp4','webm','mov','m4v','ogv','mkv','avi','gifv','3gp','3g2','h265','hevc'].includes(a.ext)||typeof data!=='string'||data.length>3000000||!data.startsWith(header))throw Error('Invalid video preview.');
-    if(library.deleting.has(id))return;
-    const key=id+':browser';
-    if(thumbPending.has(key))return thumbPending.get(key);
-    const bytes=Buffer.from(data.slice(header.length),'base64');
-    const image=nativeImage.createFromBuffer(bytes);
-    const {width,height}=image.getSize();
-    if(image.isEmpty()||Math.max(width,height)>galleryEdge)throw Error('Invalid preview.');
-    const base=path.join(library.root,'thumbnails',id);
-    const temp=base+'.thumb-v2.part.jpg';
-    const write=(async()=>{
-      try{
-        await fs.promises.writeFile(temp,bytes);
-        await fs.promises.rename(temp,base+'.thumb-v2.jpg');
-        await fs.promises.rm(base+'.png',{force:true}).catch(()=>{});
-        thumbnailMisses.delete(id);
-        return true;
-      }finally{
-        await fs.promises.rm(temp,{force:true}).catch(()=>{});
-      }
-    })();
-    thumbPending.set(key,write);
-    try{return await write;}finally{thumbPending.delete(key);}
-  });
-  ipcMain.handle('save-feedback',async(event,data)=>{trusted(event);const chosen=await dialog.showSaveDialog(win,{title:'Save beta feedback',defaultPath:'Canvas Pro feedback.json'});if(chosen.canceled)return {cancelled:true};const report={app:require('../package.json').version,platform:process.platform,architecture:process.arch,os:require('node:os').release(),at:new Date().toISOString(),notes:String(data.notes||'').slice(0,20000),checks:Array.isArray(data.checks)?data.checks.slice(0,20):[]};await fs.promises.writeFile(chosen.filePath,JSON.stringify(report,null,2));return {saved:true};});
   ipcMain.handle('canvas-export',async(event,data)=>{trusted(event);if(!['png','pdf'].includes(data.format)||!Number.isFinite(data.width)||!Number.isFinite(data.height)||data.width<1||data.height<1||data.width>16000||data.height>16000||data.width*data.height>64000000)throw Error('Choose a smaller export area.');let basename=String(data.name||'Canvas').trim().slice(0,120).replace(/[/\\:\x00-\x1f]/g,'-').replace(/^\.+/,'').trim();
     while(Buffer.byteLength(basename)>240)basename=basename.slice(0,-1);
     const name=(basename||'Canvas')+'.'+data.format;
@@ -824,7 +796,6 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('model-state',(event,name)=>{trusted(event);return localModel.state(String(name||'clip'));});
   ipcMain.handle('model-download',(event,name)=>{trusted(event);return localModel.download(String(name||'clip'));});
-  ipcMain.handle('model-cancel',(event,name)=>{trusted(event);return localModel.cancel(String(name||'clip'));});
   ipcMain.handle('copy-color',(event,value)=>{trusted(event);if(!/^#[a-f0-9]{6}$/i.test(value))throw Error('Invalid colour.');return clipboard.writeText(value);});
   ipcMain.handle('smart-state',event=>{trusted(event);return {...smartIndex.state(),idleOnly:workbench.pref('indexIdleOnly')!==false};});
   ipcMain.handle('smart-idle-policy',(event,value)=>{
@@ -839,7 +810,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('smart-next-work',event=>{trusted(event);return {...smartIndex.nextVisualWork(),delay:canAccelerateIndex()?250:650};});
   ipcMain.handle('smart-vector-skip',(event,id)=>{trusted(event);return smartIndex.deferVisual(id);});
   ipcMain.handle('smart-vector',(event,id,vector)=>{trusted(event);return smartIndex.put(id,{vector});});
-  ipcMain.handle('smart-analyze',(event,id)=>{trusted(event);return smartIndex.analyze(id);});
   ipcMain.handle('link-reader',(event,id)=>{trusted(event);return bookmarks.reader(id);});
   ipcMain.handle('link-info',(event,id,force)=>{trusted(event);return bookmarks.get(id,{force:!!force});});
   ipcMain.handle('web-preview-open',(event,id,token,rect)=>{trusted(event);if(typeof token!=='string'||token.length>100)throw new Error('Invalid preview.');if(!webPreview)webPreview=new WebPreview({electron:require('electron'),window:win,library,resolveLink:id=>bookmarks.resolveURL(id),onSaved:()=>{notifyLibraryChanged();}});if(testMode)global.canvasWebPreview=webPreview;return webPreview.open(id,token,rect);});
@@ -1038,11 +1008,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('quick-look', async (event, id) => {
     trusted(event);
     if (process.platform === 'darwin') win.previewFile(library.file(id), library.asset(id).name);
-  });
-  ipcMain.handle('export', async (event, id) => {
-    trusted(event);
-    const a = library.asset(id); const r = await dialog.showSaveDialog(win, { defaultPath: a.name });
-    if (!r.canceled) await fs.promises.copyFile(library.file(id), r.filePath);
   });
   ipcMain.handle('show-library', event => {trusted(event);return shell.openPath(library.root);});
   // The app menu is built explicitly rather than with the appMenu role: the

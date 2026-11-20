@@ -30,7 +30,7 @@ require('../electron/main.cjs');
  await win.setSize(1400,900);
  await run('refresh()');
  for(const id of Object.values(ids)){
-  await run(`api.smartAnalyze('${id}')`);
+  await global.smartAnalyze(id);
   await until(()=>run(`(assetById.get('${id}')?.smart?.palette?.length||0)>0`),'palette '+id);
  }
  await run('refresh()');

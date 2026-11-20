@@ -110,7 +110,7 @@ const WorkbenchUI=(()=>{
  async function history(redo=false){const result=await api.workbench('history',{redo});if(result.changed){await refreshCurrent();notify((redo?'Redid: ':'Undid: ')+result.label);}else notify('No file changes to '+(redo?'redo':'undo')+'.');}
  // The searchable sheet lives with the command palette so both use the same
 // list; Settings and ⌘/ route here too.
- function shortcuts(){return window.CommandPalette ? window.CommandPalette.open('shortcuts') : null;}
+ function shortcuts(){return window.SettingsUI ? window.SettingsUI.open('shortcuts') : null;}
  async function duplicateReview(){
   const d=dialog('Duplicate review');
   const intro=el('p','hint','Identical files are already stopped at import. These groups are the same picture saved more than once — resized, re-compressed, or exported again. Nothing moves until you choose a copy to keep.');
@@ -236,34 +236,12 @@ const WorkbenchUI=(()=>{
  }
  async function recovery(issue){const result=await api.workbench('recover',{id:issue.id});if(result.restored){notify('Original restored. Your tags and canvas placements are preserved.');thumbnailReset(issue.id);await refreshCurrent();renderHealth(await api.startHealth());}}
  function thumbnailReset(id){for(const key of [...linkRequests.keys()])if(key===id)linkRequests.delete(key);}
- async function backupSettings(){const d=dialog('Library backup'),info=await api.workbench('state');d.append(el('p','',info.root),el('p','hint',info.total.n+' files · '+bytes(info.total.bytes||0)),el('p','hint',info.backup?'Last backup: '+new Date(info.backup.at).toLocaleString()+' · '+info.backup.path:'No backup recorded yet.'),el('p','hint','Keep a copy on another disk before resetting your Mac. Open the copied .canvaslibrary folder through Open existing library.'));const check=el('input');check.type='checkbox';check.checked=info.reminders;const label=el('label','tool-field','Remind me after 30 days');label.prepend(check);check.onchange=()=>api.workbench('reminders',{enabled:check.checked});d.append(label,action('Create backup…',async()=>{const button=d.querySelector('button:last-child');button.disabled=true;try{const result=await api.workbench('backup');if(result.at){state.backup=result;notify('Library backup saved.');d.close();}}finally{if(button.isConnected)button.disabled=false;}}));return d;}
  async function created(key,kind){const icon=pendingIcons[kind];if(icon){state.icons=await api.workbench('icon',{key,icon});delete pendingIcons[kind];renderNav();}}
  function init(){for(const [selector,kind]of [['#canvas-name-label','canvas'],['#folder-dialog form','collection'],['#action-form','collection']]){const parent=$(selector);const b=action('Choose icon…',()=>{if(kind==='canvas'&&CanvasWorkspace.dialog?.renameId)return pickIcon('canvas:'+CanvasWorkspace.dialog.renameId);return pickIcon(null,value=>{pendingIcons[kind]=value;b.textContent=value.value;});});b.type='button';b.className='creation-icon';/* In dialogs the icon picker sits on the same line as Cancel and the primary action. */const actions=parent.querySelector('.dialog-actions');if(actions)actions.prepend(b);else parent.append(b);}for(const [selector,name]of [['#close-preview','close'],['#settings-close','close'],['#health-close','close'],['#activity-close','close'],['#canvas-tray-close','close'],['#canvas-zoom-out','minus'],['#canvas-zoom-in','plus'],['#add-canvas','plus'],['#add-folder','plus']]){const n=$(selector);if(n)n.replaceChildren(glyph(name));}const search=$('.search');const searchIcon=search.querySelector('.search-glyph');if(searchIcon){if(!searchIcon.firstChild)searchIcon.append(glyph('search'));}else if(search.firstChild?.nodeType===3)search.firstChild.replaceWith(glyph('search'));api.onHistoryCommand(redo=>{const focused=document.activeElement;if(focused?.matches('input,textarea,[contenteditable=true]')){document.execCommand(redo?'redo':'undo');return;}if(view==='canvas')CanvasWorkspace.undo(redo);else safe(()=>history(redo));});// Settings opens these tools in their own window and comes straight back.
  const fromSettings=fn=>async()=>{const pane=SettingsUI.currentPane;$('#settings-dialog').close();const dialog=await fn();if(dialog&&dialog.addEventListener)dialog.addEventListener('close',()=>SettingsUI.open(pane),{once:true});};
- $('#settings-backup').onclick=fromSettings(backupSettings);
+
  $('#settings-duplicate-review').onclick=fromSettings(duplicateReview);
- $('#settings-beta').onclick=fromSettings(beta);
- $('#settings-all-shortcuts').onclick=fromSettings(shortcuts);
  document.addEventListener('keydown',e=>{if(!(e.metaKey||e.ctrlKey))return;const typing=e.target.matches?.('input,textarea,select,[contenteditable=true]');if(e.key==='/'&&!typing){e.preventDefault();e.stopImmediatePropagation();shortcuts();}else if(e.key.toLowerCase()==='z'&&!typing&&view!=='canvas'&&!document.querySelector('dialog[open]')){e.preventDefault();e.stopImmediatePropagation();safe(()=>history(e.shiftKey));}},true);
  }
- function beta(){
-  const d=dialog('Beta testing and feedback');
-  d.append(el('p','hint beta-intro','Use a disposable library for destructive tests. Try import, preview, search, canvas edits, backup and reopening on several Apple Silicon Macs. Real testers are still needed before a public launch.'));
-  const card=el('div','settings-card beta-checklist');
-  const steps=['Create a new library and reopen it','Import images, audio, videos, PDFs and bookmarks','Test shortcuts, undo, selection and duplicate review','Create a canvas; move, resize and export items','Back up, then open the backup as an existing library','Check large-library scrolling and local search','Test light/dark and Reduce Motion'];
-  for(const text of steps){
-   const row=el('label','settings-row beta-check');
-   row.append(el('span','settings-copy',text));
-   const check=el('input');check.type='checkbox';row.append(check);
-   card.append(row);
-  }
-  d.append(card);
-  const notes=field('','What happened? Include steps, expected result and actual result.',()=>{},true);
-  notes.classList.add('beta-notes');
-  d.append(notes);
-  const save=action('Save feedback report…',async()=>{await api.saveReport({notes:notes.value,checks:[...card.querySelectorAll('.beta-check')].map(row=>({test:row.textContent,passed:row.querySelector('input').checked}))});},'primary');
-  const actions=el('div','dialog-actions beta-actions');actions.append(save);d.append(actions);
-  return d;
- }
- return{init,created,setData,reset,accepts,rank,rankOrder,colourMatch:colorMatch,icon,pickIcon,similar,canFindSimilar,findColor,recovery,shortcuts,get title(){return title;}};
+ return{init,created,setData,reset,accepts,rank,rankOrder,colourMatch:colorMatch,icon,similar,canFindSimilar,findColor,recovery,shortcuts,get title(){return title;}};
 })();

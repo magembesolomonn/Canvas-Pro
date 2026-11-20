@@ -3,6 +3,8 @@
 (function () {
   'use strict';
 
+  // The single source of truth for the in-app shortcut reference. The command
+  // palette and the Settings pane used to keep separate lists that disagreed.
   const SHORTCUTS = [
     ['⌘ K', 'Open command palette'],
     ['⌘ F', 'Search the library'],
@@ -10,13 +12,23 @@
     ['Space', 'Preview the selected file'],
     ['← →', 'Move through the library'],
     ['⌘I', 'Toggle file details'],
-    ['⌘B', 'Toggle the sidebar'],
+    ['⌘B / ⌘S', 'Toggle the sidebar'],
     ['⌘O', 'Import files'],
     ['⌘V', 'Paste files from the clipboard'],
+    ['⌘C', 'Copy the selected files'],
+    ['⌘A', 'Select all'],
+    ['⇧ + arrow', 'Extend selection'],
+    ['⌘ + click', 'Toggle individual selection'],
     ['⌘⌫', 'Move the selection to Trash'],
     ['⌘Z', 'Undo the last change'],
     ['⇧⌘Z', 'Redo the last change'],
     ['⌘,', 'Open Settings'],
+    ['⌥O', 'Infinite canvas view'],
+    ['V / H / T', 'Canvas select / hand / text'],
+    ['R / O', 'Canvas rectangle / ellipse'],
+    ['⌘0', 'Canvas fit'],
+    ['Space + drag', 'Pan canvas'],
+    ['↑ ↓ · Return · Esc', 'Command palette: move, choose, close'],
     ['Esc', 'Close the preview']
   ];
 
@@ -76,13 +88,6 @@
       this.wireRadioKeys('#settings-layouts', '[data-layout]');
       this.wireExperimental();
 
-      // A modal dialog makes everything outside it inert, so close Settings
-      // before handing off to the sidebar's inline collection field.
-      $('#settings-new-collection').onclick = () => {
-        $('#settings-dialog').close();
-        $('#add-folder').click();
-      };
-      $('#settings-import-files').onclick = () => importDialog();
       $('#settings-infinite').onclick = () => {
         $('#settings-dialog').close();
         window.InfiniteCanvas?.start();
@@ -187,7 +192,6 @@
 
     refresh(name) {
       if (name === 'appearance') this.syncAppearance();
-      if (name === 'collections') this.syncCollections();
       if (name === 'galleries') this.syncLayouts();
       if (name === 'search-models') this.syncExperimental();
       if (name === 'about') this.syncVersion();
@@ -299,46 +303,6 @@
         : 'Runs entirely on your Mac. Images are never uploaded.';
     },
 
-    syncCollections() {
-      const card = $('#settings-collections');
-      if (!card) return;
-      const names = Array.isArray(folders) ? folders : [];
-      if (!names.length) {
-        const empty = document.createElement('div');
-        empty.className = 'settings-row settings-row-plain';
-        const copy = document.createElement('span');
-        copy.className = 'settings-copy';
-        const strong = document.createElement('strong');
-        strong.textContent = 'No collections yet';
-        const small = document.createElement('small');
-        small.className = 'settings-subtle';
-        small.textContent = 'Group related files to find them faster';
-        copy.append(strong, small);
-        empty.append(copy);
-        card.replaceChildren(empty);
-        return;
-      }
-      card.replaceChildren(...names.map(name => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'settings-row settings-row-button';
-        const copy = document.createElement('span');
-        copy.className = 'settings-copy';
-        const strong = document.createElement('strong');
-        strong.textContent = name;
-        copy.append(strong);
-        const chevron = document.createElement('span');
-        chevron.className = 'settings-chevron';
-        chevron.setAttribute('aria-hidden', 'true');
-        chevron.append(glyph('chevronRight', { size: 14 }));
-        button.append(copy, chevron);
-        button.onclick = () => {
-          $('#settings-dialog').close();
-          setView('folder', name);
-        };
-        return button;
-      }));
-    },
 
     async syncVersion() {
       if (this.version) {

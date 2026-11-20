@@ -33,7 +33,6 @@ const SmartSearch=(()=>{
  function start(){
    if(!enabled)return;
    modelReady=true;
-   updateVisualButton();
    wakeIndex();
  }
  function wakeIndex(reason){
@@ -101,20 +100,13 @@ const SmartSearch=(()=>{
      }
    }
  }
- function stop(){enabled=false;localStorage.setItem('local-ai-enabled','false');modelReady=false;workChanged=true;clearTimeout(indexTimer);clearTimeout(workerIdleTimer);for(const item of pending.values())item.reject(Error('Visual search paused'));pending.clear();worker?.terminate();worker=null;updateVisualButton();render();updateStatus('Visual search off · text and automatic tags remain searchable');}
- function updateVisualButton(){
-   const button=$('#visual-search');
-   if(!button)return;
-   button.hidden=true;
-   button.setAttribute('aria-pressed','false');
-   button.setAttribute('aria-busy','false');
- }
- function schedule(){
+ function stop(){enabled=false;localStorage.setItem('local-ai-enabled','false');modelReady=false;workChanged=true;clearTimeout(indexTimer);clearTimeout(workerIdleTimer);for(const item of pending.values())item.reject(Error('Visual search paused'));pending.clear();worker?.terminate();worker=null;render();updateStatus('Visual search off · text and automatic tags remain searchable');}
+  function schedule(){
   clearTimeout(queryTimer);
   const query=$('#search').value.trim();
   const version=++queryVersion;
   matches=null;matchedQuery='';
-  updateVisualButton();updateActivityLabel();
+  updateActivityLabel();
   if(!query){render();return;}
   queryTimer=setTimeout(async()=>{
    try{
@@ -148,8 +140,6 @@ const SmartSearch=(()=>{
    button.title=remaining+' files left for local analysis'+(modelReady?' · '+state.visualRemaining+' left for visual search':'');
  }
  function init(){
- const visualButton=$('#visual-search');
- if(visualButton){visualButton.hidden=true;visualButton.onclick=null;}
  const box=el('section','smart-settings');
  const progress=el('p','hint');progress.id='smart-index-progress';
  const modelStatus=el('p','hint');modelStatus.id='smart-search-status';

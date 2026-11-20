@@ -29,13 +29,13 @@ function key(keyCode,modifiers=[]) {
   await until(()=>run("!!$('#navigation button') && !$('.sidebar-active-pill').hidden"));
   // The sections follow one another with an even gap, and Collections sits
   // right after the Library.
-  const sectionSpacing = await run("(()=>{const library=$('#navigation').getBoundingClientRect(),collections=$('[data-section=collections] > summary').getBoundingClientRect(),media=$('[data-section=media] > summary').getBoundingClientRect();return {libraryGap:collections.top-library.bottom,sectionGap:media.top-collections.bottom};})()");
+  const sectionSpacing = await run("(()=>{const library=$('#navigation').getBoundingClientRect(),collections=$('[data-section=collections] > summary').getBoundingClientRect(),canvas=$('[data-section=canvas] > summary').getBoundingClientRect();return {libraryGap:collections.top-library.bottom,sectionGap:canvas.top-collections.bottom};})()");
   assert.ok(sectionSpacing.libraryGap < 36, `Collections is too far from the Library: ${sectionSpacing.libraryGap}px`);
   assert.ok(sectionSpacing.sectionGap < 36, `The section after Collections is too far: ${sectionSpacing.sectionGap}px`);
   const initial = await run("$('.sidebar-active-pill').style.transform");
   await run("$('#navigation button:nth-child(2)').click()");
   await until(()=>run("view==='favorites' && $('.sidebar-active-pill').style.transform!=="+JSON.stringify(initial)));
-  await run("$('#media-navigation button').dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'}))");
+  await run("$('#navigation button:nth-child(3)').dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'}))");
   await until(()=>run("!$('.sidebar-hover-pill').hidden"));
   await run("$('.sidebar').dispatchEvent(new PointerEvent('pointerleave'))");
   await until(()=>run("$('.sidebar-hover-pill').hidden"));
@@ -52,23 +52,26 @@ function key(keyCode,modifiers=[]) {
   await run("$('#show-sidebar').click()");
   await until(()=>run("!document.body.classList.contains('hide-sidebar')"));
   await pause(240);
-  // ⌘B is the sidebar chord. ⌘S is not bound to it: it used to hide the
-  // sidebar, which is not what the save chord should do.
+  // ⌘B and ⌘S both toggle the sidebar.
   key('B',['meta']);
   await until(()=>run("document.body.classList.contains('hide-sidebar') && $('.sidebar').inert"));
   key('B',['meta']);
   await until(()=>run("!document.body.classList.contains('hide-sidebar') && !$('.sidebar').inert"));
+  key('S',['meta']);
+  await until(()=>run("document.body.classList.contains('hide-sidebar') && $('.sidebar').inert"));
+  key('S',['meta']);
+  await until(()=>run("!document.body.classList.contains('hide-sidebar') && !$('.sidebar').inert"));
   await pause(240);
-  await run("$('[data-section=media] > summary').click()");
+  await run("$('[data-section=collections] > summary').click()");
   await pause(150);
-  assert.equal(await run("$('[data-section=media]').open"),true,'Media section must stay open');
-  assert.equal(await run("localStorage.getItem('sidebar-section-media')"),null,'Section state is no longer stored');
+  assert.equal(await run("$('[data-section=collections]').open"),true,'Collections section must stay open');
+  assert.equal(await run("localStorage.getItem('sidebar-section-collections')"),null,'Section state is no longer stored');
   await run("$('#gallery').focus()");
   key('B',['meta']);
-  await until(()=>run("document.body.classList.contains('hide-sidebar') && $('[data-section=media]').open"));
+  await until(()=>run("document.body.classList.contains('hide-sidebar') && $('[data-section=collections]').open"));
   key('B',['meta']);
-  await until(()=>run("!document.body.classList.contains('hide-sidebar') && $('[data-section=media]').open"));
-  await run("$('[data-section=media] > summary').click()");
+  await until(()=>run("!document.body.classList.contains('hide-sidebar') && $('[data-section=collections]').open"));
+  await run("$('[data-section=collections] > summary').click()");
   await run("$('#add-folder').click()");
   assert.ok(await run("!!document.querySelector('#folders .inline-create input')"),'Inline collection field must open');
   await run("document.querySelector('#folders .inline-create input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");

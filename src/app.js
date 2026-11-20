@@ -19,7 +19,7 @@ function rememberRatio(a,ratio){if(!Number.isFinite(ratio)||ratio<=0||Math.abs((
 const CARD_NAME_FOOTER=21, CARD_DETAIL_FOOTER=13;
 function galleryCardFooterHeight(a){
  if(!showFileNamesEnabled()||kind(a)==='link')return 0;
- return CARD_NAME_FOOTER+CARD_DETAIL_FOOTER;
+ return CARD_NAME_FOOTER+(a.tags.length?CARD_DETAIL_FOOTER:0);
 }
 const imageExt=['png','jpg','jpeg','gif','webp','avif','bmp','svg','ico','heic','heif','tiff','tif','eps','jpegxl','jxl','jfif','jpe','insp','psd','psb'];
 const videoExt=['mp4','webm','mov','m4v','ogv','mkv','avi','gifv','3gp','3g2','h265','hevc'];
@@ -98,9 +98,6 @@ document.addEventListener('toggle',event=>{
  Motion.revealFromTrigger(surface,trigger);
 },true);
 function bytes(n){if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';if(n<1073741824)return(n/1048576).toFixed(1)+' MB';return(n/1073741824).toFixed(2)+' GB';}
-// A contact sheet needs to be scannable without opening each file: format,
-// weight and tag count live under the name, the way an asset manager does it.
-function cardDetail(a){const bits=[(a.ext||'file').toUpperCase()];if(Number(a.size)>0)bits.push(bytes(a.size));if(a.tags?.length)bits.push(a.tags.length+(a.tags.length===1?' tag':' tags'));return bits.join(' · ');}
 function notify(message){clearTimeout(toastTimer);const toast=$('#toast');toast.textContent=message;toast.hidden=false;Motion.fadeScaleIn(toast,null,{fromScale:0.96,fromOpacity:0.5,duration:180});toastTimer=setTimeout(()=>{toast.hidden=true;},5500);}
 async function safe(fn){try{return await fn();}catch(e){notify((e.message||String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/,''));}}
 function viewIdentity(){return JSON.stringify([view,collection,tagFilter,$('#search').value,$('#type').value,$('#sort').value,galleryLayout]);}
@@ -296,8 +293,6 @@ view=next;collection=folder;tagFilter=next==='tags'?lastTagFilter:null;pendingSe
 function renderNav(){
  if(!navStats){const counts={all:0,favorites:0,trash:0,image:0,video:0,audio:0,pdf:0,link:0,social:0,recipe:0},tags=new Set(),members=new Map();for(const a of assets){if(a.trash){counts.trash++;continue;}counts.all++;if(a.favorite)counts.favorites++;counts[kind(a)]=(counts[kind(a)]||0)+1;const linkType=SmartCards.type(a);if(linkType==='social'||linkType==='recipe')counts[linkType]=(counts[linkType]||0)+1;for(const t of a.tags)tags.add(t);for(const f of a.folders)members.set(f,(members.get(f)||0)+1);}counts.tags=tags.size;navStats={counts,members};}
  const {counts,members}=navStats,nav=$('#navigation'),folderIds=new Map(CanvasWorkspace.folderRecords.map(folder=>[folder.name,folder.id]));nav.replaceChildren();for(const [key,label,icon]of [['all','Library','library'],['favorites','Favourites','star'],['tags','Tags','tag'],['trash','Trash','trash']])nav.append(navButton(label,icon,counts[key],view===key,()=>setView(key)));
- const webLinks=Math.max(0,(counts.link||0)-(counts.social||0)-(counts.recipe||0));
- const mediaNav=$('#media-navigation');mediaNav.replaceChildren();for(const [key,label,icon]of [['image','Images','image'],['video','Video','video'],['audio','Audio','audio'],['social','Social','camera'],['recipe','Recipes','book'],['pdf','Documents','docText'],['link','Web links','link']])mediaNav.append(navButton(label,icon,key==='link'?webLinks:counts[key],view===key,()=>setView(key)));
  $('#folders').replaceChildren(...folders.map(f=>{const button=navButton(f,'folder',members.get(f)||0,view==='folder'&&collection===f,()=>setView('folder',f));const folderId=folderIds.get(f);if(folderId)button.firstChild.replaceWith(WorkbenchUI.icon('folder:'+folderId));button.oncontextmenu=e=>{e.preventDefault();safe(()=>api.collectionMenu(f));};button.draggable=true;button.ondragstart=e=>{e.dataTransfer.setData('application/x-canvaspro-collection',f);e.dataTransfer.effectAllowed='copy';};button.ondragend=()=>CanvasWorkspace.clearDrag();return button;}));CanvasWorkspace.renderNav();
 }
 async function setFavorites(ids,favorite){await api.bulkUpdate(ids,{type:'favorite',favorite});if(pagedCatalog)return refreshCurrent();for(const id of ids){const a=assetById.get(id);if(a)a.favorite=favorite?1:0;}navStats=null;renderNav();render();}
@@ -313,64 +308,17 @@ function inspectorPreview(a){
  frame.title='Double-click to preview';frame.ondblclick=()=>openPreview();
  return frame;
 }
-let hoverIntent=null,imageHover=null;
-function hideImageHover(){
- if(imageHover?.timer)clearTimeout(imageHover.timer);
- imageHover=null;
- const box=$('#hover-preview');
- if(box&&!box.hidden){box.hidden=true;box.querySelector('img').removeAttribute('src');}
-}
-// Eagle-style glance preview: after one 200ms beat, float the full image in
-// whichever side of the tile has the most room. It is an aria-hidden overlay,
-// so the grid keeps focus and the pointer can pass straight through it.
-function showImageHover(a,card){
- const box=$('#hover-preview');
- if(!box||!card.isConnected)return;
- const rect=card.getBoundingClientRect(),pad=16,gap=10;
- const room={right:innerWidth-rect.right-pad,left:rect.left-pad,bottom:innerHeight-rect.bottom-pad,top:rect.top-pad};
- const side=Object.entries(room).sort((one,two)=>two[1]-one[1])[0][0];
- const horizontal=side==='left'||side==='right';
- const availW=horizontal?room[side]:innerWidth-pad*2, availH=horizontal?innerHeight-pad*2:room[side];
- if(availW<120||availH<120)return;
- const ratio=Math.min(4,Math.max(.25,assetRatio(a,rect.width)||1));
- let width=Math.min(480,availW,availH*ratio),height=width/ratio;
- if(height>availH){height=availH;width=height*ratio;}
- let left=side==='right'?rect.right+gap:side==='left'?rect.left-gap-width:rect.left+rect.width/2-width/2;
- let top=side==='bottom'?rect.bottom+gap:side==='top'?rect.top-gap-height:rect.top+rect.height/2-height/2;
- left=Math.max(pad,Math.min(innerWidth-width-pad,left));
- top=Math.max(pad,Math.min(innerHeight-height-pad,top));
- const img=box.querySelector('img'),label=box.querySelector('.hover-preview-label');
- box.style.left=Math.round(left)+'px';box.style.top=Math.round(top)+'px';
- img.style.width=Math.round(width)+'px';img.style.height=Math.round(height)+'px';
- label.textContent=a.name;
- img.dataset.fallback='';
- img.onerror=()=>{if(img.dataset.fallback)return;img.dataset.fallback='1';img.src='asset://thumb/'+a.id+'?v=2';};
- img.src='asset://preview/'+a.id;
- box.hidden=false;
- Motion.fadeScaleIn(box,card);
-}
-function stopHover(){if(hoverIntent){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer){hoverPlayer.dispose();hoverPlayer=null;}hideImageHover();}
-function unmount(id){if(hoverIntent?.id===id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===id)stopHover();if(imageHover?.id===id)hideImageHover();cardCleanup.get(id)?.();cardCleanup.delete(id);const card=mounted.get(id);if(card)SmartCards.release(card);card?.remove();mounted.delete(id);}
+let hoverIntent=null;
+function stopHover(){if(hoverIntent){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer){hoverPlayer.dispose();hoverPlayer=null;}}
+function unmount(id){if(hoverIntent?.id===id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===id)stopHover();cardCleanup.get(id)?.();cardCleanup.delete(id);const card=mounted.get(id);if(card)SmartCards.release(card);card?.remove();mounted.delete(id);}
 function makeCard(a){const card=el('article','card');card.id='gallery-option-'+a.id;card.dataset.id=a.id;card.setAttribute('role','option');card.setAttribute('aria-label',a.name);card.draggable=true;card.title='Drag out to Finder · Option-drag to a Canvas';card.onpointerdown=e=>{if(e.button===0&&e.pointerType!=='touch')api.prepareDrag(selection.ids.has(a.id)?selection.values():[a.id]);};card.ondragstart=e=>{stopHover();const ids=selection.ids.has(a.id)?selection.values():[a.id];if(e.altKey){e.dataTransfer.setData('application/x-canvaspro-assets',JSON.stringify(ids));e.dataTransfer.effectAllowed='copy';}else{e.preventDefault();safe(()=>api.startDrag(ids));}};card.ondragend=()=>CanvasWorkspace.clearDrag();const surface=el('div','card-surface');const type=kind(a);if(type==='audio')cardCleanup.set(a.id,audioTile(a,surface));else surface.append(type==='link'?bookmarkVisual(a):SmartCards.fileVisual(a)||thumb(a,'',true));
 // The drag hint is useful on a still card, but a native tooltip lingers over
 // video and GIF previews right where the scrub bar appears. Hide it while the
 // pointer is on their picture and bring it back on the filename.
 if(type==='video'||type==='audio'||a.ext==='gif'||a.ext==='gifv'){const hint=card.title;surface.addEventListener('pointerenter',()=>{card.title='';});surface.addEventListener('pointerleave',()=>{card.title=hint;});}
 if(!a.trash)surface.append(favoriteButton(a));if(type==='video'||type==='audio'){const duration=el('span','duration');surface.append(duration);getMediaInfo(a).then(info=>{if(info.duration)duration.textContent=timecode(info.duration);}).catch(()=>{});}
-card.onpointerenter=e=>{
- if(e.pointerType==='touch'||!$('#preview').hidden||selection.ids.size>1)return;
- if(type==='video'||type==='audio'){
-  if(hoverIntent?.id===a.id)return;
-  stopHover();
-  hoverIntent={id:a.id,timer:setTimeout(()=>{if(hoverIntent?.id!==a.id||!card.isConnected||!$('#preview').hidden||selection.ids.size>1)return;hoverIntent=null;const player=createPlayer(a,{compact:true,muted:type==='video'});player.id=a.id;hoverPlayer=player;surface.append(player.element);},180)};
-  return;
- }
- if(type==='link'||SmartCards.isNote(a)||a.noPreview)return;
- if(imageHover?.id===a.id)return;
- hideImageHover();
- imageHover={id:a.id,timer:setTimeout(()=>{if(imageHover?.id!==a.id||!card.isConnected||!$('#preview').hidden||selection.ids.size>1)return;imageHover=null;showImageHover(a,card);},200)};
-};card.onpointerleave=()=>{if(hoverIntent?.id===a.id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===a.id)stopHover();if(imageHover?.id===a.id){clearTimeout(imageHover.timer);imageHover=null;}hideImageHover();};
-const meta=el('div','card-meta'),details=el('div','card-details');details.append(el('span','card-detail',cardDetail(a)));meta.append(el('span','card-name',a.name),details);card.append(surface,meta);card._parts={
+card.onpointerenter=e=>{if(type!=='video'&&type!=='audio')return;if(e.pointerType==='touch'||!$('#preview').hidden||selection.ids.size>1)return;if(hoverIntent?.id===a.id)return;stopHover();hoverIntent={id:a.id,timer:setTimeout(()=>{if(hoverIntent?.id!==a.id||!card.isConnected||!$('#preview').hidden||selection.ids.size>1)return;hoverIntent=null;const player=createPlayer(a,{compact:true,muted:type==='video'});player.id=a.id;hoverPlayer=player;surface.append(player.element);},180)};};card.onpointerleave=()=>{if(hoverIntent?.id===a.id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===a.id)stopHover();};
+const meta=el('div','card-meta'),details=el('div','card-details');details.append(el('span','',a.tags.length?a.tags.length+' tags':''));meta.append(el('span','card-name',a.name),details);card.append(surface,meta);card._parts={
  name:meta.firstChild,detail:details.lastChild,star:surface.querySelector('.favorite-toggle'),
  visual:type==='link'?surface.querySelector('.link-visual'):null
 };card.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();stopHover();if(!selection.ids.has(a.id))select(a.id);safe(()=>api.contextMenu(selection.values(),view==='folder'?collection:null));};card.onclick=e=>{if(e.ctrlKey&&navigator.platform.includes('Mac'))return;if(!e.target.closest('.player-controls,.player-wave'))select(a.id,e);};card.ondblclick=e=>{if(!e.target.closest('.player-controls,.player-wave')){select(a.id);openPreview();}};return card;}
@@ -443,7 +391,7 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='infinite'
    parts.star.setAttribute('aria-label',a.favorite?'Remove from Favourites':'Add to Favourites');
    parts.star.title=parts.star.getAttribute('aria-label');
   }
-  const detail=cardDetail(a);
+  const detail=a.tags.length?a.tags.length+' tags':'';
   if(parts.detail.textContent!==detail)parts.detail.textContent=detail;
  }
   // Cards are positioned with transforms, so DOM order otherwise stays in
@@ -660,21 +608,15 @@ function renderInspector() {
   collChips.hidden=!collNames.length;
   coll.append(collChips,collInput,collMatches);
   box.append(coll);
-  // One compact information section for every file type. Eagle keeps these
-  // facts visible without opening a second window; a contact sheet is no
-  // place to guess a file's format or weight.
-  const when=value=>{const date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleDateString():'—';};
-  const props=section('Information'),dl=el('dl','properties');
-  dl.append(el('dt','','Type'),el('dd','',(a.ext||'File').toUpperCase()),el('dt','','Size'),el('dd','',Number(a.size)>0?bytes(a.size):'—'),el('dt','','Imported'),el('dd','',when(a.imported)),el('dt','','Created'),el('dd','',when(a.created)));
-  props.append(dl);box.append(props);
   if(k==='image'){
-   const label=el('dt','','Dimensions'),value=el('dd','','Reading…');
-   dl.append(label,value);
+   const props=section('Image properties'),dl=el('dl','properties'),sizeLabel=el('dt','','Dimensions'),sizeValue=el('dd','','Reading…');
+   dl.append(el('dt','','Type'),el('dd','',(a.ext||'File').toUpperCase()),sizeLabel,sizeValue,el('dt','','Imported'),el('dd','',new Date(a.imported).toLocaleDateString()),el('dt','','Created'),el('dd','',new Date(a.created).toLocaleDateString()));
+   props.append(dl);box.append(props);
    api.imageSize(a.id).then(size=>{
-    if(!value.isConnected)return;
-    if(size?.width&&size?.height)value.textContent=size.width+' × '+size.height;
-    else{label.remove();value.remove();}
-   }).catch(()=>{label.remove();value.remove();});
+    if(!sizeValue.isConnected)return;
+    if(size?.width&&size?.height)sizeValue.textContent=size.width+' × '+size.height;
+    else{sizeLabel.remove();sizeValue.remove();}
+   }).catch(()=>{sizeLabel.remove();sizeValue.remove();});
   }
 }
 function renderColorDetails(box){
@@ -918,9 +860,8 @@ function importDialog(directory=false){return safe(()=>importing(()=>api.importD
 $('#import').onclick=()=>importDialog();$('#import-folder').onclick=()=>importDialog(true);api.onImport(()=>importDialog());api.onProgress(p=>{if(p)notify('Importing '+p.count+': '+p.name);});
 $('.search').addEventListener('click',event=>{if(!event.target.closest('button,input'))$('#search').focus();});
 $('#search').oninput=()=>{ const gallery=$('#gallery'); const pos=gallery.scrollTop; pendingGalleryPosition={key:viewIdentity(),top:pos,count:visible.length,anchor:AssetLayout.anchorAt(layout,gallery.scrollTop,gallery.clientHeight)};$('#gallery').scrollTop=0;SmartSearch.schedule();render();};$('#type').onchange=()=>{ syncViewMenu();pendingGalleryPosition=null;$('#gallery').scrollTop=0;pagedCatalog?safe(()=>refreshCurrent()):render();};$('#sort').onchange=()=>{localStorage.setItem('sort-order',$('#sort').value);syncViewMenu();pendingGalleryPosition=null;$('#gallery').scrollTop=0;pagedCatalog?safe(()=>refreshCurrent()):render();};
-$('#quick-filters').addEventListener('click',event=>{const chip=event.target.closest('[data-quick-type]');if(!chip)return;$('#type').value=chip.dataset.quickType;syncViewMenu();$('#type').dispatchEvent(new Event('change'));});
 function syncMenu(menu,attr,value){if(!menu)return;for(const option of menu.querySelectorAll('['+attr+']'))option.setAttribute('aria-checked',String(option.getAttribute(attr)===String(value)));}
-function syncViewMenu(){const value=$('#type').value;for(const chip of document.querySelectorAll('#quick-filters [data-quick-type]'))chip.setAttribute('aria-pressed',String(chip.dataset.quickType===value));if(typeof viewMenu==='undefined'||!viewMenu)return;syncMenu(viewMenu,'data-view-type',value);syncMenu(viewMenu,'data-view-sort',$('#sort').value);}
+function syncViewMenu(){if(typeof viewMenu==='undefined'||!viewMenu)return;syncMenu(viewMenu,'data-view-type',$('#type').value);syncMenu(viewMenu,'data-view-sort',$('#sort').value);}
 function positionMenu(menu,button){if(!menu||!button||!menu.matches(':popover-open'))return;const rect=button.getBoundingClientRect();menu.style.top=(rect.bottom+8)+'px';menu.style.left=Math.max(8,Math.min(innerWidth-menu.offsetWidth-8,rect.right-menu.offsetWidth))+'px';}
 for(const menu of document.querySelectorAll('[popover][role="menu"]')){
  const button=document.querySelector('[popovertarget="'+menu.id+'"]');
@@ -945,7 +886,7 @@ if(viewMenu){
  viewMenu.addEventListener('click',event=>{
   const typeOption=event.target.closest('[data-view-type]');
   const sortOption=event.target.closest('[data-view-sort]');
-  if(typeOption){$('#type').value=typeOption.dataset.viewType;syncViewMenu();viewMenu.hidePopover();pagedCatalog?safe(()=>refreshCurrent()):render();return;}
+  if(typeOption){$('#type').value=typeOption.dataset.viewType;syncMenu(viewMenu,'data-view-type',typeOption.dataset.viewType);viewMenu.hidePopover();pagedCatalog?safe(()=>refreshCurrent()):render();return;}
   if(sortOption){$('#sort').value=sortOption.dataset.viewSort;localStorage.setItem('sort-order',sortOption.dataset.viewSort);syncMenu(viewMenu,'data-view-sort',sortOption.dataset.viewSort);viewMenu.hidePopover();pendingGalleryPosition=null;$('#gallery').scrollTop=0;render();}
  });
 }
@@ -983,7 +924,6 @@ function setZoomSize(target){
 }
 $('#zoom').oninput=()=>setZoomSize(Number($('#zoom').value)||230);
 $('#show-extension').onclick=()=>safe(()=>api.showExtension());
-$('#show-library').onclick=()=>safe(()=>api.showLibrary());
 // The details panel needs room. Under 880px it would take a third of the
 // window and leave the gallery one narrow column, so it steps aside and
 // returns as a sheet over the gallery instead of a column beside it.
@@ -1107,7 +1047,7 @@ document.addEventListener('keydown',e=>{
  if(document.querySelector('dialog[open]'))return;
  // ⌘K is the one command entry point, including from inside the canvas where
 // CanvasWorkspace otherwise claims the same chord for its tray search.
- if(command&&key==='k'&&!e.altKey){e.preventDefault();if(!$('#preview').hidden)closePreview();window.CommandPalette?.open('commands');return;}
+ if(command&&key==='k'&&!e.altKey){e.preventDefault();if(!$('#preview').hidden)closePreview();window.CommandPalette?.open();return;}
  if(e.code==='Space'&&e.target.closest?.('button,summary,input[type="checkbox"],input[type="radio"]'))return;
  const preview = $('#preview');
  if (!preview.hidden && e.key === 'Tab') {
@@ -1156,9 +1096,9 @@ document.addEventListener('keydown',e=>{
   else setZoomSize(zoomTarget+(key==='-'||key==='_'?-30:30));
   e.preventDefault();return;
  }
- // ⌘B toggles the sidebar. ⌘S used to do the same, which meant the one chord
- // every Mac user presses to save silently hid the sidebar instead.
- if(command&&!e.shiftKey&&!e.altKey&&key==='b'&&!editing){e.preventDefault();if(!e.repeat)$('#toggle-sidebar').click();return;}
+ // ⌘B and ⌘S both toggle the sidebar. The app saves continuously, so there is
+ // no Save command for ⌘S to conflict with.
+ if(command&&!e.shiftKey&&!e.altKey&&(key==='b'||key==='s')&&!editing){e.preventDefault();if(!e.repeat)$('#toggle-sidebar').click();return;}
  if(command&&!e.shiftKey&&!e.altKey&&key===','){e.preventDefault();if(!$('#preview').hidden)closePreview();$('#show-settings').click();return;}
  if(command&&key==='f'){e.preventDefault();if(!$('#preview').hidden)closePreview();if(view==='canvas'){CanvasWorkspace.toggleTray(true);$('#canvas-tray-search').focus();}else $('#search').focus();return;}
  if(command&&!e.shiftKey&&!e.altKey&&['Backspace','Delete'].includes(e.key)&&!typing){e.preventDefault();if(!e.repeat)safe(trashSelection);return;}

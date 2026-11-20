@@ -3,16 +3,15 @@
 <body>
 <a class="skip-link" href="#gallery">Skip to library</a>
 <aside class="sidebar">
- <div class="window-space"><button id="toggle-sidebar" class="icon-button sidebar-toggle" title="Toggle sidebar · ⌘B" aria-label="Toggle sidebar" aria-pressed="true"></button></div><div class="brand"><span class="brand-icon"></span><strong>Canvas Pro</strong></div>
+ <div class="window-space"><button id="toggle-sidebar" class="icon-button sidebar-toggle" title="Toggle sidebar · ⌘B / ⌘S" aria-label="Toggle sidebar" aria-pressed="true"></button></div><div class="brand"><span class="brand-icon"></span><strong>Canvas Pro</strong></div>
  <nav id="navigation"></nav>
  <details class="sidebar-section" data-section="collections" open><summary class="section-label"><span>COLLECTIONS</span><button id="add-folder" class="section-add" title="New collection" aria-label="New collection"></button></summary><nav id="folders" aria-label="Collections"></nav></details>
- <details class="sidebar-section" data-section="media" open><summary class="section-label media-label"><span>MEDIA</span></summary><nav id="media-navigation" aria-label="Media"></nav></details>
  <details class="sidebar-section" data-section="canvas" open><summary class="section-label"><span>CANVAS</span><button id="add-canvas" class="section-add" title="New canvas" aria-label="New canvas"></button></summary><nav id="canvas-navigation" aria-label="Canvases"></nav></details>
  <div class="sidebar-bottom"><button id="show-settings" class="settings-button"><span class="settings-icon" aria-hidden="true"></span><span>Settings</span></button></div>
 </aside>
 <main>
   <div class="filter-bar library-header">
-  <button id="show-sidebar" class="icon-button" title="Show sidebar · ⌘B" aria-label="Show sidebar"></button>
+  <button id="show-sidebar" class="icon-button" title="Show sidebar · ⌘B / ⌘S" aria-label="Show sidebar"></button>
   <div class="toolbar-heading">
    <h1 id="view-title">Library</h1>
    <span id="count" class="toolbar-count">0 items</span>
@@ -28,15 +27,6 @@
   <label class="zoom-label" hidden title="Thumbnail size"><input id="zoom" type="range" min="140" max="360" value="230" aria-label="Thumbnail size"></label>
   <select id="type" hidden aria-label="File type"><option value="all">All types</option><option value="image">Images</option><option value="video">Videos</option><option value="pdf">PDFs</option><option value="audio">Audio</option><option value="social">Social posts</option><option value="recipe">Recipes</option><option value="link">Web links</option><option value="other">Design &amp; other</option></select>
   <select id="sort" hidden aria-label="Sort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="name">Name A–Z</option><option value="size">Largest first</option></select>
- </div>
- <div id="quick-filters" class="quick-filters" role="group" aria-label="Filter by file type">
-  <button type="button" data-quick-type="all" aria-pressed="true">All</button>
-  <button type="button" data-quick-type="image" aria-pressed="false">Images</button>
-  <button type="button" data-quick-type="video" aria-pressed="false">Video</button>
-  <button type="button" data-quick-type="audio" aria-pressed="false">Audio</button>
-  <button type="button" data-quick-type="pdf" aria-pressed="false">Documents</button>
-  <button type="button" data-quick-type="link" aria-pressed="false">Links</button>
-  <button type="button" data-quick-type="other" aria-pressed="false">Other</button>
  </div>
  <div id="tags-bar" class="tags-bar" hidden></div>
  <div id="gallery" class="gallery" tabindex="0" role="listbox" aria-multiselectable="true" aria-label="File library"><div id="gallery-layer"></div></div>
@@ -67,7 +57,6 @@
 <!-- The sidebar deliberately stays interactive above the preview, so this
  dialog does not claim modal semantics: no aria-modal, no focus trap. -->
 <div id="preview" class="preview" tabindex="-1" role="dialog" aria-label="File preview" hidden><div class="preview-drag-region" aria-hidden="true"></div><button id="close-preview" aria-label="Close preview" title="Close · Esc"></button><div class="preview-body"><div id="preview-content"></div></div><nav class="preview-bottom" aria-label="Preview navigation"><button id="previous" class="preview-arrow" aria-label="Previous file" title="Previous · Left arrow"></button><span id="preview-index" aria-live="polite" aria-atomic="true"></span><button id="next" class="preview-arrow" aria-label="Next file" title="Next · Right arrow"></button></nav></div>
-<div id="hover-preview" class="hover-preview" hidden aria-hidden="true"><img alt=""><span class="hover-preview-label"></span></div>
 <div id="import-menu" class="layout-menu import-menu" popover role="menu" aria-label="Import">
 <button id="import" class="primary" type="button" role="menuitem"><span>Import files</span><kbd>⌘ O</kbd></button>
 <button id="import-folder" type="button" role="menuitem">Import folder</button>
@@ -116,18 +105,11 @@
     </div>
     <div class="settings-nav-group">
      <div class="settings-nav-title">Library</div>
-     <button type="button" class="settings-nav-item" data-settings-pane="collections"><span class="settings-nav-icon" data-settings-icon="folder" aria-hidden="true"></span><span class="settings-nav-label">Collections</span></button>
-     <button type="button" class="settings-nav-item" data-settings-pane="importing"><span class="settings-nav-icon" data-settings-icon="importing" aria-hidden="true"></span><span class="settings-nav-label">Importing</span></button>
-     <button type="button" class="settings-nav-item" data-settings-pane="maintenance"><span class="settings-nav-icon" data-settings-icon="health" aria-hidden="true"></span><span class="settings-nav-label">Maintenance</span></button>
      <button type="button" class="settings-nav-item" data-settings-pane="galleries"><span class="settings-nav-icon" data-settings-icon="grid" aria-hidden="true"></span><span class="settings-nav-label">Galleries</span></button>
     </div>
      <div class="settings-nav-group">
       <div class="settings-nav-title">Browser</div>
       <button type="button" class="settings-nav-item" data-settings-pane="extensions"><span class="settings-nav-icon" data-settings-icon="extensions" aria-hidden="true"></span><span class="settings-nav-label">Extensions</span></button>
-     </div>
-     <div class="settings-nav-group">
-      <div class="settings-nav-title">Support</div>
-      <button type="button" class="settings-nav-item" data-settings-pane="feedback"><span class="settings-nav-icon" data-settings-icon="feedback" aria-hidden="true"></span><span class="settings-nav-label">Feedback</span></button>
      </div>
     <div class="settings-nav-group">
      <div class="settings-nav-title">Canvas Pro</div>
@@ -180,36 +162,10 @@
     <section class="settings-pane" data-settings-pane="shortcuts" aria-label="Keyboard shortcuts" hidden>
      <h3 class="settings-section-label">Keyboard</h3>
      <div class="settings-card settings-card-shortcuts" id="settings-shortcuts"></div>
-     <div class="settings-row settings-row-actions settings-row-outside">
-      <button id="settings-all-shortcuts" class="settings-button" type="button">All shortcuts&#8230; <kbd>⌘ /</kbd></button>
-     </div>
     </section>
 
-    <section class="settings-pane" data-settings-pane="collections" aria-label="Collections" hidden>
-     <h3 class="settings-section-label">Collections</h3>
-     <div class="settings-card" id="settings-collections"></div>
-     <div class="settings-row settings-row-actions settings-row-outside">
-      <button id="settings-new-collection" class="settings-button" type="button">New Collection&#8230;</button>
-     </div>
-    </section>
 
-    <section class="settings-pane" data-settings-pane="importing" aria-label="Importing" hidden>
-     <h3 class="settings-section-label">Import</h3>
-     <div class="settings-card">
-      <button id="show-activity" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong class="settings-label">Import activity</strong><small>Queue, cancel and retry imports</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
-      <button id="settings-import-files" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Import files</strong><small>Add files to this library</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
-     </div>
-     <p class="settings-note">Originals are copied into the library, never moved. Exact duplicates are detected by checksum.</p>
-    </section>
 
-    <section class="settings-pane" data-settings-pane="maintenance" aria-label="Maintenance" hidden>
-     <h3 class="settings-section-label">Your library</h3>
-     <div class="settings-card">
-      <button id="check-library" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library health</strong><small>Check your originals for missing or changed files</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
-      <button id="settings-backup" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library backup</strong><small>Copy the whole library to another folder</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
-      <button id="show-library" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Library on this Mac</strong><small>Open the folder containing your originals</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
-     </div>
-    </section>
 
     <section class="settings-pane" data-settings-pane="galleries" aria-label="Galleries" hidden>
      <h3 class="settings-section-label">Gallery layout</h3>
@@ -238,14 +194,6 @@
       <button id="show-extension" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Browser capture extension</strong><small>Open browser-ready extension folder</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
      </div>
      <p class="settings-note">Load the folder as an unpacked extension in Helium or Chrome to capture pages straight into your library.</p>
-    </section>
-
-    <section class="settings-pane" data-settings-pane="feedback" aria-label="Feedback" hidden>
-     <h3 class="settings-section-label">Feedback</h3>
-     <div class="settings-card">
-      <button id="settings-beta" class="settings-row settings-row-button" type="button"><span class="settings-copy"><strong>Beta testing and feedback</strong><small>Export a diagnostics report</small></span><span class="settings-chevron" aria-hidden="true"></span></button>
-     </div>
-     <p class="settings-note">Reports include version information and never include your files or queries.</p>
     </section>
 
     <section class="settings-pane" data-settings-pane="about" aria-label="About" hidden>

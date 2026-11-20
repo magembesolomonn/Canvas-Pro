@@ -4,7 +4,6 @@ const flipAnimations=new WeakMap();
 function renderImportActivity(jobs=importJobs){
  const previousIds=new Set(importJobs.map(job=>job.id));
  importJobs=jobs;const active=jobs.filter(j=>['queued','running','cancelling'].includes(j.state)).length;
- $('#show-activity .settings-label').textContent='Import activity'+(active?' · '+active:'');
  if(!$('#activity-dialog').open)return;
  const list=$('#import-jobs');
  // FLIP: remember where each existing row was before the list is reordered.
@@ -67,22 +66,13 @@ function renderHealth(state=latestHealth){
  for(const issue of (result?.issues||[]).slice(0,100)){const row=el('div','health-issue');row.append(el('strong','',issue.name),el('span','hint',labels[issue.type]||issue.type));row.title=issue.detail;if(issue.type==='missing')row.append(action('Locate original…',()=>WorkbenchUI.recovery(issue)));list.append(row);}
  if(result?.issues.length>100)list.append(el('p','hint','Showing the first 100 issues. No files have been changed.'));
 }
-function openSettingsTool(selector){
- const settings=$('#settings-dialog'),target=$(selector);target.dataset.fromSettings=String(settings.open);
- if(settings.open)settings.close();target.showModal();
-}
 function initReliabilityUI(){
  SettingsUI.init();
  $('#show-settings .settings-icon').append(glyph('settings'));
  $('#show-settings').onclick=()=>{stopHover();SettingsUI.open();safe(async()=>{const info=await api.libraryLocation();$('#current-library-name').textContent=info.name;$('#current-library-path').textContent=info.root;});};
  $('#new-library').onclick=()=>safe(()=>api.switchLibrary('new'));$('#open-library').onclick=()=>safe(()=>api.switchLibrary('open'));
  $('#settings-close').onclick=()=>$('#settings-dialog').close();
- for(const [dialog,button]of [['#activity-dialog','#show-activity'],['#health-dialog','#check-library']])$(dialog).addEventListener('close',()=>{
- if($(dialog).dataset.fromSettings==='true'){$(dialog).dataset.fromSettings='false';if(!$('#settings-dialog').open)$('#settings-dialog').showModal();$(button).focus({preventScroll:true});}
- });
- $('#show-activity').onclick=()=>safe(async()=>{openSettingsTool('#activity-dialog');renderImportActivity(await api.importState());});
  $('#activity-close').onclick=()=>$('#activity-dialog').close();
- $('#check-library').onclick=()=>safe(async()=>{openSettingsTool('#health-dialog');renderHealth(await api.healthState());});
  $('#health-close').onclick=()=>$('#health-dialog').close();$('#health-show-library').onclick=()=>safe(()=>api.showLibrary());
  $('#health-run').onclick=()=>safe(async()=>renderHealth(await api.startHealth()));$('#health-cancel').onclick=()=>safe(async()=>renderHealth(await api.cancelHealth()));
  api.onImportState(renderImportActivity);api.onHealthState(state=>{latestHealth=state;if($('#health-dialog').open)renderHealth(state);});

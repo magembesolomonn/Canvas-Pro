@@ -69,12 +69,14 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
  assert(drag.zoom>2,'Drag test did not reach the zoomed-in range');
  assert(Math.abs(drag.dx-20)<2&&Math.abs(drag.dy-18)<2,'Drag is not 1:1 on both axes');
 
- // Click opens the viewer with the wall as its own navigation scope, Space
- // closes it, the exact pan is restored and focus lands back on the item.
+ // A click only selects. Double-click opens the viewer with the wall as its
+ // own navigation scope; Space also opens it, and Space closes it again.
  await wait(200);
- const preview=JSON.parse(await run(`(()=>{const item=document.elementFromPoint(innerWidth/2,innerHeight/2)?.closest('.infinite-item');if(!item)return JSON.stringify({error:'no item at center'});const strip=document.querySelector('.infinite-strip');const before=strip.style.transform;item.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientX:innerWidth/2,clientY:innerHeight/2,pointerId:5}));item.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,clientX:innerWidth/2,clientY:innerHeight/2,pointerId:5}));const open=!document.querySelector('#preview').hidden;const index=document.querySelector('#preview-index').textContent;const total=InfiniteCanvas.scope().length;return JSON.stringify({open,index,total,selected,before});})()`));
+ const preview=JSON.parse(await run(`(()=>{const item=document.elementFromPoint(innerWidth/2,innerHeight/2)?.closest('.infinite-item');if(!item)return JSON.stringify({error:'no item at center'});const id=item.dataset.id,strip=document.querySelector('.infinite-strip'),before=strip.style.transform;item.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientX:innerWidth/2,clientY:innerHeight/2,pointerId:5}));item.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,clientX:innerWidth/2,clientY:innerHeight/2,pointerId:5}));const clickOpened=!document.querySelector('#preview').hidden,clickSelected=selected===id;item.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,clientX:innerWidth/2,clientY:innerHeight/2}));const open=!document.querySelector('#preview').hidden,index=document.querySelector('#preview-index').textContent,total=InfiniteCanvas.scope().length;return JSON.stringify({clickOpened,clickSelected,open,index,total,selected,before});})()`));
  console.log('PREVIEW',JSON.stringify(preview));
- assert(preview.open,'Clicking a wall item did not open the viewer');
+ assert(!preview.clickOpened,'A single click must not open the viewer');
+ assert(preview.clickSelected,'A single click must select the wall item');
+ assert(preview.open,'Double-clicking a wall item did not open the viewer');
  assert(preview.index.trim().endsWith('/ '+preview.total),'The viewer did not use the wall as its scope');
  // With the side islands over the wall, the viewer backdrop must cover the
  // whole window; otherwise the island margins expose moving wall items.
@@ -91,11 +93,18 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
  assert(returned.transform===preview.before,'The exact pan was not restored after the viewer');
  assert(returned.focus===returned.selected,'Focus did not return to the wall item');
 
+ // Space reopens the selected wall item, the same chord the library grid uses.
+ await run(`document.dispatchEvent(new KeyboardEvent('keydown',{key:' ',code:'Space',bubbles:true,cancelable:true}))`);
+ await wait(150);
+ assert(await run(`!document.querySelector('#preview').hidden`),'Space did not open the viewer');
+ await run(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))`);
+ await wait(100);
+
  // Clicking the empty viewer surface also dismisses it, so a viewer opened by
  // a click can never trap the pointer.
- const backdrop=JSON.parse(await run(`(()=>{const item=document.elementFromPoint(innerWidth/2,innerHeight/2)?.closest('.infinite-item');item.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientX:innerWidth/2,clientY:innerHeight/2,pointerId:7}));item.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,clientX:innerWidth/2,clientY:innerHeight/2,pointerId:7}));const opened=!document.querySelector('#preview').hidden;document.querySelector('.preview-body').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));return JSON.stringify({opened,closed:document.querySelector('#preview').hidden});})()`));
+ const backdrop=JSON.parse(await run(`(()=>{const item=document.elementFromPoint(innerWidth/2,innerHeight/2)?.closest('.infinite-item');item.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,clientX:innerWidth/2,clientY:innerHeight/2}));const opened=!document.querySelector('#preview').hidden;document.querySelector('.preview-body').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));return JSON.stringify({opened,closed:document.querySelector('#preview').hidden});})()`));
  console.log('BACKDROP',JSON.stringify(backdrop));
- assert(backdrop.opened&&backdrop.closed,'Clicking the empty viewer surface did not close it');
+ assert(backdrop.opened&&backdrop.closed,'Double-clicking a wall item or clicking the viewer surface did not work');
 
  // Right-click selects the item before opening the context menu.
  const context=JSON.parse(await run(`(()=>{selection.clear();selected=null;const item=[...document.querySelectorAll('.infinite-item')].find(n=>n.getBoundingClientRect().left>0);item.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:400,clientY:400}));return JSON.stringify({selected,selectedCount:selection.ids.size});})()`));

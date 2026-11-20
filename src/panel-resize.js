@@ -417,14 +417,6 @@
       event.stopPropagation();
       cancelDrag(null);
     }, true);
-
-    // A programmatic way to reset a rail without a pointer.
-    window.PanelResize = {
-      reset(key) {
-        const panel = panels.get(key);
-        if (panel) reset(panel);
-      }
-    };
   }
 
   if (document.readyState === 'loading') {

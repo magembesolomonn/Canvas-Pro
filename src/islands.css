@@ -16,11 +16,10 @@
   --island-surface: #212121;
   --island-line: #ffffff12;
   --island-radius: 12px;
-  /* The window's own gutters use the shared spacing scale. */
-  --island-gap: var(--space-2);
+  --island-gap: 10px;
   /* Tiles sit close together, the way a contact sheet does. */
   --gallery-gap: 8px;
-  --gallery-pad: var(--space-3);
+  --gallery-pad: 12px;
   --radius-card: 6px;
   /* With titleBarStyle:'hiddenInset' the renderer starts at x=0 and the
      native traffic lights float above it (x=22, ~52px wide). Any toolbar
@@ -79,14 +78,14 @@ body.hide-sidebar {
 }
 
 .sidebar {
-  /* One spacing step on both sides and under the last row. */
-  padding: 0 var(--space-4) var(--space-4);
+  /* 16px of inset on both sides, 16px under the last row. */
+  padding: 0 16px 16px;
   /* The island is solid: the window no longer has a translucent sidebar. */
   --sidebar-surface: var(--island-surface);
 }
 
 .inspector {
-  padding: var(--space-4) var(--space-3);
+  padding: 24px 18px;
 }
 
 /* The work area is the background itself. */
