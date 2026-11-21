@@ -12,7 +12,7 @@ class Library {
     fs.mkdirSync(path.join(root, 'thumbnails'), { recursive: true });
     this.db = new DatabaseSync(path.join(root, 'library.sqlite'));
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-8000; PRAGMA busy_timeout=5000;
-      CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, name TEXT NOT NULL, ext TEXT NOT NULL, size INTEGER NOT NULL, hash TEXT UNIQUE NOT NULL, stored TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', folders TEXT NOT NULL DEFAULT '[]', notes TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '', rating INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, imported TEXT NOT NULL, trash INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, name TEXT NOT NULL, ext TEXT NOT NULL, size INTEGER NOT NULL, hash TEXT UNIQUE NOT NULL, stored TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', folders TEXT NOT NULL DEFAULT '[]', notes TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '', rating INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, imported TEXT NOT NULL, trash INTEGER NOT NULL DEFAULT 0, width INTEGER NOT NULL DEFAULT 0, height INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS folders (name TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS capture_metadata (id TEXT PRIMARY KEY REFERENCES assets(id), json TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS assets_imported ON assets(imported DESC,id DESC);
@@ -20,21 +20,14 @@ class Library {
       CREATE TABLE IF NOT EXISTS asset_analysis(id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,summary TEXT NOT NULL DEFAULT '{}',text TEXT NOT NULL DEFAULT '',vector BLOB,model TEXT,version INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS aspect_ratios (id TEXT PRIMARY KEY REFERENCES assets(id), ratio REAL NOT NULL);`);
     const columns=this.db.prepare('PRAGMA table_info(assets)').all();if(!columns.some(c=>c.name==='favorite')){this.db.exec('ALTER TABLE assets ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0; UPDATE assets SET favorite=1 WHERE rating>=4');}
-    // A managed original can disappear when someone deletes it in Finder. The
-    // record moves to Trash and remembers why, so it can return if the file is
-    // put back. This is separate from a file the person moved to Trash here.
     if(!this.db.prepare('PRAGMA table_info(assets)').all().some(c=>c.name==='missing'))this.db.exec('ALTER TABLE assets ADD COLUMN missing INTEGER NOT NULL DEFAULT 0');
-    // A 64-bit perceptual fingerprint (16 hex characters). NULL means "not
-    // looked at yet"; an empty string records a file that could not be
-    // decoded, so a review does not retry it forever.
+    const assetColumns=this.db.prepare('PRAGMA table_info(assets)').all();
+    if(!assetColumns.some(c=>c.name==='width'))this.db.exec('ALTER TABLE assets ADD COLUMN width INTEGER NOT NULL DEFAULT 0');
+    if(!assetColumns.some(c=>c.name==='height'))this.db.exec('ALTER TABLE assets ADD COLUMN height INTEGER NOT NULL DEFAULT 0');
     if(!this.db.prepare('PRAGMA table_info(assets)').all().some(c=>c.name==='phash'))this.db.exec('ALTER TABLE assets ADD COLUMN phash TEXT');
-    // Fingerprinting walks the remaining images in batches; without a partial
-    // index each batch rescans the whole assets table.
     this.db.exec(`CREATE INDEX IF NOT EXISTS assets_phash_pending ON assets(imported DESC) WHERE phash IS NULL AND trash=0;
       CREATE INDEX IF NOT EXISTS asset_analysis_version ON asset_analysis(version);`);
     if(!this.db.prepare('PRAGMA table_info(folders)').all().some(c=>c.name==='id'))this.db.exec('ALTER TABLE folders ADD COLUMN id TEXT');for(const folder of this.db.prepare('SELECT name FROM folders WHERE id IS NULL').all())this.db.prepare('UPDATE folders SET id=? WHERE name=?').run(crypto.randomUUID(),folder.name);this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS folders_id ON folders(id)');
-    // The Movies tracker and the RSS reader were removed. Their tables are
-    // dropped so existing libraries do not keep orphaned data around.
     for(const table of ['movie_tracker','rss_articles','rss_feeds','rss_settings'])this.db.exec(`DROP TABLE IF EXISTS ${table};`);
     this.assetStatement=this.db.prepare('SELECT * FROM assets WHERE id=?');
     this.updateStatements=new Map();
@@ -43,8 +36,9 @@ class Library {
     recoverDeletions(this);
     recoverImports(this);
   }
-  list(ids,limit=0) { const where=ids?' WHERE assets.id IN ('+ids.map(()=>'?').join(',')+')':'';const params=[...(ids||[])];let sql='SELECT assets.*, assets.rowid AS importOrder, aspect_ratios.ratio AS aspectRatio, capture_metadata.json AS captureJSON, asset_analysis.summary AS smartJSON FROM assets LEFT JOIN aspect_ratios ON assets.id=aspect_ratios.id LEFT JOIN capture_metadata ON assets.id=capture_metadata.id LEFT JOIN asset_analysis ON assets.id=asset_analysis.id'+where+' ORDER BY imported DESC, assets.rowid DESC';if(Number.isFinite(limit)&&limit>0){sql+=' LIMIT ?';params.push(Math.floor(limit));}return this.db.prepare(sql).all(...params).map(a => ({ ...a, captureMetadata: a.captureJSON?JSON.parse(a.captureJSON):null, captureJSON:undefined,smart:a.smartJSON?JSON.parse(a.smartJSON):null,smartJSON:undefined, tags: JSON.parse(a.tags), folders: JSON.parse(a.folders) })); }
-  page({view='all',folder='',tag='',sort='new',query='',matches=[],extensions=[],bookmark='',excludeBookmarks=false,other=false,knownExtensions=[],offset=0,limit=120}={}){
+  list(ids,limit=0,offset=0) { const where=ids?' WHERE assets.id IN ('+ids.map(()=>'?').join(',')+')':'';const params=[...(ids||[])];let sql='SELECT assets.*, assets.rowid AS importOrder, aspect_ratios.ratio AS aspectRatio, capture_metadata.json AS captureJSON, asset_analysis.summary AS smartJSON FROM assets LEFT JOIN aspect_ratios ON assets.id=aspect_ratios.id LEFT JOIN capture_metadata ON assets.id=capture_metadata.id LEFT JOIN asset_analysis ON assets.id=asset_analysis.id'+where+' ORDER BY imported DESC, assets.rowid DESC';if(Number.isFinite(limit)&&limit>0){sql+=' LIMIT ?';params.push(Math.floor(limit));}else if(offset>0){sql+=' LIMIT -1';}if(Number.isFinite(offset)&&offset>0){sql+=' OFFSET ?';params.push(Math.floor(offset));}return this.db.prepare(sql).all(...params).map(a => ({ ...a, captureMetadata: a.captureJSON?JSON.parse(a.captureJSON):null, captureJSON:undefined,smart:a.smartJSON?JSON.parse(a.smartJSON):null,smartJSON:undefined, tags: JSON.parse(a.tags), folders: JSON.parse(a.folders) })); }
+  ftsAvailable(){if(this.ftsReady)return true;try{if(this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='smart_fts'").get())this.ftsReady=true;}catch{}return !!this.ftsReady;}
+  page({view='all',folder='',tag='',sort='new',query='',matches=[],extensions=[],bookmark='',excludeBookmarks=false,other=false,knownExtensions=[],offset=0,limit=120,cursor=null}={}){
     const where=['a.trash=?'],params=[view==='trash'?1:0];
     const clause=(sql,...values)=>{where.push(sql);params.push(...values);};
     if(view==='favorites')clause('a.favorite=1');
@@ -55,8 +49,6 @@ class Library {
     if(bookmark==='social'||bookmark==='recipe')clause("EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND json_extract(m.json,'$.linkPreview.type')=?)",bookmark);
     if(excludeBookmarks)clause("NOT EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND json_extract(m.json,'$.linkPreview.type') IN ('social','recipe'))");
     if(other)clause('a.ext NOT IN (SELECT value FROM json_each(?))',JSON.stringify(knownExtensions));
-    // An empty needle makes instr() true for every row, so text and semantic
-    // results are separate predicates rather than one OR chain.
     const text=String(query??'').trim();
     if(text||matches.length){
       const predicates=[],values=[];
@@ -67,10 +59,15 @@ class Library {
         }
         predicates.push(`instr(canvas_fold(a.name||' '||a.notes||' '||a.url||' '||a.tags||' '||a.folders),?)>0`);
         values.push(text);
-        predicates.push(`EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND instr(canvas_fold(m.json),?)>0)`);
-        values.push(text);
-        predicates.push(`EXISTS(SELECT 1 FROM asset_analysis s WHERE s.id=a.id AND instr(canvas_fold(s.summary),?)>0)`);
-        values.push(text);
+        if(this.ftsAvailable()){
+          const terms=text.split(/\s+/).filter(Boolean).slice(0,8).map(term=>'"'+term.replace(/"/g,'')+'"*');
+          if(terms.length){predicates.push('a.id IN (SELECT id FROM smart_fts WHERE smart_fts MATCH ?)');values.push(terms.join(' OR '));}
+        }else{
+          predicates.push(`EXISTS(SELECT 1 FROM capture_metadata m WHERE m.id=a.id AND instr(canvas_fold(m.json),?)>0)`);
+          values.push(text);
+          predicates.push(`EXISTS(SELECT 1 FROM asset_analysis s WHERE s.id=a.id AND instr(canvas_fold(s.summary),?)>0)`);
+          values.push(text);
+        }
       }
       if(matches.length){
         predicates.push('a.id IN (SELECT value FROM json_each(?))');
@@ -79,11 +76,16 @@ class Library {
       clause('('+predicates.join(' OR ')+')',...values);
     }
     const condition=' WHERE '+where.join(' AND ');
-    const order={new:'a.imported DESC,a.rowid DESC',old:'a.imported ASC,a.rowid ASC',name:'a.name COLLATE NOCASE,a.rowid DESC',size:'a.size DESC,a.imported DESC,a.rowid DESC'};
-    const rows=this.db.prepare('SELECT a.id FROM assets a'+condition+' ORDER BY '+(Object.hasOwn(order,sort)?order[sort]:order.new)+' LIMIT ? OFFSET ?').all(...params,limit,offset);
+    const order={new:'a.imported DESC,a.rowid DESC',old:'a.imported ASC,a.rowid ASC',name:'a.name COLLATE NOCASE,a.rowid DESC','name-desc':'a.name COLLATE NOCASE DESC,a.rowid DESC',size:'a.size DESC,a.imported DESC,a.rowid DESC','size-asc':'a.size ASC,a.imported DESC,a.rowid DESC',kind:'a.ext COLLATE NOCASE,a.name COLLATE NOCASE',rating:'a.rating DESC,a.imported DESC,a.rowid DESC'};
+    const orderSql=Object.hasOwn(order,sort)?order[sort]:order.new;
+    const keyset=sort==='new'&&cursor&&typeof cursor==='object'&&typeof cursor.imported==='string'&&Number.isFinite(Number(cursor.rowid));
+    const cursorSql=keyset?' AND (a.imported < ? OR (a.imported = ? AND a.rowid < ?))':'';
+    const cursorParams=keyset?[cursor.imported,cursor.imported,Number(cursor.rowid)]:[];
+    const rows=this.db.prepare('SELECT a.id, a.imported AS importedKey, a.rowid AS rowKey FROM assets a'+condition+cursorSql+' ORDER BY '+orderSql+' LIMIT ? OFFSET ?').all(...params,...cursorParams,limit,keyset?0:offset);
     const records=new Map(this.list(rows.map(row=>row.id)).map(asset=>[asset.id,asset]));
-    const total=offset===0?this.db.prepare('SELECT COUNT(*) AS total FROM assets a'+condition).get(...params).total:null;
-    return {assets:rows.map(row=>records.get(row.id)),total};
+    const total=offset===0&&!keyset?this.db.prepare('SELECT COUNT(*) AS total FROM assets a'+condition).get(...params).total:null;
+    const last=rows.at(-1);
+    return {assets:rows.map(row=>records.get(row.id)),total,nextCursor:last?{imported:last.importedKey,rowid:Number(last.rowKey)}:null};
   }
   navSummary(){
     if(this.navCache&&this.navCache.revision===this.revision)return this.navCache.value;
@@ -142,10 +144,6 @@ class Library {
     }
     const realBase=fs.realpathSync(base);if(!real.startsWith(realBase+path.sep))throw new Error('The original points outside this library.');return real;
   }
-  // Called by the originals watcher. A file deleted in Finder leaves the
-  // library: the item goes to Trash, but remembers that it was the file that
-  // vanished rather than a choice made here. A file that comes back is
-  // restored automatically, so restoring from the macOS Trash is enough.
   markMissing(id) {
     const a=this.asset(id);
     if(a.trash||a.missing||this.deleting.has(id))return false;
@@ -172,7 +170,6 @@ class Library {
     let retained = false, journal;
     try {
       journal = recordImport(this, id, stored);
-      // Identity belongs to our immutable copy, never to a changing source path.
       await fs.promises.copyFile(source, dest, fs.constants.COPYFILE_EXCL);
       signal?.throwIfAborted();
       const snapshot = await fs.promises.stat(dest);
@@ -180,15 +177,10 @@ class Library {
       for await (const chunk of fs.createReadStream(dest,{signal})) hash.update(chunk);
       signal?.throwIfAborted();
       const digest = hash.digest('hex');
-      // The collection may have been renamed while the bytes were copying;
-      // follow its id so the file lands in the name it has now.
       if(destination)folder=this.db.prepare('SELECT name FROM folders WHERE id=?').get(destination.id)?.name||null;
       const exists = this.db.prepare('SELECT id, stored, folders, trash, missing FROM assets WHERE hash=?').get(digest);
       if (exists) {
         if (this.deleting.has(exists.id)) throw new Error('This file is being deleted. Try importing it again afterwards.');
-        // Importing the same file again is a way to put a managed original back
-        // after it was deleted in Finder. The bytes are already verified here,
-        // so link them into place before restoring the record.
         if (exists.missing) {
           const target=path.join(this.root, exists.stored);
           try { await fs.promises.link(dest, target); }
@@ -204,15 +196,14 @@ class Library {
       this.db.prepare('INSERT INTO assets(id,name,ext,size,hash,stored,folders,created,imported) VALUES(?,?,?,?,?,?,?,?,?)')
         .run(id, path.basename(source), ext, snapshot.size, digest, stored, JSON.stringify(folder ? [folder] : []), sourceStat.birthtime.toISOString(), new Date().toISOString());
       retained = true;
-      // Optional shortcut metadata must never roll back an already committed original.
       try {
       if(['url','webloc'].includes(ext)&&snapshot.size<1024*1024){const text=await fs.promises.readFile(dest,'utf8');const value=ext==='url'?text.match(/^URL\s*=\s*(.+)$/im)?.[1]:text.match(/<key>URL<\/key>\s*<string>([\s\S]*?)<\/string>/i)?.[1];if(value){try{const url=new URL(value.trim().replaceAll('&amp;','&'));if(['http:','https:'].includes(url.protocol))this.update(id,{url:url.href});}catch{}}}
-      } catch { /* URL recovery can retry when the bookmark is opened. */ }
+      } catch {  }
       this.revision++;this.onAssetChanged?.(id);
       return { imported: id };
     } finally {
       if (!retained) await fs.promises.rm(dest, { force: true });
-      if (journal) { try { await fs.promises.rm(journal, { force: true }); } catch { /* Recover the journal on the next launch. */ } }
+      if (journal) { try { await fs.promises.rm(journal, { force: true }); } catch {  } }
     }
   }
 
@@ -239,8 +230,6 @@ class Library {
     const sources=[...new Set([...(old.sources||[]),old.pageUrl,metadata.pageUrl].filter(Boolean))].slice(-20);
     this.db.prepare('INSERT INTO capture_metadata(id,json) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET json=excluded.json').run(id,JSON.stringify({...old,...metadata,sources}));this.revision++;this.onAssetChanged?.(id);
   }
-  // Fingerprints are written by the main process after it decodes a picture.
-  // Keeping them out of importFile means importing never waits on a decode.
   setPhash(id, value) {
     if (typeof value !== 'string' || (value && !/^[0-9a-f]{16}$/.test(value))) throw new Error('Invalid fingerprint');
     this.db.prepare('UPDATE assets SET phash=? WHERE id=?').run(value, id);
@@ -261,9 +250,21 @@ class Library {
   }
   updateMany(ids,operation){
     const records = this.selectedAssets(ids);
-    if(!operation||!['tags','collection','removeCollection','rating','favorite','trash'].includes(operation.type))throw new Error('Invalid bulk action');
-    this.db.exec('BEGIN');try{for(const asset of records){const id=asset.id;let changes;
+    if(!operation||!['tags','removeTags','collection','removeCollection','rating','favorite','trash','rename'].includes(operation.type))throw new Error('Invalid bulk action');
+    this.db.exec('BEGIN');try{let position=0;for(const asset of records){const id=asset.id;let changes;position++;
       if(operation.type==='tags'){if(!Array.isArray(operation.tags)||operation.tags.some(t=>typeof t!=='string'))throw new Error('Invalid tags');changes={tags:[...JSON.parse(asset.tags),...operation.tags]};}
+      if(operation.type==='removeTags'){if(!Array.isArray(operation.tags)||operation.tags.some(t=>typeof t!=='string'))throw new Error('Invalid tags');const remove=new Set(operation.tags.map(tag=>tag.trim()).filter(Boolean));changes={tags:JSON.parse(asset.tags).filter(tag=>!remove.has(tag))};}
+      if(operation.type==='rename'){
+        if(typeof operation.pattern!=='string'||!operation.pattern.trim())throw new Error('Enter a name pattern.');
+        const pattern=operation.pattern.trim();
+        const dot=asset.name.lastIndexOf('.');
+        const base=dot>0?asset.name.slice(0,dot):asset.name;
+        const extension=dot>0?asset.name.slice(dot):'';
+        let next=pattern.replaceAll('{name}',base).replaceAll('{n}',String(position));
+        if(!next.includes('.')&&extension)next+=extension;
+        next=next.slice(0,255);
+        changes={name:next||asset.name};
+      }
       if(operation.type==='collection'){if(typeof operation.folder!=='string'||!this.db.prepare('SELECT name FROM folders WHERE name=?').get(operation.folder))throw new Error('Choose an existing collection.');changes={folders:[...JSON.parse(asset.folders),operation.folder]};}
       if(operation.type==='removeCollection'){if(typeof operation.folder!=='string')throw new Error('Invalid collection');changes={folders:JSON.parse(asset.folders).filter(name=>name!==operation.folder)};}
       if(operation.type==='favorite')changes={favorite:!!operation.favorite};
@@ -271,6 +272,44 @@ class Library {
       if(operation.type==='trash')changes={trash:!!operation.trash};
       this.update(id,changes);
     }this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');if(operation.type==='trash'&&!operation.trash&&/original file is missing/i.test(String(e.message||'')))throw new Error('Nothing was restored: one of these files has no original in the library. Put it back in Finder, then restore it on its own.');throw e;}
+  }
+  renameTag(oldName,newName=''){
+    oldName=String(oldName||'').trim();newName=String(newName||'').trim();
+    if(!oldName)throw new Error('Choose a tag to rename.');
+    if(newName.length>120)throw new Error('Use a tag name of 120 characters or less.');
+    const rows=this.db.prepare('SELECT id,tags FROM assets').all();
+    this.db.exec('BEGIN');
+    try{
+      for(const row of rows){
+        const tags=JSON.parse(row.tags);
+        if(!tags.includes(oldName))continue;
+        const next=newName?[...new Set(tags.map(tag=>tag===oldName?newName:tag))]:tags.filter(tag=>tag!==oldName);
+        this.update(row.id,{tags:next});
+      }
+      this.db.exec('COMMIT');
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+    this.revision++;
+  }
+  removeTag(name){return this.renameTag(name,'');}
+  applyPresence(presentIds=[],missingIds=[]){
+    const changed=[];
+    this.db.exec('BEGIN');
+    try{
+      const present=this.db.prepare('UPDATE assets SET trash=0,missing=0 WHERE id=? AND missing=1');
+      for(const id of presentIds)if(present.run(id).changes){changed.push(id);this.onAssetChanged?.(id);}
+      const missing=this.db.prepare('UPDATE assets SET trash=1,missing=1 WHERE id=? AND missing=0 AND trash=0');
+      for(const id of missingIds)if(missing.run(id).changes){changed.push(id);this.onAssetChanged?.(id);}
+      this.db.exec('COMMIT');
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+    if(changed.length)this.revision++;
+    return changed;
+  }
+  setDimensions(id,width,height){
+    width=Math.floor(Number(width));height=Math.floor(Number(height));
+    if(typeof id!=='string'||!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0||width>200000||height>200000)return false;
+    const changed=this.db.prepare('UPDATE assets SET width=?,height=? WHERE id=? AND (width<>? OR height<>?)').run(width,height,id,width,height).changes;
+    if(changed)this.revision++;
+    return !!changed;
   }
   permanentDelete(ids,options){this.revision++;return permanentDelete(this,ids,options);}
   renameCollection(oldName,newName){newName=String(newName).trim();if(!newName||newName.length>120)throw new Error('Use a collection name between 1 and 120 characters.');if(!this.folders().includes(oldName))throw new Error('Collection not found.');if(oldName===newName)return;if(this.folders().includes(newName))throw new Error('A collection with that name already exists.');this.db.exec('BEGIN');try{this.db.prepare('UPDATE folders SET name=? WHERE name=?').run(newName,oldName);for(const a of this.db.prepare('SELECT id,folders FROM assets').all()){const folders=JSON.parse(a.folders);if(folders.includes(oldName))this.update(a.id,{folders:folders.map(f=>f===oldName?newName:f)});}this.db.exec('COMMIT');this.revision++;}catch(e){this.db.exec('ROLLBACK');throw e;}}

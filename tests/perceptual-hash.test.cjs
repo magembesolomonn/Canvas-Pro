@@ -19,9 +19,6 @@ test('malformed fingerprints are never mistaken for copies',()=>{
 test('hashing bands guarantee a shared bucket within the distance limit',()=>{
   const base=BigInt('0x0f0f0f0f0f0f0f0f');
   const hex=value=>value.toString(16).padStart(16,'0');
-  // Every single-bit neighbour must share a band, and so must every pair that
-  // differs in six bits: eight bands of eight bits means seven differing bits
-  // are needed to empty the intersection.
   for(let bit=0;bit<64;bit++)assert.ok(overlap(hex(base),hex(base^(1n<<BigInt(bit)))));
   let state=0x9e3779b9;
   const random=()=>{state=(state*1664525+1013904223)>>>0;return state;};

@@ -1,4 +1,4 @@
-importScripts('capture-core.js','region.js','activity.js','social-core.js');
+importScripts('capture-core.js','collection-filter.js','region.js','activity.js','social-core.js');
 const HOST='com.canvaspro.capture';
 function native(message){return new Promise((resolve,reject)=>chrome.runtime.sendNativeMessage(HOST,{version:1,...message},response=>{const error=chrome.runtime.lastError;if(error){
  const detail=error.message||'';
@@ -8,8 +8,6 @@ function native(message){return new Promise((resolve,reject)=>chrome.runtime.sen
  return reject(new Error(message));
 }if(!response?.ok)return reject(new Error(response?.error||'Canvas Pro did not respond.'));resolve(response);}));}
 async function badge(text,error=false){await chrome.action.setBadgeText({text});await chrome.action.setBadgeBackgroundColor({color:error?'#a24949':'#3478d5'});}
-// Remember only the tabs the person has actually used for capture. Worker
-// wake-ups then re-inject those tabs instead of every open web page.
 async function rememberTab(tabId){
   if(!Number.isInteger(tabId))return;
   try{
@@ -21,16 +19,10 @@ async function rememberTab(tabId){
 async function progress(value,tabId){
  await chrome.storage.session.set({lastCapture:value});
  for(const id of new Set((Array.isArray(tabId)?tabId:[tabId]).filter(Boolean))){
-  // The page's own content script shows the toast. Injecting it directly needs
-  // permission for that site, which the reader may not have granted, and the
-  // toast would then never appear.
   try{await chrome.tabs.sendMessage(id,{type:'capture-activity',job:value});continue;}catch{}
-  try{await chrome.scripting.executeScript({target:{tabId:id},func:canvasCaptureActivity,args:[value]});}catch{/* Browser/internal pages may prohibit overlays; the popup retains progress. */}
+  try{await chrome.scripting.executeScript({target:{tabId:id},func:canvasCaptureActivity,args:[value]});}catch{ }
  }
 }
-// Thumbnails come in two parts: the original address (cheap, and usually
-// allowed by the page) and an inline copy (used when the page's own rules
-// block the address). The toast tries the address first, then the inline copy.
 async function inlineCopy(url){
  try{
    const res=await fetch(url,{credentials:'omit'});
@@ -79,7 +71,7 @@ async function sendCapture(items,folder,tabId,notice='',activityId){
  try{const options=await chrome.storage.local.get('folder');const result=await native({op:'capture',items,folder:folder??options.folder??''});
  if(!result?.jobId)throw new Error('Canvas Pro did not accept the capture.');
  let pollDelay=250;
-  for(let attempt=0;attempt<1200;attempt++){const {job}=await native({op:'status',jobId:result.jobId});latest={...job,id,title,kind:items[0].kind,notice,items:previews.map((item,index)=>({...item,state:job.results?.[index]?.state||(index===(job.done||0)?job.phase||'saving':'queued'),error:job.results?.[index]?.error||''}))};await progress(latest,tabId);if(['complete','failed'].includes(job.state)){await badge(job.errors.length?'!':String(job.imported+job.duplicates),!!job.errors.length);return job;}await new Promise(resolve=>setTimeout(resolve,pollDelay));pollDelay=Math.min(2000,Math.round(pollDelay*1.15));}
+  for(let attempt=0;attempt<1200;attempt++){const {job}=await native({op:'status',jobId:result.jobId});latest={...job,jobId:job.id,id,title,kind:items[0].kind,notice,items:previews.map((item,index)=>({...item,state:job.results?.[index]?.state||(index===(job.done||0)?job.phase||'saving':'queued'),error:job.results?.[index]?.error||''}))};await progress(latest,tabId);if(['complete','failed'].includes(job.state)){await badge(job.errors.length?'!':String(job.imported+job.duplicates),!!job.errors.length);return job;}await new Promise(resolve=>setTimeout(resolve,pollDelay));pollDelay=Math.min(2000,Math.round(pollDelay*1.15));}
  throw new Error('Capture is taking longer than expected. Check Canvas Pro.');
  }catch(error){await badge('!',true);await progress({...latest,state:'failed',errors:[error.message]},tabId);throw error;}
 }
@@ -95,55 +87,77 @@ async function region(tab){const token=crypto.randomUUID(),records=pruneRegionRe
 async function collect(tab,mode='images',frameId){
  if(!chrome.sidePanel)throw Error('This browser does not support the capture side panel. Use a current Chrome version.');
  let result;try{result=await inspect(tab.id,mode==='images'?'discover':'videos','',frameId);}catch(error){throw new Error('This page does not allow media inspection. '+error.message);}
- const {base}=result;const watched=(await chrome.storage.session.get('media-watch:'+tab.id))['media-watch:'+tab.id];const combined=[...result.items,...(watched?.expires>Date.now()?watched.items.map(item=>({...base,...item})):[])];const seen=new Set();const items=combined.filter(item=>{if(mode==='images'&&item.kind!=='image'||mode==='videos'&&item.kind==='image'&&!/\.gif(?:[?#]|$)/i.test(item.mediaUrl))return false;const key=item.mediaUrl||item.dataUrl;if(seen.has(key))return false;seen.add(key);return true;});
+ const {base}=result;const watched=(await chrome.storage.session.get('media-watch:'+tab.id))['media-watch:'+tab.id];const combined=[...result.items,...(watched?.expires>Date.now()?watched.items.map(item=>({...base,...item})):[])];const seen=new Set();const items=combined.filter(item=>{if(!matchesCollectionMode(item,mode))return false;const key=item.mediaUrl||item.dataUrl;if(seen.has(key))return false;seen.add(key);return true;});
  const id=crypto.randomUUID();const all=await chrome.storage.session.get(null);const expired=Object.keys(all).filter(key=>key.startsWith('collection:')&&Date.now()-all[key].created>3600000);if(expired.length)await chrome.storage.session.remove(expired);
- await chrome.storage.session.set({['collection:'+id]:{base,items,tabId:tab.id,mode,created:Date.now()}});await chrome.storage.session.set({activeCollection:id});return {count:items.length};
+ await chrome.storage.session.set({['collection:'+id]:{base,items,tabId:tab.id,mode,created:Date.now()}});await chrome.storage.session.set({['activeCollection:'+tab.windowId]:id});return {count:items.length};
 }
 async function fullPage(tab){
-  const [{result}]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>({width:Math.max(document.documentElement.scrollWidth,document.body?.scrollWidth||0,innerWidth),height:Math.max(document.documentElement.scrollHeight,document.body?.scrollHeight||0,innerHeight),vw:innerWidth,vh:innerHeight,devicePixelRatio:window.devicePixelRatio||1,scrollX,scrollY,overflow:document.documentElement.style.overflow,scrollBehavior:document.documentElement.style.scrollBehavior})});
-  if(!result?.width||!result?.height)throw new Error('Could not measure this page.');
-  const maxHeight=16000;const height=Math.min(result.height,maxHeight);
-  await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{document.documentElement.style.scrollBehavior='auto';}});
-  const [active]=await chrome.tabs.query({active:true,windowId:tab.windowId});if(active?.id!==tab.id)throw new Error('Return to the page you want to capture and try again.');
-  const steps=[];for(let y=0;y<height;y+=Math.max(1,result.vh-20)){steps.push(Math.min(y,height-result.vh));if(y+result.vh>=height)break;}
-  let canvas,ctx,scale;
+  let interrupted=false;
+  const activated=info=>{if(info.windowId===tab.windowId&&info.tabId!==tab.id)interrupted=true;};
+  const updated=(id,change)=>{if(id===tab.id&&(change.url||change.status==='loading'))interrupted=true;};
+  const check=async()=>{
+    const [active]=await chrome.tabs.query({active:true,windowId:tab.windowId});
+    if(interrupted||active?.id!==tab.id||active.url!==tab.url)throw Error('Page changed during capture. Return to the page and try again.');
+  };
+  chrome.tabs.onActivated.addListener(activated);
+  chrome.tabs.onUpdated.addListener(updated);
+  let canvas,partialLabel='',restore;
   try{
-    for(let i=0;i<steps.length;i++){
-      await chrome.scripting.executeScript({target:{tabId:tab.id},func:y=>window.scrollTo(0,y),args:[steps[i]]});
-      await new Promise(r=>setTimeout(r, i?350:180));
-      const dataUrl=await chrome.tabs.captureVisibleTab(tab.windowId,{format:'png'});
-      const bmp=await createImageBitmap(await (await fetch(dataUrl)).blob());
-      if(!canvas){
-        scale=bmp.width/result.vw||result.devicePixelRatio||1;
-        canvas=new OffscreenCanvas(Math.round(result.width*scale),Math.round(height*scale));
-        ctx=canvas.getContext('2d');
-      }
-      ctx.drawImage(bmp,0,Math.round(steps[i]*scale));
-      bmp.close();
+    await check();
+    const [frame]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{
+      const root=document.documentElement;
+      return {width:Math.max(root.scrollWidth,document.body?.scrollWidth||0,innerWidth),
+        height:Math.max(root.scrollHeight,document.body?.scrollHeight||0,innerHeight),
+        vw:innerWidth,vh:innerHeight,dx:root.clientWidth||innerWidth,dy:root.clientHeight||innerHeight,x:scrollX,y:scrollY};
+    }});
+    const target={tabId:tab.id,documentIds:[frame.documentId]};
+    const {width,height:originalHeight,vw,vh,dx,dy,x,y}=frame.result;
+    const height=Math.min(originalHeight,16000);
+    if(height<originalHeight)partialLabel=`Partial page (first ${height} of ${originalHeight} px)`;
+    const scroll=(left,top)=>chrome.scripting.executeScript({target,func:(left,top)=>{
+      window.scrollTo({left,top,behavior:'instant'});
+      return {x:scrollX,y:scrollY};
+    },args:[left,top]});
+    restore=()=>scroll(x,y);
+    const offsets=(length,step)=>{
+      const values=[0];
+      while(values.at(-1)+step<length)values.push(Math.min(values.at(-1)+step,length-step));
+      return values;
+    };
+    let ctx;
+    for(const top of offsets(height,dy))for(const left of offsets(width,dx)){
+      const [position]=await scroll(left,top);
+      await new Promise(resolve=>setTimeout(resolve,canvas?550:180));
+      await check();
+      const url=await chrome.tabs.captureVisibleTab(tab.windowId,{format:'png'});
+      await check();
+      const bitmap=await createImageBitmap(await (await fetch(url)).blob());
+      try{
+        const sx=bitmap.width/vw,sy=bitmap.height/vh;
+        if(!canvas){
+          canvas=new OffscreenCanvas(Math.round(width*sx),Math.round(height*sy));
+          ctx=canvas.getContext('2d');
+        }
+        ctx.drawImage(bitmap,Math.round(position.result.x*sx),Math.round(position.result.y*sy));
+      }finally{bitmap.close();}
     }
+    await check();
   }finally{
-    await chrome.scripting.executeScript({target:{tabId:tab.id},func:(x,y,orig)=>{document.documentElement.style.overflow=orig?.overflow||'';document.documentElement.style.scrollBehavior=orig?.behavior||'';window.scrollTo(x,y);},args:[result.scrollX,result.scrollY,{overflow:result.overflow,behavior:result.scrollBehavior}]});
+    chrome.tabs.onActivated.removeListener(activated);
+    chrome.tabs.onUpdated.removeListener(updated);
+    if(restore)await restore().catch(()=>{});
   }
   if(!canvas)throw new Error('Could not capture this page.');
   const buffer=new Uint8Array(await (await canvas.convertToBlob({type:'image/png'})).arrayBuffer());
   const outWidth=canvas.width,outHeight=canvas.height;
-  canvas=null;ctx=null;
+  canvas=null;
   let binary='';for(let i=0;i<buffer.length;i+=32768)binary+=String.fromCharCode(...buffer.subarray(i,i+32768));
-  return sendCapture([{kind:'screenshot',title:(tab.title||'Web page')+' full page',pageTitle:tab.title,pageUrl:tab.url,dataUrl:'data:image/png;base64,'+btoa(binary),width:outWidth,height:outHeight}],undefined,tab.id);
+  const job=await sendCapture([{kind:'screenshot',title:(tab.title||'Web page')+' '+(partialLabel||'full page'),pageTitle:tab.title,pageUrl:tab.url,dataUrl:'data:image/png;base64,'+btoa(binary),width:outWidth,height:outHeight}],undefined,tab.id);
+  return {...job,partialLabel};
 }
 
 async function runAction(action,tabId){const tab=await tabFor(tabId);if(action==='viewport')return screenshot(tab);if(action==='region')return region(tab);if(action==='fullpage')return fullPage(tab);if(action==='collect')return collect(tab);if(action==='videos')return collect(tab,'videos');if(action==='content')return sendCapture([await inspect(tab.id,'content')],undefined,tab.id);if(action==='bookmark')return sendCapture([{...await inspect(tab.id,'media'),kind:'bookmark'}],undefined,tab.id);throw new Error('Unknown capture action');}
 chrome.runtime.onInstalled.addListener(()=>{chrome.contextMenus.removeAll(()=>{for(const [id,title,contexts]of [['save-image','Save Image to Canvas Pro...',['image','video']],['video','Download video to Canvas Pro',['video']],['audio','Save audio to Canvas Pro',['audio']],['link','Save link to Canvas Pro',['link']],['selection','Save selected text to Canvas Pro',['selection']],['content','Save page content to Canvas Pro',['page']],['viewport','Capture visible page to Canvas Pro',['page']],['region','Capture an area to Canvas Pro',['page']],['fullpage','Capture full page to Canvas Pro',['page']],['collect','Collect images with Canvas Pro',['page']],['videos','Find videos with Canvas Pro',['page','video']]])chrome.contextMenus.create({id,title,contexts,documentUrlPatterns:['http://*/*','https://*/*']});});reinjectQuickSave();});
-// A page that was already open when the extension updated still runs the old
-// content script, whose extension context is dead ("Extension context
-// invalidated"). Re-injecting the current script restores Alt+click and
-// drag-and-drop there without asking the reader to refresh every tab.
-// A page that was already open when the extension updated still runs the old
-// content script, whose extension context is dead ("Extension context
-// invalidated"). Re-injecting the current scripts restores Alt+click and
-// drag-and-drop there, so the reader does not have to refresh every tab.
-// The capture card lives in activity.js, so it must be injected too: without
-// it the page would save the file and show nothing.
 const PAGE_SCRIPTS=['activity.js','quick-save.js'];
 async function reinjectInto(tabId){
  if(!Number.isInteger(tabId)) return false;
@@ -161,10 +175,6 @@ async function reinjectQuickSave(){
  }
 }
 if(chrome.runtime.onStartup)chrome.runtime.onStartup.addListener(()=>{reinjectQuickSave();});
-// The worker starts again after every idle period and after every update.
-// That is the moment to put the current scripts back into the pages that were
-// already open, so their quick save keeps working. The sweep is throttled
-// because the worker wakes often.
 async function refreshStalePages(){
  try{
   const now=Date.now();
@@ -188,12 +198,9 @@ function extractableVideoURL(value){
  }catch{return '';}
 }
 async function captureContext(info,tab){
- // A blob: source is a streaming player on any site, not just the supported
- // social ones. Ask the page to resolve the real file from its own metadata.
  const blobVideo=info.menuItemId==='video'&&info.srcUrl?.startsWith('blob:');
  if(info.menuItemId==='save-image'||blobVideo){
   const item=await chrome.tabs.sendMessage(tab.id,{type:'focused-media'},{frameId:info.frameId??0}).catch(()=>null);
-  // "Save image" on a player means its cover, not the video file.
   if(info.menuItemId==='save-image'&&item?.kind==='video'){
    if(!item.poster)throw new Error('This player has no separate cover image. Use Download video or open the original page.');
    const base=await baseFor(tab,info.frameId,item.poster);
@@ -221,9 +228,8 @@ if(['viewport','region','fullpage','collect','content','videos'].includes(info.m
 chrome.contextMenus.onClicked.addListener((info,tab)=>{if(['collect','videos'].includes(info.menuItemId)&&tab?.id&&chrome.sidePanel)chrome.sidePanel.open({tabId:tab.id}).catch(()=>{});captureContext(info,tab).catch(async error=>{await badge('!',true);await progress({id:crypto.randomUUID(),state:'failed',errors:[error.message]},tab?.id);});});
 chrome.commands.onCommand.addListener(command=>runAction(command==='capture-area'?'region':'viewport').catch(async e=>{await badge('!',true);await progress({state:'failed',errors:[e.message]});}));
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{(async()=>{if(sender.id!==chrome.runtime.id)throw new Error('Invalid capture sender');if(message.type==='social-save'){if(!sender.tab||!CanvasSocialCore.platformFor(sender.url))throw new Error('Post capture is available only on supported platforms.');return captureSocial(message.post,sender.tab);}if(message.type==='social-error'){if(!sender.tab||!CanvasSocialCore.platformFor(sender.url))throw new Error('Invalid social capture');await progress({id:crypto.randomUUID(),state:'failed',title:'Post capture',errors:[String(message.error||'Could not save this post').slice(0,500)]},sender.tab.id);return {};}if(['region-result','cancel-region'].includes(message.type)){const records=pruneRegionRecords((await chrome.storage.session.get('regions')).regions||{}),record=records[message.token];if(!record||record.tabId!==sender.tab?.id||record.expires<Date.now())throw new Error('This capture selection expired. Try again.');delete records[message.token];await chrome.storage.session.set({regions:records});if(message.type==='cancel-region')return {cancelled:true};const rect=message.rect;if(!rect||Object.values(rect).some(n=>!Number.isFinite(n))||rect.x<0||rect.y<0||rect.width<1||rect.height<1||rect.x+rect.width>rect.viewportWidth+1||rect.y+rect.height>rect.viewportHeight+1)throw new Error('Invalid screenshot region');return screenshot(await tabFor(record.tabId),rect);}
-if(message.type==='reinject-quick-save'){const tabId=Number(message.tabId);if(Number.isInteger(tabId))await reinjectInto(tabId);else await reinjectQuickSave();return {reinjected:true};}if(message.type==='quick-save'){if(!sender.tab?.id)throw new Error('Open a web page first.');const item=message.item||{},url=String(item.mediaUrl||item.url||'');if(!/^(https?:|data:image\/)/i.test(url))throw new Error('This item cannot be saved directly.');const kind=item.kind==='video'?'video':'image',base={pageUrl:String(item.pageUrl||sender.tab.url||''),pageTitle:String(item.pageTitle||sender.tab.title||''),title:String(item.title||sender.tab.title||'Saved media').slice(0,160)};const payload={...base,kind,alt:String(item.alt||''),width:Number(item.width)||0,height:Number(item.height)||0,poster:String(item.poster||''),thumbnail:String(item.thumbnail||''),...(url.startsWith('data:')?{dataUrl:url}:{mediaUrl:url})};return sendCapture([payload],undefined,sender.tab.id);}if(!sender.url?.startsWith(chrome.runtime.getURL('')))throw new Error('Capture must be initiated from Canvas Pro.');if(message.type==='watch-media'){const tab=await tabFor(message.tabId);if(!await chrome.permissions.contains({origins:['http://*/*','https://*/*']}))throw new Error('Allow media scanning in the browser first.');await rehydrateWatchedTabs();watchedMediaTabs.add(tab.id);syncMediaListener();await chrome.storage.session.set({['media-watch:'+tab.id]:{expires:Date.now()+1800000,items:[]}});return {watching:true};}if(message.type==='ping')return native({op:'ping'});if(message.type==='action')return runAction(message.action,message.tabId);if(message.type==='save-batch'){const record=(await chrome.storage.session.get('collection:'+message.collectionId))['collection:'+message.collectionId];if(!record||!Array.isArray(message.indices)||!message.indices.length||message.indices.length>100)throw new Error('Choose up to 100 images.');const items=[...new Set(message.indices)].map(i=>record.items[i]);if(items.some(item=>!item))throw new Error('Invalid image selection');return sendCapture(items,message.folder,[record.tabId,sender.tab?.id]);}throw new Error('Unknown message');})().then(result=>respond({ok:true,result}),async error=>{respond({ok:false,error:error.message});});return true;});
+if(message.type==='reinject-quick-save'){const tabId=Number(message.tabId);if(Number.isInteger(tabId))await reinjectInto(tabId);else await reinjectQuickSave();return {reinjected:true};}if(message.type==='quick-save'){if(!sender.tab?.id)throw new Error('Open a web page first.');const item=message.item||{},url=String(item.mediaUrl||item.url||'');if(!/^(https?:|data:image\/)/i.test(url))throw new Error('This item cannot be saved directly.');const kind=item.kind==='video'?'video':'image',base={pageUrl:String(item.pageUrl||sender.tab.url||''),pageTitle:String(item.pageTitle||sender.tab.title||''),title:String(item.title||sender.tab.title||'Saved media').slice(0,160)};const payload={...base,kind,alt:String(item.alt||''),width:Number(item.width)||0,height:Number(item.height)||0,poster:String(item.poster||''),thumbnail:String(item.thumbnail||''),...(url.startsWith('data:')?{dataUrl:url}:{mediaUrl:url})};return sendCapture([payload],undefined,sender.tab.id);}if(!sender.url?.startsWith(chrome.runtime.getURL('')))throw new Error('Capture must be initiated from Canvas Pro.');if(message.type==='reveal-capture')return native({op:'reveal',jobId:message.jobId});if(message.type==='watch-media'){const tab=await tabFor(message.tabId);if(!await chrome.permissions.contains({origins:['http://*/*','https://*/*']}))throw new Error('Allow media scanning in the browser first.');await rehydrateWatchedTabs();watchedMediaTabs.add(tab.id);syncMediaListener();await chrome.storage.session.set({['media-watch:'+tab.id]:{expires:Date.now()+1800000,items:[]}});return {watching:true};}if(message.type==='ping')return native({op:'ping'});if(message.type==='action')return runAction(message.action,message.tabId);if(message.type==='save-batch'){const record=(await chrome.storage.session.get('collection:'+message.collectionId))['collection:'+message.collectionId];if(!record||!Array.isArray(message.indices)||!message.indices.length||message.indices.length>100)throw new Error('Choose up to 100 images.');const items=[...new Set(message.indices)].map(i=>record.items[i]);if(items.some(item=>!item))throw new Error('Invalid image selection');return sendCapture(items,message.folder,[record.tabId,sender.tab?.id]);}throw new Error('Unknown message');})().then(result=>respond({ok:true,result}),async error=>{respond({ok:false,error:error.message});});return true;});
 
-// Opt-in, tab-scoped media observation. No request bodies, cookies or authorization headers are read.
 const watchedMediaTabs=new Set();
 const mediaWrites=new Map();
 let mediaListenerActive=false;
@@ -284,7 +290,6 @@ async function captureSocial(post,tab){
  if((platform==='x.com'||platform==='twitter.com')&&!items.some(i=>i.kind==='video')&&(post.hasVideo||!items.length)){
   const id=new URL(source).pathname.match(/\/status\/(\d+)/)?.[1];if(id){const token=((Number(id)/1e15)*Math.PI).toString(36).replace(/(0+|\.)/g,'');const data=await publicJSON('https://cdn.syndication.twimg.com/tweet-result?id='+id+'&token='+token);items=CanvasSocialCore.twitterMedia(data,{...base,description:data.text||'',author:data.user?.name||''});}
  }
- // Reddit/Facebook/YouTube: use yt-dlp extraction for highest quality (and merged A/V).
  if(platform==='reddit.com'&&(post.hasVideo||/\/comments\/[a-z0-9]+/i.test(new URL(source).pathname))){
   const ru=extractableVideoURL(source)||extractableVideoURL(tab.url);
   if(ru){items=[...items.filter(i=>i.kind!=='video'),{...base,kind:'video',mediaUrl:ru,pageUrl:ru}];notice='';}

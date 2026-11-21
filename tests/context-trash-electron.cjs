@@ -1,4 +1,3 @@
-// Only disposable copies in /private/tmp are modified or deleted by this test.
 process.env.ASSET_TEST_MODE='1';process.env.AGAGWU_DATA_DIR='/private/tmp/canvas-context-test-'+Date.now();
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');const electron=require('electron'),{app}=electron;const{Library}=require('../electron/library.cjs');let answer=0;const confirmations=[];electron.dialog.showMessageBox=async(_win,options)=>{confirmations.push(options);return {response:answer};};
 require(process.env.ASSET_LIBRARY_MAIN||'../electron/main.cjs');const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));async function poll(check){for(let i=0;i<150;i++){const result=await check();if(result)return result;await wait(20);}throw new Error('UI test timed out');}

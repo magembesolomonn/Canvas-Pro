@@ -1,7 +1,6 @@
 (() => {
   const video = document.getElementById('video'), seek = document.getElementById('seek');
   let state = {};
-  // A malformed hash must not stop the controls from being wired up.
   try {
     state = JSON.parse(decodeURIComponent(location.hash.slice(1) || '{}'));
     if (!state || typeof state !== 'object') state = {};
@@ -12,15 +11,10 @@
   window.library.onAppearance(state=>document.body.classList.toggle('light-mode', !state.dark));
   if (!state.id) return;
   video.src = 'asset://file/' + state.id;
-  // The floating window is created with no-user-gesture-required autoplay, so
-  // it can continue with the original audio state immediately.
   video.muted = !!state.muted;
   video.volume = state.volume ?? 1;
   video.loop = !!state.loop;
   video.playbackRate = state.rate || 1;
-  // Controls fade in on pointer movement and idle out after a beat. The CSS
-  // :hover fallback alone flickered because the window is a drag region; the
-  // class keeps the reveal stable while the pointer is moving or interacting.
   const card = document.querySelector('.floating-card');
   const HOLD = 1200, LEAVE_GRACE = 320;
   let idleTimer = 0, interacting = false;
@@ -77,7 +71,7 @@
   video.addEventListener('pause', paint);
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); window.library.floating('close'); }
-    else if (event.code === 'Space') { event.preventDefault(); video.paused ? video.play() : video.pause(); }
+    else if (event.code === 'Space' && !event.target.closest?.('button,input')) { event.preventDefault(); video.paused ? video.play() : video.pause(); }
   });
   window.library.onFloatingRestore(() => { if (!video.paused) video.pause(); });
   paint();

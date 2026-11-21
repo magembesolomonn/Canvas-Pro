@@ -1,4 +1,3 @@
-// Load heavier document/model engines only when that type is opened.
 let formatEnginePromise;
 window.CanvasFormats={supports:ext=>['eps','3ds','3mf','dae','ifc','ply','stl','glb','epub','html','htm','mhtml','mht','swf'].includes(ext),mount(asset){
  const element=document.createElement('div');element.className='format-host';element.textContent='Preparing preview…';let disposed=false,viewer;

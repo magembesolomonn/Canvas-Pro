@@ -1,6 +1,3 @@
-// Runs in the isolated extension world. Never inserts page-provided HTML.
-// A copy that is placed into a page later than the first one replaces the
-// earlier copy; this counter shows which copies are present.
 globalThis.__canvasActivityGeneration=(globalThis.__canvasActivityGeneration||0)+1;
 try{document.documentElement.setAttribute('data-canvas-activity',String(globalThis.__canvasActivityGeneration));}catch{}
 function canvasCaptureActivity(job,mount){
@@ -43,8 +40,6 @@ function canvasCaptureActivity(job,mount){
   row.classList.toggle('failed', job.state==='failed');
   const icon=row.querySelector('.icon'), thumb=row.querySelector('.thumb'), titleEl=row.querySelector('.title'), detailEl=row.querySelector('.detail'), bar=row.querySelector('.bar');
   const active=(job.items||[])[Math.min(job.done||0, Math.max(0,(job.items||[]).length-1))] || (job.items||[])[0];
-  // The address is tried first; the inline copy is the fallback for pages whose
-  // own rules block the original image.
   const address=job.thumbnail || active?.thumbnail || active?.poster || (active?.kind==='image' ? active?.mediaUrl : '');
   const inline=job.thumbnailData || active?.thumbnailData || '';
   const showThumb=source=>{
@@ -53,8 +48,6 @@ function canvasCaptureActivity(job,mount){
     thumb.onerror=()=>{ if(inline && inline!==source && thumb.dataset.source===source){ thumb.dataset.source=inline; thumb.src=inline; thumb.onerror=()=>{thumb.hidden=true; icon.style.display='grid';}; } else { thumb.hidden=true; icon.style.display='grid'; } };
     return true;
   };
-  // The inline copy is tried first: it is immune to the page's own rules
-  // about which images may be loaded.
   if(!showThumb(inline)) showThumb(address);
   const kind=(job.kind || active?.kind || (job.title||'').toLowerCase().includes('video') ? (job.kind||active?.kind||'video') : (job.kind||active?.kind||'image'));
   const label = kind==='bookmark'||kind==='link' ? 'Link' : kind==='video' ? 'Video' : kind==='content' ? 'Page content' : kind==='screenshot' ? 'Screenshot' : 'Image';
@@ -85,8 +78,6 @@ function canvasCaptureActivity(job,mount){
     if(done){
       row._dismiss=setTimeout(()=>{ row.classList.add('leaving'); setTimeout(()=>{ row.remove(); if(!root.querySelector('.toast')) host.remove(); }, 180); }, 2200);
     } else {
-      // A capture that never finishes must not leave its card on the page for
-      // good. The card goes after a while; a later report re-opens it.
       row._dismiss=setTimeout(()=>{ row.classList.add('leaving'); setTimeout(()=>{ row.remove(); if(!root.querySelector('.toast')) host.remove(); }, 180); }, 12000);
     }
   }

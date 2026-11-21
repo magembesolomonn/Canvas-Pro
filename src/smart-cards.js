@@ -22,10 +22,6 @@ const SmartCards=(()=>{
  function postText(i){
   return i.postText??i.description??'';
  }
- // A post's words may need more room than the card reserved (a narrow
- // justified row, an old canvas item whose size was never refreshed). Fit the
- // clamp to whole lines so the text ends in an ellipsis on a line boundary
- // instead of being sliced through a row of letters.
  const socialFit=new WeakSet();
  const socialObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const entry of entries)fitSocial(entry.target);}):null;
  function fitSocial(card){
@@ -55,9 +51,6 @@ const SmartCards=(()=>{
   socialObserver.observe(card);
   requestAnimationFrame(()=>fitSocial(card));
  }
- // The gallery reuses a small pool of cards, so a card that leaves the window
- // must leave the observers too. Otherwise every observed card is kept alive
- // for as long as the library is open.
  function release(node){
   const targets=new Set([node,...(node?.querySelectorAll?.('.smart-note-card,.smart-social-card')||[])]);
   for(const target of targets){
@@ -72,8 +65,6 @@ const SmartCards=(()=>{
   icon.alt=socialNames[platform]||platform;
   icon.src='assets/social/'+platform+'.svg';
   node.append(icon);
-  // A post whose metadata fetch failed has no text and no images. Fall back
-  // to something identifiable instead of an icon-only blank tile.
   const text=postText(i)||i.title||a.name||'Saved post';
   node.append(el('p','social-card-text',text));
   const sources=[...new Set([...(i.postImages||[]),...(i.cover&&i.imageURL?[i.imageURL]:[])])].slice(0,4);
@@ -97,15 +88,10 @@ const SmartCards=(()=>{
  }
  function isNote(a){return a.captureMetadata?.kind==='content'||(['txt','md'].includes(a.ext)&&a.smart?.excerpt);}
  function type(a){return kind(a)==='link'?info(a).type||'webpage':a.ext==='pdf'?'book':isNote(a)?(a.captureMetadata?.selection?'quote':'note'):null;}
- // A post is text that reflows: the narrower the card, the more lines it
- // needs, so its height is a function of the width it is drawn at. These
- // numbers mirror the sizing in .smart-link.smart-social-card so the height
- // the layout reserves and the card that is drawn always agree.
  function socialMetrics(width){
   const size=Number.isFinite(width)&&width>0?width:230;
   const clamp=(min,value,max)=>Math.min(max,Math.max(min,value));
   const padding=clamp(8,size*.06,14),icon=clamp(13,size*.08,18),gap=clamp(5,size*.035,8),font=clamp(12,size*.065,15);
-  // The words sit beside the icon, so their column is narrower than the card.
   return {padding,icon,gap,font,line:font*1.4,text:Math.max(1,size-padding*2-icon-gap)};
  }
  function socialHeight(a,width){
@@ -136,12 +122,7 @@ const SmartCards=(()=>{
  }
  function art(a,t=type(a)){const root=el('div','smart-object smart-object-'+t);if(t==='album'||t==='playlist'||t==='music'){root.append(el('div','smart-vinyl'));const sleeve=el('div','smart-sleeve');if(info(a).cover)sleeve.append(image(a));else sleeve.append(glyph('audio'));root.append(sleeve);}else if(t==='song'){const disc=el('div','smart-disc');if(info(a).cover)disc.append(image(a));else disc.append(glyph('audio'));disc.append(el('div','smart-disc-hole'));root.append(disc);}else if(t==='book'){const book=el('div','smart-book');if(kind(a)!=='link'||info(a).cover)book.append(image(a));else book.append(el('strong','',info(a).title||a.name));root.append(book);}else if(t==='movie'||t==='series'){const poster=el('div','smart-poster');if(info(a).cover)poster.append(image(a));else poster.append(glyph('video'));root.append(poster);}return root;}
  function noteText(a){return a.captureMetadata?.textExcerpt||a.smart?.excerpt||a.name.replace(/\.[^.]+$/,'');}
- // Every quote gets one of eight paper tints. The pick is derived from the id,
- // so a card keeps its colour across launches and layouts.
  function paperFor(a){let hash=0;const id=String(a.id||'');for(let i=0;i<id.length;i++)hash=(hash*31+id.charCodeAt(i))>>>0;return 1+hash%8;}
- // Fit the quote to the card instead of chopping it: start at a comfortable
- // size, shrink a little if needed, and only add an ellipsis when the text is
- // genuinely longer than the card can hold.
  const quoteFit=new WeakSet();
  const quoteObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const entry of entries)fitQuote(entry.target);}):null;
  function fitQuote(card){
@@ -171,8 +152,6 @@ const SmartCards=(()=>{
   return el('span',cls+' smart-web-monogram',monogram(siteHost(a)));
  }
  function webFallback(a,i){const fallback=el('div','smart-web-fallback');fallback.append(faviconNode(a,i,'smart-web-fallback-icon'));return fallback;}
- // The page's own picture, in order of preference: the copy saved with the
- // link, then a live fetch of the page image, then the site icon alone.
  function webImage(a,i,cls,media){
   const photo=el('img',cls);
   photo.alt=i.title||a.name;photo.loading='lazy';photo.decoding='async';
@@ -197,8 +176,6 @@ const SmartCards=(()=>{
   }
   return null;
  }
- // A website card reads like a page, not a database row: the page's own image
- // fills the card, then its title and where it came from sit underneath.
  function paintWebpage(node,a,i){
   node.classList.add('smart-web-card');
   const media=el('div','smart-web-media');
@@ -208,17 +185,12 @@ const SmartCards=(()=>{
   const footer=el('div','smart-web-footer');
   const domain=siteHost(a);
   const title=i.title||a.name.replace(/\.(url|webloc)$/i,'');
-  // A link that never got a page title is named after its own address, so
-  // the title would only repeat the line underneath it.
   if(title!==domain)footer.append(el('strong','smart-web-title',title));
   const meta=el('div','smart-web-meta');
   meta.append(faviconNode(a,i,'smart-web-favicon'),el('span','smart-web-domain',domain));
   footer.append(meta);
   node.append(media,footer);
  }
- // A link whose page has not answered yet keeps the card's shape: the site's
- // own mark stands in for the picture and the address sits underneath, so a
- // slow connection shows a calm card instead of a placeholder letter.
  function paintPending(node,a){
   node.className='link-visual smart-link smart-type-webpage smart-web-card';
   node.replaceChildren();
@@ -282,9 +254,6 @@ const SmartCards=(()=>{
   if(value==null||value==='')return '';
   const text=String(value).trim();
   if(!text)return '';
-  // Recipe sites publish schema durations as ISO 8601, often with date
-  // components (P0Y0M0DT0H45M0.000S) rather than PT45M. Parse the whole value
-  // instead of showing it verbatim.
   const iso=text.match(/^P(?:(\d+(?:\.\d+)?)Y)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)W)?(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i);
   if(iso){
    const [,y,mo,w,d,h,m,s]=iso.map(part=>part==null?0:Number(part));
@@ -294,7 +263,6 @@ const SmartCards=(()=>{
    const hours=Math.floor(minutes/60), rest=minutes%60;
    return hours?(rest?hours+'h '+rest+'m':hours+'h'):minutes+'m';
   }
-  // Recipes also use plain minute counts or written durations.
   const count=text.match(/^(\d+(?:\.\d+)?)$/);
   if(count)return Math.round(Number(count[1]))+'m';
   const written=text.match(/^(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\s*(?:(\d+)\s*(?:minutes?|mins?|m))?$/i);
@@ -367,9 +335,6 @@ const SmartCards=(()=>{
  }
  function recipeChecks(id){try{return new Set(JSON.parse(localStorage.getItem('recipe-checks:'+id)||'[]'));}catch{return new Set();}}
  function saveRecipeChecks(id,set){try{localStorage.setItem('recipe-checks:'+id,JSON.stringify([...set]));}catch{}}
- // A recipe is a page you cook from, not a page you read. The ingredients are
- // a checklist that remembers what you already have, and the method stays
- // beside them instead of running far below the fold.
  function renderRecipe(a,i,web){
   const d=i.details||{};
   const toolbar=el('div','smart-reader-toolbar');
@@ -483,10 +448,10 @@ const SmartCards=(()=>{
  };
  element.append(el('p','hint','Preparing saved link…'));bookmarkInfoLatest(a).then(i=>show(i||info(a))).catch(()=>{if(!disposed&&mode!=='web')web();});return {element,dispose(){if(disposed)return;disposed=true;if(child){child.dispose();child=null;}element.remove();}};
  }
- function mountNote(a){const element=el('div','smart-note-preview'),body=el('article','smart-note-paper');body.dataset.paper=String(paperFor(a));body.append(el('span','smart-quote-mark',a.captureMetadata?.selection?'“':'✎'),el('p','',noteText(a)));element.append(body);let disposed=false;api.readText(a.id).then(value=>{if(disposed)return;const text=value.replace(/^# [^\n]*\n\nSource: [^\n]*\nCaptured: [^\n]*\n\n/,'');body.querySelector('p').textContent=text;if(a.captureMetadata?.author)body.append(el('small','',a.captureMetadata.author));if(a.url)body.append(action('View source in Canvas Pro',()=>{const child=mountWebBookmark({...a,ext:'url'});element.replaceChildren(child.element);element._child=child;}));}).catch(error=>body.append(el('p','hint',error.message)));return{element,dispose(){disposed=true;element._child?.dispose();element.remove();}};}
+ function mountNote(a){const element=el('div','smart-note-preview'),body=el('article','smart-note-paper');body.classList.toggle('quote-preview',!!a.captureMetadata?.selection);body.dataset.paper=String(paperFor(a));body.append(el('span','smart-quote-mark',a.captureMetadata?.selection?'“':'✎'),el('p','',noteText(a)));element.append(body);let disposed=false;api.readText(a.id).then(value=>{if(disposed)return;const text=value.replace(/^# [^\n]*\n\nSource: [^\n]*\nCaptured: [^\n]*\n\n/,'');body.querySelector('p').textContent=text;if(a.captureMetadata?.author)body.append(el('small','',a.captureMetadata.author));if(a.url)body.append(action('View source in Canvas Pro',()=>{const child=mountWebBookmark({...a,ext:'url'});element.replaceChildren(child.element);element._child=child;}));}).catch(error=>body.append(el('p','hint',error.message)));return{element,dispose(){disposed=true;element._child?.dispose();element.remove();}};}
  function isSelfContained(a){const t=type(a);return isSocialCard(a)||t==='webpage'||t==='article'||t==='recipe';}
  function enrichSearch(a){return [a.name,a.notes,a.url,...a.tags,...a.folders,...(a.smart?.tags||[]),a.smart?.excerpt,a.captureMetadata?.textExcerpt,a.captureMetadata?.pageTitle,a.captureMetadata?.author,JSON.stringify(info(a))].filter(Boolean).join(' ').toLowerCase();}
- function paletteSection(a){const sectionNode=section('Colours'),swatches=el('div','color-palette');const values=a.smart?.palette||[];if(!values.length){sectionNode.append(el('p','hint','Colours appear after local indexing finds a preview.'));const link=el('button','hint-link','Turn on local indexing');link.onclick=()=>safe(()=>SettingsUI.open('search-models'));sectionNode.append(link);return sectionNode;}for(const item of values){const button=el('button','color-swatch');button.style.backgroundColor=item.hex;button.title=item.hex+' · '+item.name;button.setAttribute('aria-label','Find files with '+item.hex);button.title+=' · Click to find matching colours · Option-click to copy';button.onclick=e=>e.altKey?safe(async()=>{await api.copyColor(item.hex);notify(item.hex+' copied');}):safe(()=>WorkbenchUI.findColor(item.hex));swatches.append(button);}sectionNode.append(swatches);return sectionNode;}
+ function paletteSection(a){const sectionNode=section('Colours'),swatches=el('div','color-palette');const values=a.smart?.palette||[];if(!values.length){sectionNode.append(el('p','hint','Colours appear after local indexing finds a preview.'));const link=el('button','hint-link','Turn on local indexing');link.onclick=()=>safe(()=>SettingsUI.open('search-models'));sectionNode.append(link);return sectionNode;}for(const item of values){const button=el('button','color-swatch');button.style.backgroundColor=item.hex;button.title=item.hex+' · '+item.name;button.setAttribute('aria-label','Find files with '+(item.name||'colour')+' '+item.hex);button.title+=' · Click to find matching colours · Option-click to copy';button.onclick=e=>e.altKey?safe(async()=>{await api.copyColor(item.hex);notify(item.hex+' copied');}):safe(()=>WorkbenchUI.findColor(item.hex));swatches.append(button);}sectionNode.append(swatches);return sectionNode;}
  return{type,ratio,isSocialCard,isSelfContained,paint,paintPending,art,fileVisual,isNote,mount,mountNote,enrichSearch,paletteSection,release};
 })();
 function mountBookmark(a){return SmartCards.mount(a);}

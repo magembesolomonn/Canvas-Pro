@@ -1,4 +1,3 @@
-// Exercise the production bridge with Electron net.fetch, not Node's different fetch implementation.
 const {app,net}=require('electron');const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {CaptureBridge}=require('../electron/capture-bridge.cjs'),{Library}=require('../electron/library.cjs');
 const directory=fs.mkdtempSync('/private/tmp/canvas-capture-network-');app.setPath('userData',path.join(directory,'profile'));
@@ -7,7 +6,6 @@ let server,bridge,library;
  server=http.createServer((req,res)=>{requests.push({url:req.url,referrer:req.headers.referer});if(req.url==='/blocked'){res.writeHead(403);res.end('Forbidden');return;}if(req.url==='/redirect'){res.writeHead(302,{Location:'/video.mp4'});res.end();return;}const bytes=req.url==='/image.png'?png:video;res.writeHead(200,{'Content-Type':req.url==='/image.png'?'image/png':'video/mp4','Content-Length':bytes.length});res.end(bytes);});await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
  library=new Library(path.join(directory,'library'));bridge=new CaptureBridge({allowPrivateCapture:true,library,directory:path.join(directory,'bridge'),fetcher:(url,options)=>net.fetch(url,options)});await bridge.start();
  async function capture(items){const {jobId}=bridge.handle({version:1,op:'capture',items});for(let i=0;i<500;i++){const job=bridge.publicJob(bridge.jobs.get(jobId));if(['complete','failed'].includes(job.state))return job;await new Promise(r=>setTimeout(r,20));}throw new Error('Capture timed out');}
- // A foreign HTTPS source reproduces the exact invalid-referrer failure from Twitter.
  const image=await capture([{kind:'image',title:'Twitter image',mediaUrl:base+'/image.png',pageUrl:'https://x.com/test/status/123'}]);assert.equal(image.imported,1,JSON.stringify(image));assert.deepEqual(image.errors,[]);
  const movie=await capture([{kind:'video',title:'Twitter video',mediaUrl:base+'/redirect',pageUrl:'https://x.com/test/status/456'}]);assert.equal(movie.imported,1,JSON.stringify(movie));assert.deepEqual(movie.errors,[]);
  const duplicate=await capture([{kind:'image',title:'Repeat image',mediaUrl:base+'/image.png',pageUrl:base+'/post'}]);assert.equal(duplicate.duplicates,1,JSON.stringify(duplicate));

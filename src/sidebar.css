@@ -1,4 +1,3 @@
-/* Sidebar movement uses one shared active surface and one hover surface. */
 .sidebar .sidebar-pill {
   position: absolute;
   top: 0;
@@ -16,22 +15,13 @@
 .sidebar nav button {
   position: relative;
   min-height: 32px;
-  /* The rows sit in the sidebar's own inset, so a line drawn down the
-     sidebar meets the icons and then the names. The 8px of padding, pulled
-     back out with an equal margin, gives the chosen fill room around the
-     icon without moving the icon or the name. */
   padding-inline: 8px 16px;
   margin-inline: -8px;
-  /* Counts and add buttons stay right-aligned but clear the sidebar edge. */
-  /* Body: 13px at 160%. */
   font-size: 13px;
 }
-/* The items of one group stand 8px apart. */
 .sidebar nav {
   gap: 8px;
 }
-/* Finder keeps every icon in one column and every name in another, so a
-   line drawn down the sidebar meets the icons and then the names. */
 .sidebar nav button > :first-child {
   flex: 0 0 16px;
   width: 16px;
@@ -43,41 +33,28 @@ body.light-mode .sidebar nav button.active {
 }
 .sidebar .sidebar-section { flex: none; }
 .sidebar .sidebar-section > summary {
-  /* Every category stays open, so the heading is a label rather than a
-     disclosure control: no arrow, and clicking it does nothing. */
   justify-content: flex-start;
   gap: 6px;
-  /* The heading sits in the icon column, the way Finder puts its section
-     names above the items. */
   padding-left: 0;
   cursor: default;
   list-style: none;
 }
 .sidebar .sidebar-section > summary::-webkit-details-marker { display: none; }
 .sidebar .sidebar-section > summary .section-add { margin-left: auto; cursor: default; }
-/* Keep the window controls legible while sidebar content scrolls behind them. */
 .sidebar .window-space {
   position: sticky; top: 0; z-index: 4;
-  /* Same 56px band as the toolbar, so the sidebar toggle sits exactly on the
-     traffic lights instead of a few pixels above them. */
   height: 56px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   margin-inline: -16px; padding-inline: 16px;
-  /* The band is part of the card, so it is the card's own surface. The File
-     Details panel is a solid piece, and the sidebar now matches it. */
   background: var(--island-surface);
   backdrop-filter: none;
 }
 body.light-mode .sidebar .window-space {
   background: var(--island-surface);
 }
-.sidebar #navigation { position: relative; padding-bottom: 12px; margin-bottom: 12px; }
-.sidebar #navigation::after {
-  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
-  background: linear-gradient(to right, transparent, var(--line) 14%, var(--line) 86%, transparent);
-}
+.sidebar #navigation { margin-bottom: var(--ui-row-inset); }
 @media (prefers-reduced-transparency: reduce) {
   .sidebar .window-space { background: var(--island-surface); backdrop-filter: none; }
   body.light-mode .sidebar .window-space { background: var(--island-surface); }
@@ -94,9 +71,6 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
 .sidebar-backdrop,.sidebar-drawer-edge,.sidebar-drawer-handle { display: none; }
 @media (max-width: 1040px) {
   body,body.hide-sidebar { --sidebar: 0px; }
-  /* The sidebar is a fixed drawer here, so its grid track must collapse too.
-     Leaving the 20px island gutter in place shifts the whole toolbar and the
-     gallery right for no visual reason. */
   body,body.hide-sidebar { --sidebar-track: 0px; }
   body > main { grid-column: 2; grid-row: 1; }
   body > #inspector { grid-column: 3; grid-row: 1; }
@@ -123,8 +97,6 @@ body.hide-sidebar #show-sidebar { display: inline-flex; }
   body .library-header,body.hide-sidebar .library-header { padding-left: var(--traffic-light-inset); }
   body #show-sidebar,body.hide-sidebar #show-sidebar { display: inline-flex; }
   body.hide-sidebar .sidebar .window-space {
-    /* Same 56px band as the toolbar, so the drawer toggle sits on the
-       traffic lights and not a few pixels above them. */
     height: 56px;
     align-items: center;
     justify-content: flex-end;

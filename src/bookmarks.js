@@ -1,9 +1,6 @@
 const linkRequests=new Map();
 const linkRetries=new Map();
 const LINK_MAX_ATTEMPTS=3;
-// Mirrors EXTRACTOR_VERSION in electron/bookmarks.cjs. A preview saved by an
-// older extractor is refreshed once, when it is opened, so an existing link
-// picks up its recipe card without a delete-and-re-add or a launch-time sweep.
 const EXTRACTOR_VERSION=10;
 function bookmarkInfo(a,force=false){
  const existing=linkRequests.get(a.id);
@@ -57,9 +54,6 @@ function applyBookmarkInfo(id,info){
  if(info.name)a.name=info.name;
  if(info.tags)a.smart={...a.smart,tags:[...new Set([...(a.smart?.tags||[]),...info.tags])]};
  a.searchText=SmartCards.enrichSearch(a);
- // A newer extractor version can arrive for an unchanged, already-cached
- // preview (no refetch). Updating metadata is enough; avoid layout/paint churn
- // while scrolling through many saved links.
  if(versionOnly)return;
  if(ratio!==assetRatio(a)||social!==SmartCards.isSocialCard(a)){layoutDirty=true;scheduleGallery();}
  const card=mounted.get(id);

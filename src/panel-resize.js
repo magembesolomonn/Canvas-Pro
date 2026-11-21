@@ -1,9 +1,3 @@
-// Panel resizing: the app sidebar, the Settings rail and File Details all
-// share one hairline. Dragging it changes that column's width, the way a
-// macOS split view does. The hairline is invisible until the pointer reaches
-// it, then it doubles in weight and takes the app's focus grey. Keyboard
-// users get the same edge: arrow keys resize, Enter resets, and a small
-// readout appears while adjusting.
 (() => {
   'use strict';
 
@@ -14,8 +8,6 @@
   };
   const MIN = { sidebar: 180, inspector: 220, settings: 160 };
   const MAX = { sidebar: 420, inspector: 460, settings: 360 };
-  // The gallery keeps at least this much room no matter how far a rail is
-  // dragged, so a split view never eats the library.
   const MAIN_MIN = 380;
   const SNAP = 6;
 
@@ -38,9 +30,6 @@
     return 200;
   }
 
-  // The islands keep a margin inside their grid track, so the column is
-  // larger than the visible panel. Widths are stored and shown as the panel
-  // the user actually sees.
   function islandGap() {
     const gap = parseFloat(getComputedStyle(root).getPropertyValue('--island-gap'));
     return Number.isFinite(gap) ? gap * 2 : 0;
@@ -147,9 +136,6 @@
 
   function commit(panel, width) {
     const next = Math.round(clamp(width, MIN[panel.key], maxWidth(panel.key)));
-    // Landing on the responsive default is the same as resetting: keeping a
-    // custom width that merely copies the default would stop the rail from
-    // following the window's own breakpoints.
     if (next === Math.round(defaultWidth(panel.key))) {
       reset(panel);
       return next;
@@ -336,9 +322,6 @@
   }
 
   function positionSettingsHandle() {
-    // The Settings rail's handle lives inside the rail, so the browser keeps
-    // it on the edge as the rail changes width. Only the readout needs the
-    // current width.
     const panel = panels.get('settings');
     if (panel) updateAria(panel, panel.el.getBoundingClientRect().width || defaultWidth('settings'));
   }
@@ -361,8 +344,6 @@
       body.append(panel.handle);
     }
 
-    // Restore widths saved by an earlier drag. The Settings rail is restored
-    // when its dialog opens so a closed 0-width dialog cannot clamp it.
     for (const [key, panel] of panels) {
       if (key === 'settings') continue;
       const saved = Number(localStorage.getItem(WIDTH_KEY[key]));
@@ -394,9 +375,6 @@
     if (preview) observer.observe(preview, { attributes: true, attributeFilter: ['hidden'] });
 
     addEventListener('resize', () => {
-      // A live drag already owns the width. The resize event dispatched by
-      // its own re-layout must not snap the rail back to the last committed
-      // value.
       if (drag) return;
       for (const panel of panels.values()) {
         if (!panel.custom) continue;
@@ -410,7 +388,6 @@
     mediaNarrowInspector.addEventListener('change', syncAll);
     document.fonts?.ready.then(syncAll);
 
-    // Escape abandons a drag and restores the width it started with.
     addEventListener('keydown', event => {
       if (!drag || event.key !== 'Escape') return;
       event.preventDefault();

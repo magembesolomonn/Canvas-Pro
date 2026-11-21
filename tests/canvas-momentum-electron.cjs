@@ -1,6 +1,3 @@
-// The canvas must carry a flick the way a hand does: it keeps travelling at
-// the speed it was let go at, it settles without overshooting, and it can be
-// caught in flight without a jump.
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -36,7 +33,6 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     send('mouseUp', path_.at(-1)[0], path_.at(-1)[1]);
   };
 
-  // A flick keeps going after the hand lets go, and it settles.
   await flick();
   const released = await cameraX();
   const samples = [];
@@ -45,11 +41,9 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const glide = rest - released;
   assert.ok(glide < -20, `a flick did not carry on (glide ${glide})`);
   assert.equal(await run('!CanvasWorkspace.momentum'), true, 'the glide never settled');
-  // It must not overshoot and come back.
   assert.ok(Math.min(...samples) >= rest - 2, 'the glide overshot its resting point');
   console.log('CANVAS_GLIDE_CARRIES_THE_FLICK_OK', JSON.stringify({ released, rest, glide }));
 
-  // Caught in flight, it stops where it is: no jump, no drift.
   await flick();
   await sleep(60);
   const inFlight = await cameraX();
@@ -64,7 +58,6 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   await sleep(300);
   console.log('CANVAS_GLIDE_CAN_BE_CAUGHT_OK', JSON.stringify({ inFlight, grabbed, afterCatch }));
 
-  // A slow drag is a drag, not a flick: it must not glide.
   const before = await cameraX();
   send('mouseDown', origin.x, origin.y);
   for (let step = 1; step <= 6; step++) { send('mouseMove', origin.x - step * 12, origin.y); await sleep(90); }

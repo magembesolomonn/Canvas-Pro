@@ -1,14 +1,6 @@
 import Foundation
 import NaturalLanguage
 
-// The text understanding helper.
-//
-// macOS already knows how to compare sentences. This tool turns a piece of
-// text into the vector that comparison uses, so the app can search documents
-// and notes in plain language without downloading anything.
-//
-//   text-tool embed "some text"   -> the vector, as JSON numbers
-//   text-tool dimension           -> how many numbers a vector has
 
 @main struct TextTool {
  static func writeError(_ message: String) {
@@ -28,8 +20,6 @@ import NaturalLanguage
         }
         print(embedding.dimension)
     case "embed-many":
-        // Several texts at once, one per line, so a whole document is
-        // understood in a single call.
         let data = FileHandle.standardInput.readDataToEndOfFile()
         let input = String(data: data, encoding: .utf8) ?? ""
         guard let embedding = NLEmbedding.sentenceEmbedding(for: .english) else {
@@ -52,8 +42,6 @@ import NaturalLanguage
             writeError("This text could not be embedded.")
             exit(1)
         }
-        // The vector is written as plain numbers: the app stores it beside the
-        // picture vectors and compares them with a dot product.
         var parts: [String] = []
         parts.reserveCapacity(values.count)
         for value in values {

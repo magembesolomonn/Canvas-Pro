@@ -312,8 +312,6 @@ test('install stages the new bundle and hands the swap to a detached helper', as
     assert.ok(fs.existsSync(staged));
     assert.equal(openCommand, '/usr/bin/open');
     assert.ok(fs.readFileSync(script, 'utf8').includes('kill -0 "$pid"'));
-    // The detached helper calls quit asynchronously; wait for the event
-    // instead of guessing a fixed delay (flaky under load).
     {
       const start = Date.now();
       while (!calls.some(call => call[0] === 'quit') && Date.now() - start < 4000)
@@ -321,9 +319,6 @@ test('install stages the new bundle and hands the swap to a detached helper', as
     }
     assert.ok(calls.some(call => call[0] === 'quit'), 'the update helper did not quit');
 
-    // Run the same helper against a disposable target: it must wait for the
-    // old process, move the old bundle aside, put the staged app in place and
-    // remove the backup. No real app is touched.
     fs.writeFileSync(path.join(staged, 'new-marker'), 'new');
     execFileSync('/bin/bash', [script, '999999', target, staged, old, log, '/usr/bin/true'], {
       env: { ...process.env, CANVAS_UPDATE_SLEEP: '0' },

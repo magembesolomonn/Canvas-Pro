@@ -8,9 +8,6 @@ test('a node:crypto Ed25519 signature verifies and a tampered payload is rejecte
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
   const signature = crypto.sign(null, payload, privateKey);
 
-  // The helper pins its own public key. Point its key loader at a temporary
-  // public key so the real verify function is exercised end to end without
-  // ever using the release private key.
   const createPublicKey = crypto.createPublicKey;
   try {
     crypto.createPublicKey = () => publicKey;

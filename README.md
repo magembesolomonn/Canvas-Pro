@@ -35,7 +35,7 @@ All file types can be imported. Built-in previews cover browser-supported images
 
 Imports copy originals, never move source files. SHA-256 detects exact duplicates. Importing a duplicate into another collection adds the existing item to that collection. Tags, collection memberships, names, notes, source URL, ratings and Trash state are stored in SQLite. Favourites means a rating of four or five stars. Renaming changes the display name; the managed original retains its storage identifier. If a managed original is deleted in Finder, its item moves to Trash automatically; putting the file back in `originals/` restores it.
 
-The library is in Electron's application-data directory (normally `~/Library/Application Support/Asset Library/Library`). Use **Library on this Mac** to find the actual location. It contains `originals/`, `thumbnails/`, and `library.sqlite`. Quit the app before copying the entire Library folder as a backup. Never edit the managed originals or database directly. **Export copy** saves an individual original to a chosen location. Trash is reversible; **Delete Permanently** removes the item and its managed files.
+Find your active library in **Settings → Library & backups → Show in Finder**. Use **Back up now** to copy the database and originals to another location. To restore, copy that backup to your preferred location and choose **Open Library**. Keep the backup itself for future recovery. **Export copy** saves an individual original to a chosen location. Trash is reversible; **Delete Permanently** removes the item and its managed files.
 
 ## Finding files
 
@@ -79,7 +79,7 @@ Manual acceptance checklist:
 
 ## Later work
 
-Colour extraction/search, browser capture extension, multi-selection and bulk edits, similar-image matching, richer design-format providers, progress cancellation, library location switching, notarized installers and automatic backups remain future work. Release checksums are now signed; see “Signed updates” below. This initial version is not full Eagle feature parity.
+Colour extraction/search, the browser capture extension, multi-selection and bulk edits, similar-image matching, library location switching, manual library backups and backup reminders are all in the app now. Remaining work is saved searches, bulk find-and-replace across file contents, and full Eagle feature parity. Release checksums are signed; see “Signed updates” below.
 
 
 ## Media and performance update (0.2)
@@ -231,7 +231,7 @@ Create a named board with **Canvas +** in the sidebar. Select library files and 
 
 A board carries a flick: pan it and let go, and the board keeps travelling at the speed your hand left it, then settles where the gesture was heading. Catch it in flight and it stops where it is, with no jump. A slow drag stays a slow drag. Pressing an item in the library answers at once, and the preview arrives by growing slightly into place. With **Reduce motion** in macOS settings the glide is off, the preview fades, and the press settles without a bounce.
 
-A large picture opens with zoom controls in the corner: use them, or Command–plus and Command–minus, to look closer, then pull the picture around by hand to scrub to the part you want. The library no longer pops a backup reminder over your work; the reminder lives in Settings → Media → Library backup.
+A large picture opens with zoom controls in the corner: use them, or Command–plus and Command–minus, to look closer, then pull the picture around by hand to scrub to the part you want. The library no longer pops a backup reminder over your work; the reminder lives in Settings → Library & backups.
 
 Boards support moving and resizing multiple items, editable text, rectangles, ellipses, colours, undo/redo and duplication. Corners preserve proportions; hold Shift for free resizing. Use Space-drag or the Hand tool to pan, pinch to zoom and Command–0 to fit. V/H/T/R/O select the tools; Command–D duplicates. Delete removes board items without trashing the underlying files. Collections remain linked when renamed, and boards reference existing originals rather than copying them.
 
@@ -241,7 +241,7 @@ Validation: 56 unit tests, real Electron board editing/import/clipboard/persiste
 
 ## 0.11.0 — Libraries and canvas refinement
 
-On a new installation, choose **Create library** or **Open existing**. Returning installations retain their current library. **File → New Library / Open Library** and the Library section in Settings let you choose another folder. Switching saves canvas edits, drains active work and restarts the app; it does not relocate or merge originals. Open the folder containing `library.sqlite` and `originals`. New libraries use a new `.canvaslibrary` folder; existing folders are never overwritten. Missing or incompatible libraries prompt for another location instead of silently creating an empty replacement. Keep the entire library folder together when moving or backing it up, with Canvas Pro closed.
+On a new installation, choose **Use default location**, **Choose location…**, or **Open existing…**. Returning installations retain their current library. **File → New Library / Open Library** and the Library section in Settings let you choose another folder. Switching saves canvas edits, drains active work and restarts the app; it does not relocate or merge originals. Open the folder containing `library.sqlite` and `originals`. New libraries use a new `.canvaslibrary` folder; existing folders are never overwritten. Missing or incompatible libraries prompt for another location instead of silently creating an empty replacement. Keep the entire library folder together when moving or backing it up, with Canvas Pro closed.
 
 The canvas library tray now uses each image/video's proportions and virtualizes its columns. Command-click toggles multiple files; Shift-click selects a range. Drag the selection together, with a file-count badge. Videos preview on hover and release on leaving; playing board videos remain draggable, including in group selections. Pointer-position scrubbing is disabled on the board and tray; use the timeline controls. Library-gallery hover scrubbing remains available. Video players have a persistent Loop toggle.
 
@@ -287,7 +287,7 @@ Run `npm run test:ui` for every interface check at once, and `npm run shot` to c
 
 ### Current source prototype (not packaged)
 
-Run `npm run prototype` for a separate persistent prototype profile and blank library in `.prototype/`. This leaves the installed app and your regular library alone. No new DMG or extension ZIP has been built for this iteration. Load `chrome-extension/` unpacked in a test browser profile to try the browser side panel (Chrome 116+).
+Run `npm run prototype` for a separate persistent prototype profile and blank library in `.prototype/`. This leaves the installed app and your regular library alone. Load `chrome-extension/` unpacked in a test browser profile to try the browser side panel (Chrome 116+). Release bundles are built with `npm run build:mac`.
 
 The prototype adds file undo/redo, palette colour matching, visual find-similar, a searchable shortcut reference, optional backup reminders, library backup and hash-verified missing-original recovery. File undo covers metadata and collection membership, not permanent deletion or imported file bytes. Identical imports are already deduplicated by hash; visual similarity requires completed local indexing and remains a review aid, not proof of duplication.
 

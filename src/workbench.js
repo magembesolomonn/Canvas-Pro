@@ -1,5 +1,4 @@
 const WorkbenchUI=(()=>{
- // Keep this gate in sync with electron/smart-index.cjs VISUAL_EXTENSIONS.
  const VISUAL_EXTENSIONS=new Set(['jpg','jpeg','jfif','jpe','png','webp','gif','avif','heic','heif','tiff','tif','bmp','svg','psd','eps','pdf','mp4','mov','m4v','webm']);
  const canFindSimilar=a=>!!a&&VISUAL_EXTENSIONS.has(String(a.ext||'').toLowerCase());
  let state={icons:{}},similarIds=null,similarScores=null,title='Similar files',color='',pendingIcons={};
@@ -9,11 +8,6 @@ const WorkbenchUI=(()=>{
  async function pickIcon(key,onChoose){const value=await EmojiPicker.pick();if(!value)return;const choice={type:'emoji',value};if(onChoose)onChoose(choice);else{state.icons=await api.workbench('icon',{key,icon:choice});renderNav();}}
  function setData(data){if(data)state=data;}
  function reset(){similarIds=null;similarScores=null;color='';title='Similar files';}
- // Colour matching uses CIE Lab distance, not raw RGB. The old rule allowed a
- // distance of 85 per channel, so any file with a dark grey matched a dark
- // swatch and the result looked random. A swatch should mean the same colour,
- // not a colour in the same family: Delta E of 8 covers the palette's own
- // quantisation (5 bits per channel) and nothing more.
  const COLOUR_TOLERANCE=8;
  const rgbCache=new Map(),labCache=new Map();
  function hexToRgb(hex){
@@ -60,8 +54,6 @@ const WorkbenchUI=(()=>{
  function accepts(a){return view!=='smart'||((!similarIds||similarIds.has(a.id))&&(!color||colorMatch(a,color)));}
  function showSimilarInLibrary(source,result){
   similarIds=new Set(result.map(r=>r.id));similarScores=new Map(result.map(r=>[r.id,r.score]));title='Similar to '+(source.name||'image');
-  // Set the result up before changing views so the single render that follows
-  // already has the filter, the ranking and the closest match selected.
   setView('smart',null,false,{keepWorkbench:true,type:'all',pendingSelection:result[0]?.id||null});
  }
  async function similar(id){
@@ -77,9 +69,9 @@ const WorkbenchUI=(()=>{
    try{result=(await api.workbench('similar',{id})).filter(r=>r.score>=0.2);}catch(error){notify(error.message||String(error));return;}
    if(!result.length){
     const [index,installed]=await Promise.all([api.smartState().catch(()=>null),api.modelState('clip').catch(()=>null)]);
-    const reason=!installed?.ready?'Install the local visual model in Settings → Search & models, then let the index finish.'
+    const reason=!installed?.ready?'Install the local visual model in Settings → Search, then let the index finish.'
      :index?.visualRemaining?'Still indexing: '+index.visualRemaining+' files left to compare.'
-     :'No close matches yet. Let local indexing finish in Settings → Search & models.';
+     :'No close matches yet. Let local indexing finish in Settings → Search.';
     notify(reason);
     return;
    }
@@ -89,18 +81,12 @@ const WorkbenchUI=(()=>{
    if(button?.isConnected){button.disabled=false;button.removeAttribute('aria-busy');button.title='';}
   }
  }
- // A colour is a filter, not a report: clicking a swatch takes you to every
- // file that uses that colour, the same way Find similar takes you to the
- // files that look like this one.
  async function findColor(hex){
   if(!hexToRgb(hex))return;
   window.showColorDetails?.(hex);
-  // The colour is set after the view changes: switching views clears the
-  // filter, and a filter that is cleared shows nothing at all.
   setView('smart');$('#type').value='all';
   color=hex;title='Files with '+hex;
   render();
-  // Every file has to be here, not only the page the library was showing.
   await hydrateCatalog();
   const matches=assets.filter(a=>!a.trash&&colorMatch(a,hex));
   title='Files with '+hex+(matches.length?' · '+matches.length:'');
@@ -108,8 +94,6 @@ const WorkbenchUI=(()=>{
   if(!matches.length)notify('No indexed file uses that colour yet. Colours are known once the local index has looked at a file.');
  }
  async function history(redo=false){const result=await api.workbench('history',{redo});if(result.changed){await refreshCurrent();notify((redo?'Redid: ':'Undid: ')+result.label);}else notify('No file changes to '+(redo?'redo':'undo')+'.');}
- // The searchable sheet lives with the command palette so both use the same
-// list; Settings and ⌘/ route here too.
  function shortcuts(){return window.SettingsUI ? window.SettingsUI.open('shortcuts') : null;}
  async function duplicateReview(){
   const d=dialog('Duplicate review');
@@ -237,11 +221,11 @@ const WorkbenchUI=(()=>{
  async function recovery(issue){const result=await api.workbench('recover',{id:issue.id});if(result.restored){notify('Original restored. Your tags and canvas placements are preserved.');thumbnailReset(issue.id);await refreshCurrent();renderHealth(await api.startHealth());}}
  function thumbnailReset(id){for(const key of [...linkRequests.keys()])if(key===id)linkRequests.delete(key);}
  async function created(key,kind){const icon=pendingIcons[kind];if(icon){state.icons=await api.workbench('icon',{key,icon});delete pendingIcons[kind];renderNav();}}
- function init(){for(const [selector,kind]of [['#canvas-name-label','canvas'],['#folder-dialog form','collection'],['#action-form','collection']]){const parent=$(selector);const b=action('Choose icon…',()=>{if(kind==='canvas'&&CanvasWorkspace.dialog?.renameId)return pickIcon('canvas:'+CanvasWorkspace.dialog.renameId);return pickIcon(null,value=>{pendingIcons[kind]=value;b.textContent=value.value;});});b.type='button';b.className='creation-icon';/* In dialogs the icon picker sits on the same line as Cancel and the primary action. */const actions=parent.querySelector('.dialog-actions');if(actions)actions.prepend(b);else parent.append(b);}for(const [selector,name]of [['#close-preview','close'],['#settings-close','close'],['#health-close','close'],['#activity-close','close'],['#canvas-tray-close','close'],['#canvas-zoom-out','minus'],['#canvas-zoom-in','plus'],['#add-canvas','plus'],['#add-folder','plus']]){const n=$(selector);if(n)n.replaceChildren(glyph(name));}const search=$('.search');const searchIcon=search.querySelector('.search-glyph');if(searchIcon){if(!searchIcon.firstChild)searchIcon.append(glyph('search'));}else if(search.firstChild?.nodeType===3)search.firstChild.replaceWith(glyph('search'));api.onHistoryCommand(redo=>{const focused=document.activeElement;if(focused?.matches('input,textarea,[contenteditable=true]')){document.execCommand(redo?'redo':'undo');return;}if(view==='canvas')CanvasWorkspace.undo(redo);else safe(()=>history(redo));});// Settings opens these tools in their own window and comes straight back.
+ function init(){for(const [selector,kind]of [['#canvas-name-label','canvas'],['#folder-dialog form','collection'],['#action-form','collection']]){const parent=$(selector);const b=action('Choose icon…',()=>{if(kind==='canvas'&&CanvasWorkspace.dialog?.renameId)return pickIcon('canvas:'+CanvasWorkspace.dialog.renameId);return pickIcon(null,value=>{pendingIcons[kind]=value;b.textContent=value.value;});});b.type='button';b.className='creation-icon'; const actions=parent.querySelector('.dialog-actions');if(actions)actions.prepend(b);else parent.append(b);}for(const [selector,name]of [['#close-preview','close'],['#settings-close','close'],['#health-close','close'],['#activity-close','close'],['#canvas-tray-close','close'],['#canvas-zoom-out','minus'],['#canvas-zoom-in','plus'],['#add-canvas','plus'],['#add-folder','plus']]){const n=$(selector);if(n)n.replaceChildren(glyph(name));}const search=$('.search');const searchIcon=search.querySelector('.search-glyph');if(searchIcon){if(!searchIcon.firstChild)searchIcon.append(glyph('search'));}else if(search.firstChild?.nodeType===3)search.firstChild.replaceWith(glyph('search'));api.onHistoryCommand(redo=>{const focused=document.activeElement;if(focused?.matches('input,textarea,[contenteditable=true]')){document.execCommand(redo?'redo':'undo');return;}if(view==='canvas')CanvasWorkspace.undo(redo);else safe(()=>history(redo));});
  const fromSettings=fn=>async()=>{const pane=SettingsUI.currentPane;$('#settings-dialog').close();const dialog=await fn();if(dialog&&dialog.addEventListener)dialog.addEventListener('close',()=>SettingsUI.open(pane),{once:true});};
 
  $('#settings-duplicate-review').onclick=fromSettings(duplicateReview);
  document.addEventListener('keydown',e=>{if(!(e.metaKey||e.ctrlKey))return;const typing=e.target.matches?.('input,textarea,select,[contenteditable=true]');if(e.key==='/'&&!typing){e.preventDefault();e.stopImmediatePropagation();shortcuts();}else if(e.key.toLowerCase()==='z'&&!typing&&view!=='canvas'&&!document.querySelector('dialog[open]')){e.preventDefault();e.stopImmediatePropagation();safe(()=>history(e.shiftKey));}},true);
  }
- return{init,created,setData,reset,accepts,rank,rankOrder,colourMatch:colorMatch,icon,similar,canFindSimilar,findColor,recovery,shortcuts,get title(){return title;}};
+ return{init,created,setData,reset,accepts,rank,rankOrder,colourMatch:colorMatch,icon,similar,canFindSimilar,findColor,recovery,shortcuts,get title(){return title;},get color(){return color;}};
 })();

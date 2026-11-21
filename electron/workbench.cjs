@@ -1,8 +1,6 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {DEFAULT_DISTANCE,distance,bands:fingerprintBands,token:tokenFor}=require('./perceptual-hash.cjs');
 const fields=['name','notes','url','rating','favorite','trash','tags','folders'];
-// A copy with tags, notes or a favourite star is the one worth keeping; after
-// that the larger file wins, then the one that arrived first.
 function keepScore(asset){const tags=JSON.parse(asset.tags||'[]').length;return (asset.notes?1e15:0)+(tags?1e14:0)+(asset.favorite?1e13:0)+asset.size;}
 class Workbench{
  constructor(library){this.library=library;this.db=library.db;this.undo=[];this.redo=[];this.backingUp=false;this.db.exec(`CREATE TABLE IF NOT EXISTS presentation(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS library_preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS duplicate_dismissals(token TEXT PRIMARY KEY,ids TEXT NOT NULL,at TEXT NOT NULL);`);}
@@ -16,11 +14,6 @@ class Workbench{
  backup(destination){if(this.backupTask)return Promise.reject(Error('Wait for the current backup to finish.'));this.backupTask=this.runBackup(destination).finally(()=>{this.backupTask=null;});return this.backupTask;}
  async close(){await this.backupTask?.catch(()=>{});}
  async runBackup(destination){if(this.backingUp||this.library.deleting.size)throw Error('Wait for the current backup or deletion to finish.');const real=path.resolve(destination),root=fs.realpathSync(this.library.root);if(real===root||real.startsWith(root+path.sep))throw Error('Save backups outside the current library.');this.backingUp=true;let made=false;try{await fs.promises.mkdir(real);made=true;this.db.prepare('VACUUM INTO ?').run(path.join(real,'library.sqlite'));const {DatabaseSync}=require('node:sqlite'),snapshot=new DatabaseSync(path.join(real,'library.sqlite'),{readOnly:true});let originals;try{originals=snapshot.prepare('SELECT stored FROM assets').all();}finally{snapshot.close();}await fs.promises.mkdir(path.join(real,'originals'));for(const record of originals){const source=path.resolve(root,record.stored);if(path.dirname(source)!==path.join(root,'originals')||!(await fs.promises.lstat(source)).isFile()||(await fs.promises.lstat(source)).isSymbolicLink())throw Error('Backup stopped: an original is missing or unsafe. Run Library health.');await fs.promises.copyFile(source,path.join(real,record.stored));}for(const dir of ['thumbnails','media-v2'])if(fs.existsSync(path.join(root,dir)))await fs.promises.cp(path.join(root,dir),path.join(real,dir),{recursive:true,filter:source=>!fs.lstatSync(source).isSymbolicLink()});const info={at:new Date().toISOString(),path:real};this.pref('lastBackup',info);return info;}catch(e){if(made)await fs.promises.rm(real,{recursive:true,force:true});throw e;}finally{this.backingUp=false;}}
- // Groups files whose pictures are the same, not files that merely share a
- // subject. Exact copies are already blocked at import by their checksum, so
- // most groups come from the 64-bit fingerprint: the same photograph saved
- // again, resized, or re-compressed. Nothing is changed here; the review
- // dialog decides what to keep.
  async duplicates({threshold = DEFAULT_DISTANCE} = {}) {
   const limit = Math.max(1, Math.min(12, Math.round(Number(threshold) || DEFAULT_DISTANCE)));
   const rows = this.db.prepare(`SELECT id,name,size,ext,hash,phash,imported,notes,favorite,tags FROM assets WHERE trash=0 AND phash IS NOT NULL AND phash<>''`).all();
@@ -44,9 +37,6 @@ class Workbench{
   };
   for (const row of rows) { parent.set(row.id, row.id); rank.set(row.id, 0); }
 
-  // A checksum match is definitive. It is rare, because import refuses bytes
-  // it has already seen, but a library restored from a backup can still hold
-  // one, and it should not be hidden behind a similarity score.
   const byHash = new Map();
   for (const row of rows) {
     const previous = byHash.get(row.hash);
@@ -54,8 +44,6 @@ class Workbench{
     else byHash.set(row.hash, row.id);
   }
 
-  // Fingerprints meet through shared 16-bit bands, so each row only compares
-  // against the few rows that already agree on one band.
   const buckets = new Map();
   for (const row of rows) {
     for (const band of fingerprintBands(row.phash)) {
@@ -120,9 +108,6 @@ class Workbench{
   groups.sort((a, b) => b.savings - a.savings || b.members.length - a.members.length || b.similarity - a.similarity);
   return { groups: groups.slice(0, 200), pending, total: rows.length, scanned: rows.length, threshold: limit };
  }
- // "These are not duplicates" is remembered per group. A later third copy
- // makes a new group (and a new token), so the subject can come back when the
- // library actually changes.
  dismissDuplicates(ids) {
   if (!Array.isArray(ids) || ids.length < 2) throw new Error('Choose a duplicate group first.');
   const token = tokenFor(ids);

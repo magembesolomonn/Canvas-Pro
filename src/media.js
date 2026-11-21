@@ -14,11 +14,6 @@ async function getMediaInfo(a,priority=false){
   const current=mediaInFlight.get(a.id);
   if(current){
     if(!priority||current.priority)return withPlaybackDimensions(a,await current.request);
-    // A priority request supersedes a non-priority one that is still in flight
-    // (typically a deferred lookup). Fall through to start a fresh priority
-    // request and replace the in-flight entry, so the player never waits on
-    // the slow deferred request. The identity checks below still keep the old
-    // request from overwriting the cache or deleting the replacement entry.
   }
   const entry={priority};
   entry.request=window.library.mediaInfo(a.id,priority).then(result=>{
@@ -56,7 +51,6 @@ function createPlayer(a,{compact=false,muted=false,scrubHover=true}={}){
     const ratio=media.videoWidth/media.videoHeight||a.aspectRatio||16/9;
     const width=Math.max(1,Math.min(rect.width,Math.max(1,rect.height-16)*ratio));
     stage.style.width=width+'px';
-    // Give the controls room on very narrow videos while keeping the picture at its natural ratio.
     root.style.width=Math.max(width,Math.min(rect.width,260))+'px';
     root.style.height=(width/ratio)+'px';
   }
@@ -73,7 +67,6 @@ function createPlayer(a,{compact=false,muted=false,scrubHover=true}={}){
       stage.append(title);
       const caption=document.createElement('p');caption.className='audio-caption';caption.textContent=named?(a.ext.toUpperCase()+' audio'):'';stage.append(caption);
     }
-    // Add a waveform only after metadata confirms there is no cover art.
   }
   const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
   const controls=node('div','player-controls cinematic-controls');root.append(controls);

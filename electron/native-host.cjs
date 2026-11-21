@@ -1,4 +1,3 @@
-// Native messaging entry point. Stdout is reserved exclusively for Chrome frames.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),net=require('node:net');const{spawn}=require('node:child_process');const{encodeFrame,frameReader}=require('./framing.cjs');
 const directory=process.env.CANVAS_BRIDGE_DIR||path.join(os.homedir(),'Library/Application Support/Canvas Pro/Bridge');const socketPath=path.join(directory,'capture.sock');let finished=false,handling=false;
 function reply(value){if(finished)return;finished=true;process.stdout.write(encodeFrame(value),()=>process.exit(0));}

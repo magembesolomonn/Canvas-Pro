@@ -45,7 +45,6 @@ async function resolveSocialVideo(value){
   const base={pageUrl:permalink,pageTitle:'Post',title:'Post',description:'',author:''};
   let items=[],notice='';
   try{
-    // X/Twitter syndication
     if((platform==='x.com'||platform==='twitter.com')){
       const id=new URL(permalink).pathname.match(/\/status\/(\d+)/)?.[1];
       if(id){
@@ -56,7 +55,6 @@ async function resolveSocialVideo(value){
         items=twitterMedia(data,base);
       }
     }
-    // Reddit public json
     if(platform==='reddit.com' && !items.some(i=>i.kind==='video')){
       const u=new URL(permalink); if(u.pathname.includes('/comments/')){
         u.search='';u.hash='';u.pathname=u.pathname.replace(/\/$/,'')+'.json';u.searchParams.set('raw_json','1');
@@ -69,7 +67,6 @@ async function resolveSocialVideo(value){
         }
       }
     }
-    // Generic og:video fallback (instagram/pinterest/tiktok/facebook/threads/linkedin/youtube etc.)
     if(!items.some(i=>i.kind==='video')){
       try{
         const html=await readText(permalink,2*1024*1024,platform==='instagram.com'?{'User-Agent':'Canvas Pro'}:undefined);
@@ -81,8 +78,7 @@ async function resolveSocialVideo(value){
         if(found.length) items.push(...found);
       }catch{}
     }
-  }catch(e){ /* fall through */ }
-  // keep only direct downloadable-looking media
+  }catch(e){  }
   items=items.filter(i=>i?.mediaUrl && /^https?:/i.test(i.mediaUrl) && !/\.(m3u8|mpd)(?:[?#]|$)/i.test(i.mediaUrl));
   const unique=new Map(items.map(i=>[i.mediaUrl,i])); items=[...unique.values()].slice(0,10);
   if(!items.length) return null;

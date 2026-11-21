@@ -34,9 +34,6 @@ function referrerHeader(referrer,url){
   try{
     const source=new URL(referrer);
     if(!['http:','https:'].includes(source.protocol)||source.username||source.password)return null;
-    // Match strict-origin-when-cross-origin: the full path only goes back to
-    // the same origin, otherwise the receiving server gets just the origin.
-    // A secure page never hands its origin to a plain-text destination.
     if(source.protocol==='https:'&&url.protocol!=='https:')return null;
     return source.origin===url.origin?source.href:source.origin+'/';
   }catch{return null;}
@@ -51,7 +48,6 @@ async function publicFetch(value,{signal,headers,timeout=12000,referrer}={}){
        isIP(host)&&!isPublicAddress(host))throw new Error('Automatic previews require a public HTTP address.');
     const transport=url.protocol==='https:'?https:http;
     const referer=referrerHeader(referrer,url);
-    // Lookup filters the actual socket destination, including after redirects.
     const incoming=await new Promise((resolve,reject)=>{
       const req=transport.get(url,{lookup:publicLookup,signal:deadline,headers:{
         'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36',

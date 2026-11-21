@@ -1,11 +1,7 @@
-// Test-only Chromium profile and local fixture server; never opens the user's profile.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http=require('node:http'),crypto=require('node:crypto');const{spawn}=require('node:child_process');const{CaptureBridge}=require('../electron/capture-bridge.cjs');const{Library}=require('../electron/library.cjs');const{DatabaseSync}=require('node:sqlite');
 const assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..'),temporary=fs.mkdtempSync(path.join(os.tmpdir(),'canvas-browser-'));let browser,bridge,server,lib;const clients=[];
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-// Optional real-library fixture: explicit env override, then the product's
-// Application Support folders (main.cjs uses "Canvas Pro" and still honours
-// the legacy "Asset Library" data directory).
 function realLibraryRoot(){
   const support=path.join(os.homedir(),'Library','Application Support');
   const candidates=process.env.CANVAS_TEST_LIBRARY
@@ -17,12 +13,10 @@ async function poll(fn,timeout=20000){const deadline=Date.now()+timeout;while(Da
 async function client(url){const socket=new WebSocket(url);await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});let next=0;const pending=new Map();socket.addEventListener('message',event=>{const value=JSON.parse(event.data);if(value.method)c.onEvent?.(value.method,value.params);if(value.id&&pending.has(value.id)){const p=pending.get(value.id);pending.delete(value.id);clearTimeout(p.timer);value.error?p.reject(new Error(value.error.message)):p.resolve(value.result);}});const c={socket,call(method,params={}){return new Promise((resolve,reject)=>{const id=++next;const timer=setTimeout(()=>{pending.delete(id);reject(new Error('CDP timeout: '+method));},60000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});},async evaluate(expression){const result=await this.call('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true,userGesture:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value;}};clients.push(c);return c;}
 (async()=>{
  const profile=path.join(temporary,'profile'),extension=path.join(temporary,'extension');fs.mkdirSync(profile);fs.cpSync(path.join(root,'chrome-extension'),extension,{recursive:true});const manifest=JSON.parse(fs.readFileSync(path.join(extension,'manifest.json'),'utf8'));
- // Only this isolated test copy receives fixture-host access. The shipped manifest uses activeTab.
  manifest.host_permissions=['<all_urls>'];fs.writeFileSync(path.join(extension,'manifest.json'),JSON.stringify(manifest));const id=fs.readFileSync(path.join(extension,'extension-id.txt'),'utf8').trim();
  lib=new Library(path.join(temporary,'library'));
- // A stand-in for yt-dlp: platform posts are served by the fixture video
- // instead of downloading from the real site.
- bridge=new CaptureBridge({allowPrivateCapture:true,library:lib,directory:path.join(temporary,'bridge'),fetcher:fetch,videoDownloader:{download:async(target,dir)=>{const url=/reddit\.com|youtube\.com|facebook\.com/i.test(target)?base+'/lazy.mp4?social':target;const response=await fetch(url);if(!response.ok)throw new Error('Fixture video unavailable ('+response.status+')');const file=path.join(dir,'video.mp4');fs.writeFileSync(file,Buffer.from(await response.arrayBuffer()));return file;}}});await bridge.start();
+ let revealedId;
+ bridge=new CaptureBridge({allowPrivateCapture:true,library:lib,onReveal:id=>{revealedId=id;return {shown:true};},directory:path.join(temporary,'bridge'),fetcher:fetch,videoDownloader:{download:async(target,dir)=>{const url=/reddit\.com|youtube\.com|facebook\.com/i.test(target)?base+'/lazy.mp4?social':target;const response=await fetch(url);if(!response.ok)throw new Error('Fixture video unavailable ('+response.status+')');const file=path.join(dir,'video.mp4');fs.writeFileSync(file,Buffer.from(await response.arrayBuffer()));return file;}}});await bridge.start();
  const runtimeCandidates=[process.env.CANVAS_TEST_ELECTRON];
  try{const binary=require('electron');if(typeof binary==='string')runtimeCandidates.push(binary);}catch{}
  runtimeCandidates.push(path.join(root,'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),path.join(root,'node_modules/electron/dist/electron.exe'),path.join(root,'node_modules/electron/dist/electron'));
@@ -41,14 +35,14 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
  const crop=await c.evaluate(`screenshot(${JSON.stringify(tab)},{x:5,y:5,width:120,height:90,viewportWidth:800,viewportHeight:600})`);console.log('EXTENSION_REGION',JSON.stringify(crop));
  const content=await c.evaluate(`runAction('content',${tab.id})`);console.log('EXTENSION_CONTENT',JSON.stringify(content));
  const bookmark=await c.evaluate(`runAction('bookmark',${tab.id})`);assert.equal(bookmark.imported,1);assert.ok(lib.list().some(a=>a.ext==='url'&&a.url===base+'/page'));console.log('EXTENSION_URL_BOOKMARK',true);
+ assert.equal((await c.evaluate(`native({op:'reveal',jobId:${JSON.stringify(bookmark.id)}})`)).shown,true);
+ assert.equal(revealedId,bookmark.results[0].id);
+
  const image=await c.evaluate(`captureContext({menuItemId:'image',srcUrl:${JSON.stringify(base+'/image.png')},frameId:0},${JSON.stringify(tab)})`);console.log('EXTENSION_IMAGE',JSON.stringify(image));
  if(videoFile){const video=await c.evaluate(`captureContext({menuItemId:'video',srcUrl:${JSON.stringify(base+'/video.mp4')},frameId:0},${JSON.stringify(tab)})`);console.log('EXTENSION_VIDEO',JSON.stringify(video));const saved=lib.list().find(a=>a.ext==='mp4');if(!saved||saved.captureMetadata.author!=='Capture test artist')throw new Error('Video metadata did not reach the library.');}
- // A streaming player exposes only a blob: URL to the browser menu. The
- // worker must ask the page for the resolved file and save that instead.
  const streamTarget=await c.call('Target.createTarget',{url:base+'/stream'});
  const streamInfo=await poll(async()=>(await targets()).find(t=>t.id===streamTarget.targetId));
  const streamPage=await client(streamInfo.webSocketDebuggerUrl);await streamPage.call('Runtime.enable');await streamPage.call('Page.enable');
- // A new CDP target can be inspected before its document exists.
  await poll(()=>streamPage.evaluate(`!!document.documentElement?.getAttribute?.('data-canvas-quick-save')`));
  const streamTab=await c.evaluate(`chrome.tabs.query({}).then(tabs=>tabs.find(t=>t.url===${JSON.stringify(base+'/stream')}))`);
  assert.equal(await streamPage.evaluate(`document.querySelectorAll('video').length`),1);
@@ -60,10 +54,6 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
  console.log('EXTENSION_BLOB_VIDEO_RESOLVED',JSON.stringify({ext:streamAsset.ext,bytes:streamAsset.size,mediaUrl:streamAsset.captureMetadata.mediaUrl}));
  assert.ok(page,'Fixture page is available');
  const activity=await page.evaluate(`(()=>{const root=document.querySelector('[data-canvas-capture-activity]')?.shadowRoot;return {rows:root?.querySelectorAll('.toast').length,text:root?.textContent};})()`);assert.ok(activity.rows>=1,'The capture toast did not appear on the page.');assert.match(activity.text,/saved/);console.log('EXTENSION_RIGHT_ACTIVITY',activity.rows);const activityShot=await page.call('Page.captureScreenshot');fs.writeFileSync('/private/tmp/canvas-pro-capture-activity.png',Buffer.from(activityShot.data,'base64'));await poll(()=>page.evaluate(`!document.querySelector('[data-canvas-capture-activity]')`),5000);console.log('EXTENSION_ACTIVITY_AUTO_DISMISS',true);
- // Observe a real MIME-only video request after arming this tab; no filename extension.
- // A storage write alone does not arm the webRequest listener; the worker
- // learns about armed tabs through rehydrateWatchedTabs (or the watch-media
- // message). Exercise that path so the fixture matches real usage.
  await c.evaluate(`(async()=>{await chrome.storage.session.set({['media-watch:'+${tab.id}]:{expires:Date.now()+60000,items:[]}});await rehydrateWatchedTabs();})()`);
  await page.evaluate(`fetch('/opaque-media').then(r=>r.arrayBuffer()).then(()=>true)`);
  await poll(()=>c.evaluate(`chrome.storage.session.get('media-watch:'+${tab.id}).then(r=>r['media-watch:'+${tab.id}]?.items.some(i=>i.mediaUrl.endsWith('/opaque-media')))`));
@@ -75,15 +65,10 @@ async function client(url){const socket=new WebSocket(url);await new Promise((re
  const popupTarget=await c.call('Target.createTarget',{url:'chrome-extension://'+id+'/popup.html'});const popup=await poll(async()=>{return(await targets()).find(t=>t.id===popupTarget.targetId);});const p=await client(popup.webSocketDebuggerUrl);await poll(()=>p.evaluate("document.querySelector('#connection')?.textContent==='Connected'"));await p.call('Emulation.setDeviceMetricsOverride',{width:362,height:610,deviceScaleFactor:1,mobile:false});const tabsBefore=await c.evaluate('chrome.tabs.query({}).then(t=>t.length)');await c.evaluate(`runAction('collect',${tab.id})`);assert.equal(await c.evaluate('chrome.tabs.query({}).then(t=>t.length)'),tabsBefore);console.log('COLLECTION_NO_NEW_TAB_OK');const panelOptions=await p.evaluate('chrome.sidePanel.getOptions({})');assert.equal(panelOptions.path,'collector.html');const openPanel=await p.call('Runtime.evaluate',{expression:`chrome.sidePanel.open({tabId:${tab.id}}).then(()=>true).catch(e=>e.message)`,awaitPromise:true,returnByValue:true,userGesture:true});assert.equal(openPanel.result.value,true);console.log('NATIVE_SIDE_PANEL_OPEN_OK');const panelTarget=await c.call('Target.createTarget',{url:'chrome-extension://'+id+'/collector.html'});const target=await poll(async()=>(await targets()).find(t=>t.id===panelTarget.targetId));const panel=await client(target.webSocketDebuggerUrl);await poll(()=>panel.evaluate("document.querySelectorAll('.image-choice').length>0"));await c.evaluate("chrome.storage.session.set({lastCapture:{id:'panel-test',state:'running',total:2,done:0,currentTotal:100,currentBytes:50,items:[{title:'First file',state:'downloading'},{title:'Second file',state:'queued'}]}})");await poll(()=>panel.evaluate("document.querySelector('#download-progress').value===.5"));await c.evaluate("chrome.storage.session.set({lastCapture:{id:'panel-test',state:'complete',total:2,done:2,imported:1,duplicates:1,errors:[],items:[{title:'First file',state:'saved'},{title:'Second file',state:'duplicate'}]}})");await poll(()=>panel.evaluate("document.querySelector('#download-files').textContent.includes('Already saved')"));assert.equal(await panel.evaluate("document.querySelector('#download-progress').value"),2);console.log('SIDE_PANEL_PROGRESS_AND_SAVED_FILES_OK');await c.evaluate(`chrome.tabs.remove(${panelTarget.targetId})`).catch(()=>{});const screenshotPopup=await p.call('Page.captureScreenshot');fs.writeFileSync('/private/tmp/canvas-pro-extension-popup.png',Buffer.from(screenshotPopup.data,'base64'));
  
 
- const fallbacks=await c.evaluate(`(async()=>{const original=publicText,originalExtract=extractableVideoURL,results=[];const media=${JSON.stringify(base+(videoFile?'/video.mp4':'/lazy.mp4?fallback'))};try{for(const platform of ['x.com','www.reddit.com','www.instagram.com','www.pinterest.com']){const permalink=platform==='x.com'?'https://x.com/test/status/1234567890123456789':platform.includes('reddit')?'https://www.reddit.com/r/test/comments/abc123/post/':'https://'+platform+'/p/TestPost/';publicText=async()=>platform==='x.com'?JSON.stringify({mediaDetails:[{type:'video',video_info:{variants:[{content_type:'video/mp4',url:media,bitrate:1000}]}}]}):platform.includes('reddit')?JSON.stringify([{data:{children:[{data:{secure_media:{reddit_video:{fallback_url:media,width:320,height:180,duration:3}},title:'Reddit film'}}]}}]):'<meta content="'+media+'" property="og:video">';// Reddit prefers the video extractor over public metadata; stand in for its
-// direct-file result so this case still exercises post discovery without a
-// real yt-dlp download.
+ const fallbacks=await c.evaluate(`(async()=>{const original=publicText,originalExtract=extractableVideoURL,results=[];const media=${JSON.stringify(base+(videoFile?'/video.mp4':'/lazy.mp4?fallback'))};try{for(const platform of ['x.com','www.reddit.com','www.instagram.com','www.pinterest.com']){const permalink=platform==='x.com'?'https://x.com/test/status/1234567890123456789':platform.includes('reddit')?'https://www.reddit.com/r/test/comments/abc123/post/':'https://'+platform+'/p/TestPost/';publicText=async()=>platform==='x.com'?JSON.stringify({mediaDetails:[{type:'video',video_info:{variants:[{content_type:'video/mp4',url:media,bitrate:1000}]}}]}):platform.includes('reddit')?JSON.stringify([{data:{children:[{data:{secure_media:{reddit_video:{fallback_url:media,width:320,height:180,duration:3}},title:'Reddit film'}}]}}]):'<meta content="'+media+'" property="og:video">';
 extractableVideoURL=platform==='www.reddit.com'?()=>media:originalExtract;
 const result=await captureSocial({permalink,title:'Public fallback test',hasVideo:true,items:[]},{id:${tab.id},url:permalink,title:'Post metadata fixture'});results.push({platform,errors:result.errors.length,messages:result.errors,saved:result.imported+result.duplicates});}return results;}finally{publicText=original;extractableVideoURL=originalExtract;}})()`);console.log('EXTENSION_PUBLIC_ADAPTERS',JSON.stringify(fallbacks));for(const result of fallbacks){assert.equal(result.errors,0);assert.equal(result.saved,1);}
- // This test host has no yt-dlp binary. Simulate the extractor finding no
- // direct file for Reddit so those posts use the ordinary capture path.
  await c.evaluate(`globalThis.__originalExtract=extractableVideoURL;extractableVideoURL=value=>/reddit\\.com/i.test(value)?'':globalThis.__originalExtract(value)`);
- // Fulfil only test documents at platform origins. No real social account/profile is opened.
  for(const [host,postTag]of [['x.com','article data-testid="tweet"'],['www.instagram.com','article'],['www.reddit.com','shreddit-post permalink="https://www.reddit.com/r/test/comments/abc123/post/"'],['www.pinterest.com','div data-test-id="pin"'],['www.tiktok.com','div data-e2e="feed-video"'],['bsky.app','div data-testid="feedItem-by-fixture"']]){
   console.log('SOCIAL_FIXTURE',host);
   const target=await c.call('Target.createTarget',{url:'about:blank'});const info=await poll(async()=>{return(await targets()).find(t=>t.id===target.targetId);});const social=await client(info.webSocketDebuggerUrl);const href=host==='x.com'?'https://x.com/test/status/1234567890123456789':host.includes('reddit')?'https://www.reddit.com/r/test/comments/abc123/post/':host.includes('instagram')?'https://www.instagram.com/p/TestPost/':host.includes('pinterest')?'https://www.pinterest.com/pin/123456789/':host.includes('tiktok')?'https://www.tiktok.com/@test/video/12345':'https://bsky.app/profile/test.example/post/abc';
@@ -100,8 +85,6 @@ const result=await captureSocial({permalink,title:'Public fallback test',hasVide
   if(host==='x.com'){const shot=await social.call('Page.captureScreenshot');fs.writeFileSync('/private/tmp/canvas-pro-social-save.png',Buffer.from(shot.data,'base64'));}
   console.log('EXTENSION_SOCIAL_BUTTON_OK',host);
   if(host==='x.com'){
-   // A post can hold a video and a picture at once. Alt+Right-click on the
-   // picture must save the picture, not the video beside it.
    const socialJobBefore=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture?.id||'')`);
    const imagePoint=await social.evaluate(`(()=>{const img=[...document.querySelectorAll('article img')].find(i=>i.src.includes('/image.png'));if(!img)return null;const box=img.getBoundingClientRect();return {x:Math.round(box.left+box.width/2),y:Math.round(box.top+box.height/2)};})()`);
    assert.ok(imagePoint,'The fixture post has no picture to click.');
@@ -116,8 +99,6 @@ const result=await captureSocial({permalink,title:'Public fallback test',hasVide
   }
   await c.evaluate(`chrome.tabs.query({}).then(tabs=>{const tab=tabs.find(t=>t.url===${JSON.stringify(href)});return tab&&chrome.tabs.remove(tab.id);})`);
  }
- // Alt + Right-click saves straight away, with no menu and no download.
- // A real browser input event is used, so the page sees a trusted gesture.
  const altBefore=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture?.id||'')`);
  const altPoint=await page.evaluate(`(()=>{const img=document.querySelector('img[alt="Square inspiration"]');const box=img.getBoundingClientRect();return {x:Math.round(box.left+box.width/2),y:Math.round(box.top+box.height/2)};})()`);
  await page.call('Input.dispatchMouseEvent',{type:'mousePressed',x:altPoint.x,y:altPoint.y,button:'right',buttons:2,clickCount:1,modifiers:1});
@@ -126,7 +107,6 @@ const result=await captureSocial({permalink,title:'Public fallback test',hasVide
  assert.equal(altJob.state,'complete',JSON.stringify(altJob));
  assert.ok((altJob.imported||0)+(altJob.duplicates||0)>=1,JSON.stringify(altJob));
  console.log('EXTENSION_ALT_CLICK',JSON.stringify({imported:altJob.imported,duplicates:altJob.duplicates}));
- // The toast appears in the top right corner with a thumbnail of what was saved.
  const altToast=await poll(async()=>page.evaluate(`(()=>{const root=document.querySelector('[data-canvas-capture-activity]')?.shadowRoot;const toast=root?.querySelector('.toast');if(!toast)return null;const thumb=toast.querySelector('.thumb');return {count:root?.querySelectorAll('.toast').length||0,title:toast.querySelector('.title')?.textContent||'',hasThumb:!!thumb&&!thumb.hidden,thumbReady:!!thumb&&thumb.complete&&thumb.naturalWidth>0};})()`),15000).catch(()=>null);
  assert.ok(altToast,'No toast appeared for the Alt+Right-click save.');
  assert.match(altToast.title,/saved to Canvas Pro/i);
@@ -136,8 +116,6 @@ const result=await captureSocial({permalink,title:'Public fallback test',hasVide
  const extraToasts=await page.evaluate(`document.getElementById('__canvas_qs_toast')?1:0`);
  assert.equal(extraToasts,0,'A second toast from the page script appeared.');
  console.log('EXTENSION_ALT_TOAST',JSON.stringify(altToast));
- // Drag and drop saves the dropped picture through the extension. Real drag
- // events are used, so the page sees the gesture a person makes.
  const dropBefore=await c.evaluate(`chrome.storage.session.get('lastCapture').then(r=>r.lastCapture?.id||'')`);
  await page.call('Input.setInterceptDrags',{enabled:true});
  const dragItem={mimeType:'text/uri-list',data:base+'/image.png'};
@@ -152,12 +130,6 @@ const result=await captureSocial({permalink,title:'Public fallback test',hasVide
  assert.equal(dropJob.state,'complete',JSON.stringify(dropJob));
  assert.ok((dropJob.imported||0)+(dropJob.duplicates||0)>=1,JSON.stringify(dropJob));
  console.log('EXTENSION_DRAG_DROP',JSON.stringify({imported:dropJob.imported,duplicates:dropJob.duplicates}));
- // After the extension is reloaded, a page that was already open must get the
- // current scripts again, including the file that draws the capture card.
- // Without it the file is saved and the page shows nothing at all.
- // Putting the current scripts back into a page that was already open must
- // bring the capture card with them. Without it the file is saved and the
- // page shows nothing at all.
  const before=await page.evaluate(`({quick:Number(document.documentElement.getAttribute('data-canvas-quick-save')||0),card:Number(document.documentElement.getAttribute('data-canvas-activity')||0)})`);
  const reinjected=await c.evaluate(`reinjectInto(${tab.id})`);
  assert.equal(reinjected,true,'The scripts could not be placed back into the page.');
@@ -167,5 +139,17 @@ const result=await captureSocial({permalink,title:'Public fallback test',hasVide
  const hasCard=await page.evaluate(`Number(document.documentElement.getAttribute('data-canvas-activity')||0)>0?1:0`);
  assert.equal(hasCard,1,'The page is missing the file that draws the capture card.');
  console.log('EXTENSION_REINJECT_AFTER_RELOAD',JSON.stringify({before,after}));
+ await c.evaluate(`chrome.tabs.update(${tab.id},{active:true})`);
+ await page.evaluate("document.body.style.minWidth='300vw';window.scrollTo(0,0)");
+ const priorAssets=lib.list().length;
+ await c.evaluate(`globalThis.captureOutcome=fullPage(${JSON.stringify(tab)}).then(()=> 'saved',error=>error.message);true`);
+ await poll(()=>page.evaluate('scrollX>0'));
+ const other=await c.evaluate("chrome.tabs.create({url:'about:blank',active:true})");
+ const outcome=await c.evaluate('captureOutcome');
+ assert.match(outcome,/Page changed during capture/);
+ assert.equal(lib.list().length,priorAssets);
+ assert.equal(await page.evaluate('scrollX'),0);
+ await c.evaluate(`chrome.tabs.remove(${other.id})`);
+ console.log('EXTENSION_INTERRUPTED_CAPTURE_OK');
  console.log('EXTENSION_BROWSER_OK',JSON.stringify({assets:lib.list().length,profile:temporary}));
 })().catch(error=>{console.error('EXTENSION_BROWSER_FAILED',error.message);console.error('Test logs:',temporary);process.exitCode=1;}).finally(async()=>{for(const c of clients)c.socket.close();browser?.kill('SIGTERM');await bridge?.close();if(server)await new Promise(resolve=>server.close(resolve));lib?.close();});

@@ -1,6 +1,3 @@
-// Link types decide where a saved link lives: social posts are media, recipes
-// are recipes, and the rest stay ordinary web links. A platform counts as
-// social by host, so a profile, a board or a single post all land together.
 const socialHosts=/(^|\.)(x\.com|twitter\.com|instagram\.com|reddit\.com|redd\.it|facebook\.com|fb\.watch|fb\.com|pinterest\.com|pin\.it|tiktok\.com|threads\.net|threads\.com|bsky\.app)$/;
 function classifyURL(value){
   let u;

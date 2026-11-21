@@ -50,8 +50,6 @@ class WebPreview{
     if(!['url','webloc'].includes(a.ext)&&!a.url)throw new Error('Select a saved web source.');
     const source=this.resolveLink?await this.resolveLink(id):webURL(a.url);
     const target=embedURL(source);
-    // Both loadURL calls below must start from a public address. The test
-    // harness may load its local fixture server, as its other fetches do.
     if(!this.allowPrivatePreview&&!networkBypassEnabled(process.env,process.defaultApp))
       await assertPublicHost(new URL(target).hostname.replace(/^\[|\]$/g,''));
     this.allowedHosts=new Set([hostOf(source),hostOf(target)].filter(Boolean));
@@ -61,8 +59,6 @@ class WebPreview{
     this.token=token;this.id=id;
     if(this.cached?.id===id&&!this.cached.view.webContents.isDestroyed()){
       this.view=this.cached.view;this.cached=null;
-      // The cached view may be sitting on a page the user clicked into. A
-      // reopened bookmark must show its saved source, not that last URL.
       this.view.webContents.loadURL(target,target!==source?{httpReferrer:'https://com.canvaspro.app/'}:{}).catch(error=>this.status({error:error.message}));
     }else{
       this.destroyCached();

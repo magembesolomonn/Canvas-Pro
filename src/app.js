@@ -12,10 +12,8 @@ function publishVisibleAssets(ids){
  lastVisibleAssets=key;
  api.visibleAssets(ids);
 }
-function assetRatio(a,width){return SmartCards.ratio(a,width)||a.aspectRatio||(kind(a)==='video'?16/9:kind(a)==='audio'?3.5:kind(a)==='pdf'?.707:kind(a)==='link'?1.6:1);}
+function assetRatio(a,width){return SmartCards.ratio(a,width)||a.aspectRatio||(a.width&&a.height?a.width/a.height:0)||(kind(a)==='video'?16/9:kind(a)==='audio'?3.5:kind(a)==='pdf'?.707:kind(a)==='link'?1.6:1);}
 function rememberRatio(a,ratio){if(!Number.isFinite(ratio)||ratio<=0||Math.abs((a.aspectRatio||0)-ratio)<.001)return;a.aspectRatio=ratio;layoutDirty=true;scheduleGallery();safe(()=>api.setAspectRatio(a.id,ratio));}
-// The gallery footer is the file name plus, when present, the tag count.
-// These match the line heights in .card-name and .card-details.
 const CARD_NAME_FOOTER=21, CARD_DETAIL_FOOTER=13;
 function galleryCardFooterHeight(a){
  if(!showFileNamesEnabled()||kind(a)==='link')return 0;
@@ -26,14 +24,8 @@ const videoExt=['mp4','webm','mov','m4v','ogv','mkv','avi','gifv','3gp','3g2','h
 const audioExt=['mp3','wav','ogg','m4a','aac','flac','aiff','aif','oga','opus','alac'];
 const kind=a=>imageExt.includes(a.ext)?'image':videoExt.includes(a.ext)?'video':audioExt.includes(a.ext)?'audio':a.ext==='pdf'?'pdf':['webloc','url'].includes(a.ext)?'link':'other';
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
-// macOS inserts the chosen emoji into whatever editable field has focus. A
-// one-pixel capture field lets the real Apple picker do the choosing, with no
-// second dialog of our own in front of it.
 const EmojiPicker=(()=>{
  let field, pending=null;
- // The macOS picker inserts into whichever field has focus. While a modal
- // dialog owns the keyboard everything outside it is inert, so the capture
- // field must live inside the open dialog or focus() would silently fail.
  function release(){if(field){field.value='';field.remove();field=null;}}
  function finish(value){
   const done=pending;pending=null;
@@ -70,9 +62,6 @@ const EmojiPicker=(()=>{
  }
  return {pick};
 })();
-// Every surface that opens from a control remembers where the gesture began.
-// Dialogs, popovers and the preview all reveal from that same trigger instead
-// of scaling from the centre of the surface.
 let lastTrigger=null,lastTriggerAt=0,lastPointer=null;
 document.addEventListener('pointerdown',event=>{
  lastPointer={x:event.clientX,y:event.clientY};
@@ -92,7 +81,6 @@ document.addEventListener('toggle',event=>{
  if(event.newState!=='open')return;
  const surface=event.target;
  if(!(surface instanceof HTMLElement)||!surface.matches('[popover]'))return;
- // A context menu opens at the pointer, so its trigger is a point, not a button.
  const trigger=surface.id==='canvas-item-menu'&&lastPointer
   ?{left:lastPointer.x,top:lastPointer.y,width:0,height:0}:revealTrigger();
  Motion.revealFromTrigger(surface,trigger);
@@ -117,7 +105,7 @@ function restoreGalleryPosition(){
  $('#gallery').scrollTop=0;
 }
 const catalogPageSize=120;
-let pagedCatalog=true,catalogKey='',catalogTotal=0,catalogLoading=null,catalogGeneration=0,catalogNavigation=null,catalogHydration=null,temporaryCatalog=false;
+let pagedCatalog=true,catalogKey='',catalogTotal=0,catalogLoading=null,catalogGeneration=0,catalogNavigation=null,catalogHydration=null,temporaryCatalog=false,catalogCursor=null;
 function catalogQuery(){
  const sets={image:imageExt,video:videoExt,audio:audioExt,pdf:['pdf'],link:['url','webloc']};
  const type=$('#type').value;
@@ -159,36 +147,35 @@ async function loadLibraryPage({append=false,reload=false}={}){
  const target=Math.max(catalogPageSize,restored,reload&&catalogKey===key?assets.length:0);
  const request={key};
  request.promise=(async()=>{
-  const data=await api.libraryPage({...query,offset,limit:append?catalogPageSize:Math.min(500,target),navigation:reload});
+  const pageArgs={...query,limit:append?catalogPageSize:Math.min(500,target),navigation:reload};
+  if(append&&catalogCursor)pageArgs.cursor=catalogCursor;else pageArgs.offset=offset;
+  const data=await api.libraryPage(pageArgs);
   if(generation!==catalogGeneration||!pagedCatalog)return;
-  let rows=data.assets||[],serverTotal=data.total;
+  let rows=data.assets||[],serverTotal=data.total,cursor=data.nextCursor||null;
   if(append){
    let added=storeCatalogRows(rows).filter(asset=>!assetById.has(asset.id));
    let nextOffset=offset+rows.length;
-   // Offset pages can shift and return rows already loaded; skip duplicate
-   // windows instead of truncating the catalog and hiding later items.
-   while(!added.length&&rows.length&&serverTotal!=null&&nextOffset<serverTotal){
+   while(!added.length&&rows.length&&!cursor&&serverTotal!=null&&nextOffset<serverTotal){
     const next=await api.libraryPage({...query,offset:nextOffset,limit:catalogPageSize});
     if(generation!==catalogGeneration||!pagedCatalog)return;
-    serverTotal=next.total??serverTotal;
-    rows=next.assets||[];
-    nextOffset+=rows.length;
+    serverTotal=next.total??serverTotal;cursor=next.nextCursor||null;
+    rows=next.assets||[];nextOffset+=rows.length;
     added=storeCatalogRows(rows).filter(asset=>!assetById.has(asset.id));
     if(!rows.length)break;
    }
    if(data.navigation)applyCatalogNavigation(data);
-   if(added.length){
-    for(const asset of added)assetById.set(asset.id,asset);
-    assets=assets.concat(added);
-   }
+   if(added.length){for(const asset of added)assetById.set(asset.id,asset);assets=assets.concat(added);}
    if(serverTotal!=null)catalogTotal=serverTotal;
    if(!added.length&&!rows.length&&serverTotal!=null)catalogTotal=assets.length;
+   if(cursor)catalogCursor=cursor;
   }else{
    const limitTarget=Math.min(target,serverTotal??target);
    while(rows.length<limitTarget){
-    const next=await api.libraryPage({...query,offset:rows.length,limit:Math.min(500,limitTarget-rows.length)});
+    const nextArgs={...query,limit:Math.min(500,limitTarget-rows.length)};
+    if(cursor)nextArgs.cursor=cursor;else nextArgs.offset=rows.length;
+    const next=await api.libraryPage(nextArgs);
     if(generation!==catalogGeneration||!pagedCatalog)return;
-    serverTotal=next.total??serverTotal;
+    serverTotal=next.total??serverTotal;cursor=next.nextCursor||cursor;
     if(!next.assets?.length)break;
     rows=rows.concat(next.assets);
    }
@@ -196,7 +183,8 @@ async function loadLibraryPage({append=false,reload=false}={}){
    const prepared=storeCatalogRows(rows);
    assets=prepared;assetById=new Map(assets.map(asset=>[asset.id,asset]));
    for(const id of linkRequests.keys())if(!assetById.has(id))linkRequests.delete(id);
-   catalogTotal=serverTotal;catalogKey=key;
+   catalogTotal=serverTotal;catalogKey=key;catalogCursor=cursor;
+   appliedRefreshVersion=++refreshVersion;
   }
   const focused=document.activeElement;
   render({anchor,preserveInspector:append||$('#inspector').contains(focused)&&focused.matches('input,textarea,select')});
@@ -211,22 +199,22 @@ async function loadLibraryPage({append=false,reload=false}={}){
 }
 function hydrateCatalog(){
  if(catalogHydration)return catalogHydration;
- // The wall needs the full library even when a prior full refresh left the
- // paged catalog off.
  temporaryCatalog=true;
- // Load the whole library for the unbounded wall. Going through refresh()
- // here would re-enter render() -> hydrateCatalog() and keep replacing the
- // asset set, so update the catalog directly and ask the wall to rebuild.
  catalogHydration=(async()=>{
-  const data=await api.list();
-  if(!data?.assets)return;
-  assets=data.assets.map(next=>{const old=assetById.get(next.id);return old?Object.assign(old,next):next;});
+  const pageSize=500;
+  let offset=0,loaded=[];
+  for(;;){
+   const data=await api.list(pageSize,offset);
+   if(!data?.assets?.length)break;
+   loaded=loaded.concat(data.assets);
+   offset+=data.assets.length;
+   if(data.assets.length<pageSize)break;
+  }
+  if(!loaded.length)return;
+  assets=loaded.map(next=>{const old=assetById.get(next.id);return old?Object.assign(old,next):next;});
   assetById=new Map(assets.map(a=>[a.id,a]));
   for(const a of assets)a.searchText=SmartCards.enrichSearch(a);
   catalogTotal=assets.length;
-  // This replaces the whole catalog, so it is a refresh as far as the capture
-  // counters are concerned. Without this, captures after the wall has been
-  // opened see stale counters and force a needless full refresh.
   appliedRefreshVersion=++refreshVersion;
   if(view==='infinite'){
    window.InfiniteCanvas?.show(true);
@@ -238,6 +226,7 @@ function hydrateCatalog(){
 }
 function refreshCurrent(){return pagedCatalog?loadLibraryPage({reload:true}):refresh();}
 async function refresh(){
+ if(pagedCatalog&&!['canvas','infinite','smart'].includes(view))return loadLibraryPage({reload:true});
  const wasPaged=pagedCatalog;
  pagedCatalog=false;catalogGeneration++;catalogLoading=null;catalogNavigation=null;
  try{
@@ -250,8 +239,9 @@ async function refresh(){
   for(const a of assets)a.searchText=SmartCards.enrichSearch(a);
   render({preserveInspector,anchor:identity===viewIdentity()?anchor:null});
  }catch(error){
-  pagedCatalog=wasPaged;
   throw error;
+ }finally{
+  pagedCatalog=wasPaged;
  }
 }
 
@@ -278,27 +268,23 @@ async function refreshCaptured(ids){
 }
 
 function current(){return selection.ids.size?assetById.get(selected):null;}
-function navButton(label,icon,count,active,handler){const b=el('button',active?'active':'');b.append(glyph(icon,{size:16}),el('span','',label));/* A row without a count has no badge at all. */if(count!==null&&count!==undefined)b.append(el('span','badge',String(count)));b.title=label;b.setAttribute('aria-label',label);b.onclick=handler;return b;}
+function navButton(label,icon,count,active,handler){const b=el('button',active?'active':'');b.append(glyph(icon,{size:16}),el('span','',label)); if(count!==null&&count!==undefined)b.append(el('span','badge',String(count)));b.title=label;b.setAttribute('aria-label',label);b.onclick=handler;return b;}
 function setView(next,folder=null,keepCatalog=false,options={}){if(!$('#preview').hidden&&next!==view)closePreview();rememberGalleryPosition();if(!options.keepWorkbench)WorkbenchUI.reset();if(next!=='canvas'&&next!=='infinite'&&view==='canvas')CanvasWorkspace.leave();stopHover();
  if(temporaryCatalog&&!keepCatalog&&!['canvas','smart','infinite'].includes(next)){
-  temporaryCatalog=false;pagedCatalog=true;catalogKey='';catalogNavigation=null;
+  temporaryCatalog=false;pagedCatalog=true;catalogKey='';catalogCursor=null;catalogNavigation=null;
  }
-view=next;collection=folder;tagFilter=next==='tags'?lastTagFilter:null;pendingSelection=options.pendingSelection||null;selected=null;selection.clear();$('#search').value='';if(options.type)$('#type').value=options.type;else $('#type').value='all';syncViewMenu();restoreGalleryPosition();
+view=next;collection=folder;tagFilter=next==='tags'?lastTagFilter:null;pendingSelection=options.pendingSelection||null;selected=null;selection.clear();if(options.clearSearch)$('#search').value='';if(options.type)$('#type').value=options.type;else $('#type').value='all';syncViewMenu();restoreGalleryPosition();
  renderNav();render();
- // SmartSearch.schedule() calls render() synchronously for an empty query.
- // Calling it here, after the saved position is pending, lets the first
- // catalogue page be sized to include that position instead of firing off a
- // 120-item request that clamps and discards it.
  SmartSearch.schedule();}
 function renderNav(){
  if(!navStats){const counts={all:0,favorites:0,trash:0,image:0,video:0,audio:0,pdf:0,link:0,social:0,recipe:0},tags=new Set(),members=new Map();for(const a of assets){if(a.trash){counts.trash++;continue;}counts.all++;if(a.favorite)counts.favorites++;counts[kind(a)]=(counts[kind(a)]||0)+1;const linkType=SmartCards.type(a);if(linkType==='social'||linkType==='recipe')counts[linkType]=(counts[linkType]||0)+1;for(const t of a.tags)tags.add(t);for(const f of a.folders)members.set(f,(members.get(f)||0)+1);}counts.tags=tags.size;navStats={counts,members};}
- const {counts,members}=navStats,nav=$('#navigation'),folderIds=new Map(CanvasWorkspace.folderRecords.map(folder=>[folder.name,folder.id]));nav.replaceChildren();for(const [key,label,icon]of [['all','Library','library'],['favorites','Favourites','star'],['tags','Tags','tag'],['trash','Trash','trash']])nav.append(navButton(label,icon,counts[key],view===key,()=>setView(key)));
+ const {counts,members}=navStats,nav=$('#navigation'),folderIds=new Map(CanvasWorkspace.folderRecords.map(folder=>[folder.name,folder.id]));nav.replaceChildren();for(const [key,label,icon]of [['all','All files','library'],['favorites','Favourites','star'],['tags','Tags','tag'],['trash','Trash','trash']])nav.append(navButton(label,icon,key==='all'?counts[key]:counts[key]||null,view===key,()=>setView(key)));
  $('#folders').replaceChildren(...folders.map(f=>{const button=navButton(f,'folder',members.get(f)||0,view==='folder'&&collection===f,()=>setView('folder',f));const folderId=folderIds.get(f);if(folderId)button.firstChild.replaceWith(WorkbenchUI.icon('folder:'+folderId));button.oncontextmenu=e=>{e.preventDefault();safe(()=>api.collectionMenu(f));};button.draggable=true;button.ondragstart=e=>{e.dataTransfer.setData('application/x-canvaspro-collection',f);e.dataTransfer.effectAllowed='copy';};button.ondragend=()=>CanvasWorkspace.clearDrag();return button;}));CanvasWorkspace.renderNav();
 }
 async function setFavorites(ids,favorite){await api.bulkUpdate(ids,{type:'favorite',favorite});if(pagedCatalog)return refreshCurrent();for(const id of ids){const a=assetById.get(id);if(a)a.favorite=favorite?1:0;}navStats=null;renderNav();render();}
 function favoriteButton(a){const b=action('',()=>setFavorites([a.id],!a.favorite),'favorite-toggle'+(a.favorite?' is-favorite':''));b.append(glyph(a.favorite?'starFill':'star'));b.setAttribute('aria-label',a.favorite?'Remove from Favourites':'Add to Favourites');b.setAttribute('aria-pressed',String(!!a.favorite));b.title=b.getAttribute('aria-label');b.onclick=event=>{event.stopPropagation();safe(()=>setFavorites([a.id],!a.favorite));};b.ondblclick=event=>event.stopPropagation();return b;}
 function placeholder(a){const d=el('div','file-placeholder');d.append(glyph(kind(a)==='link'?'link':kind(a)==='audio'?'audio':kind(a)==='video'?'video':'file'),el('span','',(a.ext||'FILE').toUpperCase()));return d;}
-function thumb(a,cls='',gallery=false){const img=el('img',cls);img.loading='lazy';img.decoding='async';img.alt=a.name;img.src='asset://thumb/'+a.id+'?v=2'+(gallery?'&gallery':'');img.onload=()=>{if(img.naturalWidth&&img.naturalHeight)rememberRatio(a,img.naturalWidth/img.naturalHeight);};img.onerror=()=>{img.replaceWith(placeholder(a));};return img;}
+function thumb(a,cls='',gallery=false,loading='lazy'){const img=el('img',cls);img.loading=loading;img.decoding='async';img.alt=a.name;img.src='asset://thumb/'+a.id+'?v=2'+(gallery?'&gallery':'');img.onload=()=>{if(img.naturalWidth&&img.naturalHeight)rememberRatio(a,img.naturalWidth/img.naturalHeight);};img.onerror=()=>{img.replaceWith(placeholder(a));};return img;}
 function inspectorPreview(a){
  const frame=el('div','inspector-media');
  if(kind(a)==='audio'){
@@ -311,10 +297,7 @@ function inspectorPreview(a){
 let hoverIntent=null;
 function stopHover(){if(hoverIntent){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer){hoverPlayer.dispose();hoverPlayer=null;}}
 function unmount(id){if(hoverIntent?.id===id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===id)stopHover();cardCleanup.get(id)?.();cardCleanup.delete(id);const card=mounted.get(id);if(card)SmartCards.release(card);card?.remove();mounted.delete(id);}
-function makeCard(a){const card=el('article','card');card.id='gallery-option-'+a.id;card.dataset.id=a.id;card.setAttribute('role','option');card.setAttribute('aria-label',a.name);card.draggable=true;card.title='Drag out to Finder · Option-drag to a Canvas';card.onpointerdown=e=>{if(e.button===0&&e.pointerType!=='touch')api.prepareDrag(selection.ids.has(a.id)?selection.values():[a.id]);};card.ondragstart=e=>{stopHover();const ids=selection.ids.has(a.id)?selection.values():[a.id];if(e.altKey){e.dataTransfer.setData('application/x-canvaspro-assets',JSON.stringify(ids));e.dataTransfer.effectAllowed='copy';}else{e.preventDefault();safe(()=>api.startDrag(ids));}};card.ondragend=()=>CanvasWorkspace.clearDrag();const surface=el('div','card-surface');const type=kind(a);if(type==='audio')cardCleanup.set(a.id,audioTile(a,surface));else surface.append(type==='link'?bookmarkVisual(a):SmartCards.fileVisual(a)||thumb(a,'',true));
-// The drag hint is useful on a still card, but a native tooltip lingers over
-// video and GIF previews right where the scrub bar appears. Hide it while the
-// pointer is on their picture and bring it back on the filename.
+function makeCard(a){const card=el('article','card');card.id='gallery-option-'+a.id;card.dataset.id=a.id;card.setAttribute('role','gridcell');card.setAttribute('aria-label',a.name);card.draggable=true;card.title='Drag out to Finder · Option-drag to a Canvas';card.onpointerdown=e=>{if(e.button===0&&e.pointerType!=='touch')api.prepareDrag(selection.ids.has(a.id)?selection.values():[a.id]);};card.ondragstart=e=>{stopHover();const ids=selection.ids.has(a.id)?selection.values():[a.id];if(e.altKey){e.dataTransfer.setData('application/x-canvaspro-assets',JSON.stringify(ids));e.dataTransfer.effectAllowed='copy';}else{e.preventDefault();safe(()=>api.startDrag(ids));}};card.ondragend=()=>CanvasWorkspace.clearDrag();const surface=el('div','card-surface');const type=kind(a);if(type==='audio')cardCleanup.set(a.id,audioTile(a,surface));else surface.append(type==='link'?bookmarkVisual(a):SmartCards.fileVisual(a)||thumb(a,'',true));
 if(type==='video'||type==='audio'||a.ext==='gif'||a.ext==='gifv'){const hint=card.title;surface.addEventListener('pointerenter',()=>{card.title='';});surface.addEventListener('pointerleave',()=>{card.title=hint;});}
 if(!a.trash)surface.append(favoriteButton(a));if(type==='video'||type==='audio'){const duration=el('span','duration');surface.append(duration);getMediaInfo(a).then(info=>{if(info.duration)duration.textContent=timecode(info.duration);}).catch(()=>{});}
 card.onpointerenter=e=>{if(type!=='video'&&type!=='audio')return;if(e.pointerType==='touch'||!$('#preview').hidden||selection.ids.size>1)return;if(hoverIntent?.id===a.id)return;stopHover();hoverIntent={id:a.id,timer:setTimeout(()=>{if(hoverIntent?.id!==a.id||!card.isConnected||!$('#preview').hidden||selection.ids.size>1)return;hoverIntent=null;const player=createPlayer(a,{compact:true,muted:type==='video'});player.id=a.id;hoverPlayer=player;surface.append(player.element);},180)};};card.onpointerleave=()=>{if(hoverIntent?.id===a.id){clearTimeout(hoverIntent.timer);hoverIntent=null;}if(hoverPlayer?.id===a.id)stopHover();};
@@ -329,15 +312,8 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='infinite'
  const restored=pendingGalleryPosition&&pendingGalleryPosition.key===viewIdentity()?pendingGalleryPosition:null;
  if(layoutDirty||!layout||layout.items!==visible||Math.abs(layout.width-gallery.clientWidth)>1||layout.target!==size||layout.mode!==galleryLayout){
   const anchor=anchorOverride||(layout?.items===visible?AssetLayout.anchorAt(layout,gallery.scrollTop,gallery.clientHeight):null);
-  // Cards with no tags render only a title, so their footer is shorter.
-  // Using one fixed footer height for every card leaves uneven blank rows.
-  // Cards with names hidden take no footer room; when names are shown the
-  // layout reserves the footer's real height so the next row starts below it.
   const footerHeight=galleryCardFooterHeight;
   layout=AssetLayout.createLayout(galleryLayout,visible,gallery.clientWidth,size,assetRatio,footerHeight);layoutDirty=false;layer.style.height=layout.height+'px';
-  // While a saved position is being restored, thumbnails that finish loading
-  // can change tile heights. Keep the restored offset instead of sliding the
-  // gallery to follow a different anchor, or the view jumps after coming back.
   const position=anchor&&layout.byId.get(anchor.id);if(position&&performance.now()>=restoreHoldUntil)gallery.scrollTop=position.y+anchor.offset*(position.width/anchor.width);
  }
  let pendingShortfall=false;
@@ -345,10 +321,6 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='infinite'
   const anchor=restored.anchor,position=anchor&&layout.byId.get(anchor.id);
   const target=position?position.y+anchor.offset*(position.width/anchor.width):restored.top;
   const maxScroll=Math.max(0,layout.height-gallery.clientHeight);
-  // Switching views reloads the paged catalogue from its first page. The
-  // saved place can sit below the rows loaded so far, and the browser would
-  // clamp the scroll and lose it for good. Hold on to the pending position
-  // until the catalogue is tall enough, and bring in the missing pages.
   if(target>maxScroll+2&&pagedCatalog&&assets.length<catalogTotal){
    pendingShortfall=true;
    if(!catalogLoading)safe(()=>loadLibraryPage({append:true}));
@@ -394,9 +366,6 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='infinite'
   const detail=a.tags.length?a.tags.length+' tags':'';
   if(parts.detail.textContent!==detail)parts.detail.textContent=detail;
  }
-  // Cards are positioned with transforms, so DOM order otherwise stays in
-  // import order after sorting. Keep the listbox's reading order in sync with
-  // the visual order without re-mounting cards on every scroll frame.
   const ordered=indices.map(i=>mounted.get(visible[i].id)).filter(Boolean);
   if(ordered.length===layer.childElementCount&&ordered.some((card,i)=>layer.children[i]!==card)){
    const top=gallery.scrollTop;
@@ -405,20 +374,36 @@ function renderWindow(anchorOverride=null){if(view==='canvas'||view==='infinite'
   }
   $('#gallery').setAttribute('aria-activedescendant',selected?'gallery-option-'+selected:'');
 }
-// The canonical filter for the current view/collection/tag/search/type. render()
-// uses it to build `visible`; Select All reuses it after hydration so it spans
-// the whole library rather than just the loaded page.
 function filteredAssets(records){
  const q=$('#search').value.trim().toLowerCase(),type=$('#type').value;
  const list=records.filter(a=>{if(view==='trash'?!a.trash:a.trash)return false;if(!WorkbenchUI.accepts(a))return false;if(view==='folder'&&!a.folders.includes(collection))return false;if(view==='tags'&&!a.tags.length)return false;if(view==='favorites'&&!a.favorite)return false;if(['image','audio','video','pdf'].includes(view)&&kind(a)!==view)return false;if(view==='link'&&(kind(a)!=='link'||['social','recipe'].includes(SmartCards.type(a))))return false;if(['social','recipe'].includes(view)&&SmartCards.type(a)!==view)return false;if(tagFilter&&!a.tags.includes(tagFilter))return false;if(type!=='all'&&(type==='link'?(kind(a)!=='link'||['social','recipe'].includes(SmartCards.type(a))):kind(a)!==type&&SmartCards.type(a)!==type))return false;return !q||SmartSearch.includes(a,q);});
- // Find similar and colour matching both rank the gallery: closest match
- // first, instead of the order the files happened to be imported in.
- if(WorkbenchUI.rankOrder())list.sort((x,y)=>WorkbenchUI.rank(x)-WorkbenchUI.rank(y));if($('#sort').value==='old')list.sort((a,b)=>a.imported.localeCompare(b.imported)||(a.importOrder||0)-(b.importOrder||0));if($('#sort').value==='name')list.sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()));if($('#sort').value==='size')list.sort((a,b)=>b.size-a.size);
+ if(WorkbenchUI.rankOrder())list.sort((x,y)=>WorkbenchUI.rank(x)-WorkbenchUI.rank(y));if($('#sort').value==='old')list.sort((a,b)=>a.imported.localeCompare(b.imported)||(a.importOrder||0)-(b.importOrder||0));if($('#sort').value==='name')list.sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()));if($('#sort').value==='name-desc')list.sort((a,b)=>b.name.toLowerCase().localeCompare(a.name.toLowerCase()));if($('#sort').value==='size')list.sort((a,b)=>b.size-a.size);if($('#sort').value==='size-asc')list.sort((a,b)=>a.size-b.size);if($('#sort').value==='kind')list.sort((a,b)=>a.ext.toLowerCase().localeCompare(b.ext.toLowerCase())||a.name.toLowerCase().localeCompare(b.name.toLowerCase()));if($('#sort').value==='rating')list.sort((a,b)=>(b.rating||0)-(a.rating||0));
  return list;
 }
+let tagBarKey='';
+function renderTagsBar(tags){
+ const bar=$('#tags-bar');
+ bar.hidden=view!=='tags';
+ if(!$('#search').value){
+   const example=visible.find(item=>item.tags?.length)?.tags[0];
+   $('#search').placeholder=example?'Try “'+example+'”':'Search your library';
+ }
+ const key=view==='tags'?tags.join('\u0000'):'';
+ if(key!==tagBarKey){
+  tagBarKey=key;
+  bar.replaceChildren(...tags.map(tag=>{
+   const button=el('button',tagFilter===tag?'primary':'',tag);
+   button.onclick=()=>{rememberGalleryPosition();tagFilter=lastTagFilter=tagFilter===tag?null:tag;restoreGalleryPosition();render();};
+   button.oncontextmenu=event=>{event.preventDefault();safe(()=>api.tagMenu(tag));};
+   button.title=tag+' · right-click to rename or remove';
+   return button;
+  }));
+ }else for(const button of bar.children)button.classList.toggle('primary',button.textContent===tagFilter);
+}
 function render(options={}){stopHover();
+ $('#clear-result-filter').hidden=true;
  if(view==='canvas'){if($('#preview').hidden){visible=[];selection.sync([]);selected=null;}InfiniteCanvas.show(false);CanvasWorkspace.render();return;}CanvasWorkspace.show(false);
- if(view==='infinite'){$('#view-title').textContent='Infinite canvas';safe(hydrateCatalog);InfiniteCanvas.show(true);const wall=window.InfiniteCanvas?.scope()||[];visible=wall;/* The wall is its own set of items, independent of the library view it was opened from. Keeping that view's selection index would make clicks on wall items outside it fall back to whatever was selected before. */selection.sync(wall.map(a=>a.id));selected=selection.focus;InfiniteCanvas.syncSelection();return;}InfiniteCanvas.show(false);
+ if(view==='infinite'){$('#view-title').textContent='Infinite canvas';safe(hydrateCatalog);InfiniteCanvas.show(true);const wall=window.InfiniteCanvas?.scope()||[];visible=wall; selection.sync(wall.map(a=>a.id));selected=selection.focus;InfiniteCanvas.syncSelection();return;}InfiniteCanvas.show(false);
  if(pagedCatalog&&view==='smart'){safe(hydrateCatalog);return;}
  const tags=view==='tags'?(pagedCatalog?catalogNavigation?.tags:[...new Set(assets.filter(a=>!a.trash).flatMap(a=>a.tags))].sort()):null;
  if(tags&&tagFilter&&!tags.includes(tagFilter)){
@@ -431,21 +416,27 @@ function render(options={}){stopHover();
  selection.sync(visible.map(a=>a.id));selected=selection.focus;
  }
 if(pendingSelection){const id=pendingSelection;pendingSelection=null;if(selection.index.has(id)){selection.select(id);selected=selection.focus;}}
-$('#view-title').textContent=view==='smart'?WorkbenchUI.title:view==='folder'?collection:({all:'Library',favorites:'Favourites',tags:'Tags',trash:'Trash',image:'Images',audio:'Audio',video:'Video',social:'Social',recipe:'Recipes',pdf:'Documents',link:'Web links'})[view];const count=pagedCatalog?catalogTotal:visible.length;$('#count').textContent=count.toLocaleString()+(count===1?' item':' items');const bar=$('#tags-bar');bar.hidden=view!=='tags';bar.replaceChildren();if(view==='tags')for(const tag of tags||[]){const b=el('button',tagFilter===tag?'primary':'',tag);b.onclick=()=>{rememberGalleryPosition();tagFilter=lastTagFilter=tagFilter===tag?null:tag;restoreGalleryPosition();render();};bar.append(b);}renderEmptyState();renderWindow(options.anchor);paintSelection();if(!options.preserveInspector)renderInspector();}
+ const clearResult=$('#clear-result-filter'),type=$('#type');
+ clearResult.hidden=view!=='smart'&&type.value==='all'&&!tagFilter;
+ if(!clearResult.hidden){
+   clearResult.textContent=view==='smart'?'Clear results ×':(tagFilter||type.selectedOptions[0]?.textContent)+' ×';
+   if(view==='smart'&&WorkbenchUI.color){
+     const swatch=el('span','active-colour-swatch');
+     swatch.style.backgroundColor=WorkbenchUI.color;
+     clearResult.prepend(swatch);
+     clearResult.setAttribute('aria-label','Clear colour filter '+WorkbenchUI.color);
+   }else clearResult.removeAttribute('aria-label');
+   clearResult.onclick=()=>{if(view==='smart'){setView('all');return;}if(tagFilter){tagFilter=lastTagFilter=null;}else type.value='all';syncViewMenu();render();};
+ }
+ $('#view-title').textContent=view==='smart'?WorkbenchUI.title:view==='folder'?collection:({all:'All files',favorites:'Favourites',tags:'Tags',trash:'Trash',image:'Images',audio:'Audio',video:'Video',social:'Social',recipe:'Recipes',pdf:'Documents',link:'Web links'})[view];const count=pagedCatalog?catalogTotal:visible.length;$('#count').textContent=count.toLocaleString()+(count===1?' item':' items');renderTagsBar(tags||[]);renderEmptyState();renderWindow(options.anchor);paintSelection();if(!options.preserveInspector)renderInspector();}
 function paintSelection(){for(const [id,card]of mounted){card.classList.toggle('selected',selection.ids.has(id));card.classList.toggle('focused',id===selected);card.setAttribute('aria-selected',String(selection.ids.has(id)));}const count=selection.ids.size;$('#selection-count').textContent=count===0?'':count.toLocaleString()+' selected';$('#gallery').setAttribute('aria-activedescendant',selected?'gallery-option-'+selected:'');}
 function select(id,options={}){if(colorFocus&&!options.keepColorFocus)colorFocus=null;selection.select(id,options);selected=selection.focus;if(selection.ids.size>1)stopHover();paintSelection();if(view==='infinite')window.InfiniteCanvas?.syncSelection(selection.ids,selected);scheduleInspector();}
-// Selecting a colour turns File Details into a colour report. Selecting an
-// item again leaves the report and restores the ordinary file details.
 function showColorDetails(hex){colorFocus={hex};renderInspector();}
 function scheduleInspector(){if(inspectorFrame)return;inspectorFrame=requestAnimationFrame(()=>{inspectorFrame=0;renderInspector();});}
 async function bulkAction(operation){const ids=selection.values();if(!ids.length)return;await api.bulkUpdate(ids,operation);await refreshCurrent();const count=ids.length+' '+(ids.length===1?'file':'files');notify(operation.type==='trash'?(operation.trash?'Moved '+count+' to Trash.':'Restored '+count+'.'):'Updated '+count+'.');}
 function renderSelectionInspector(){
  const box=$('#inspector'),ids=selection.values(),items=ids.map(id=>assetById.get(id)).filter(Boolean);box.replaceChildren(el('div','inspector-label','SELECTION'));
  const stack=el('div','selection-stack');
- // The newest selection is the subject: it is the one fully visible in the
- // middle of the stack, and the files selected before it recede behind it.
- // The old fan ran the other way — the first pick sat highest on screen and
- // the file you had just added was pushed down and out of the way.
  const recent=items.slice(-5);
  for(const [i,a]of recent.entries()){
   const depth=recent.length-1-i;
@@ -456,18 +447,25 @@ function renderSelectionInspector(){
   stack.append(face);
  }box.append(stack,el('h2','selection-title',items.length.toLocaleString()+' files selected'),el('p','hint',new Set(items.map(a=>a.ext)).size+' file types'));
  const tags=section('Add tags to all');const tagInput=field('','Tags, separated by commas',async value=>{const list=value.split(',').map(t=>t.trim()).filter(Boolean);if(list.length)await bulkAction({type:'tags',tags:list});});tagInput.id='bulk-tags';tagInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();tagInput.blur();}};tags.append(tagInput);box.append(tags);
+ const untag=section('Remove tag from all');const untagInput=field('','Tag to remove, then Enter',async value=>{const tag=value.trim();if(tag)await bulkAction({type:'removeTags',tags:[tag]});});untagInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();untagInput.blur();}};const tagCounts=new Map();
+ for(const item of items)for(const tag of item.tags||[])tagCounts.set(tag,(tagCounts.get(tag)||0)+1);
+ const usage=el('div','chips');
+ for(const [tag,count] of tagCounts){
+   const chip=action(tag+' · '+count+'/'+items.length,()=>{untagInput.value=tag;untagInput.focus();},'chip');
+   chip.title='Used on '+count+' of '+items.length+' selected files';
+   usage.append(chip);
+ }
+ untag.append(usage,untagInput);box.append(untag);
+ const rename=section('Rename files');rename.append(action('Rename '+items.length+' files…',()=>showActionDialog('rename-many',ids)));box.append(rename);
  const collections=section('Add to collection');const choice=field('','Collection name, then Enter',async text=>{const name=text.trim();if(!name)return;if(!folders.includes(name)){folders.push(name);folders.sort((one,two)=>one.localeCompare(two));await api.addFolder(name);}await bulkAction({type:'collection',folder:name});});choice.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();choice.blur();}};collections.append(choice);box.append(collections);
  const canvas=section('Canvas');if(view!=='trash')canvas.append(action('Add to Canvas…',()=>CanvasWorkspace.choose({ids})));box.append(canvas);
  const favourites=section('Favourites');favourites.append(action(items.every(a=>a.favorite)?'Remove from Favourites':'Add to Favourites',()=>setFavorites(ids,!items.every(a=>a.favorite))));box.append(favourites);
  const names=section('Selected files');const list=el('div','selection-names');for(const a of items.slice(0,8))list.append(el('p','',a.name));if(items.length>8)list.append(el('p','hint','and '+(items.length-8)+' more'));names.append(list);box.append(names);
  const actions=el('div','inspector-actions');actions.append(action('Copy '+items.length+' files',async()=>{await api.copyFiles(ids);notify(items.length+' files copied.');}),action('Export copies',async()=>{const count=await api.exportFiles(ids);if(count)notify(count+' copies exported.');}),action(view==='trash'?'Restore selection':'Move selection to Trash',()=>bulkAction({type:'trash',trash:view!=='trash'}),view==='trash'?'':'danger'),action('Share…',()=>api.shareFiles(ids)),...(view==='trash'?[action('Delete Permanently…',()=>deleteSelectedPermanently(ids),'danger')]:[]),action('Clear selection',()=>{selection.clear();selected=null;paintSelection();renderInspector();}));box.append(actions);
 }
-async function update(changes,{repaint=true}={}){const a=current();if(!a)return;const saved=await api.update(a.id,changes);Object.assign(a,saved);a.trash=a.trash?1:0;a.searchText=SmartCards.enrichSearch(a);if(pagedCatalog)return refreshCurrent();navStats=null;renderNav();/* A panel that must stay put, because a list is open in it, still gets its
- cards repainted: the card carries a file's tag count. */if(repaint)render();else renderWindow();}
+async function update(changes,{repaint=true}={}){const a=current();if(!a)return;const saved=await api.update(a.id,changes);Object.assign(a,saved);a.trash=a.trash?1:0;a.searchText=SmartCards.enrichSearch(a);if(pagedCatalog)return refreshCurrent();navStats=null;renderNav();
+if(repaint)render();else renderWindow();}
 function field(value, placeholder, handler, multiline=false) {const input=el(multiline?'textarea':'input'); input.value=value; input.placeholder=placeholder; input.setAttribute('aria-label',placeholder); input.onchange=()=>safe(()=>handler(input.value)); return input;}
-// Existing names that match what is being typed, offered as chips under the
-// field. Choosing one runs the field's own change handler, so adding a tag or
-// collection works exactly as if it had been typed and confirmed.
 function entrySuggestions(input, choices) {
   const list=el('div','entry-suggestions');
   list.setAttribute('role','listbox');
@@ -484,7 +482,6 @@ function entrySuggestions(input, choices) {
       option.type='button';
       option.setAttribute('role','option');
       option.title='Add “'+name+'”';
-      // Keep focus in the field until the choice has been applied.
       option.onmousedown=event=>event.preventDefault();
       option.onclick=()=>{
         input.value=name;
@@ -508,6 +505,9 @@ function section(title) {const s=el('section');s.append(el('h3','',title));retur
 function action(text,handler,cls='') {const b=el('button',cls,text); b.onclick=()=>safe(handler);return b;}
 function removeAction(handler){const b=action('',handler);b.append(glyph('close',{size:12}));b.setAttribute('aria-label','Remove');return b;}
 function renderInspector() {
+  if(localStorage.getItem('hide-inspector')===null && (current()||colorFocus||view==='canvas'||selection.ids.size)){
+    document.body.classList.remove('hide-inspector');
+  }
   if(view==='canvas'){CanvasWorkspace.renderInspector();return;}
   if(selection.ids.size>1){renderSelectionInspector();return;}
   const box=$('#inspector');
@@ -517,26 +517,19 @@ function renderInspector() {
   const k=kind(a);
   const similarButton=WorkbenchUI.canFindSimilar(a)?action('',()=>safe(()=>WorkbenchUI.similar(a.id)),'find-similar'):null;
   if(similarButton){similarButton.append(glyph('findSimilar'),document.createTextNode('Find similar'));}
-  // The name is the only thing this row holds now: the star and the file
-  // actions moved back to the card and the context menu.
   const nameRow=el('div','inspector-name-row');
   const nameInput=field(a.name,'File name',name=>update({name}));
   nameInput.className='inspector-name-input';
   nameRow.append(nameInput);
+  box.append(nameRow,inspectorPreview(a),el('p','hint',a.url&&URL.canParse(a.url)?new URL(a.url).hostname:(a.ext||'File').toUpperCase()));
+  if(similarButton)box.append(similarButton);
   if(a.smart?.caption)box.append(el('p','inspector-caption',a.smart.caption));
-  box.append(inspectorPreview(a),...(similarButton?[similarButton]:[]),nameRow);
-  // A file note is editable text that exists nowhere else, so it stays here.
-  // A note is editable text that exists nowhere else. Always expose the field,
-  // including on a fresh file, so the first note can be added from the UI.
   const notes=field(a.notes||'','Notes…',notes=>update({notes}),true);
   notes.className='inspector-notes';
-  box.append(notes);
+
   if(k==='image'){box.append(SmartCards.paletteSection(a));}
   else if(k==='video'||k==='audio'){const mediaDetails=el('p','hint','Reading media information…');box.append(mediaDetails);api.mediaInfo(a.id,true).then(info=>{if(selected!==a.id||!mediaDetails.isConnected)return;mediaDetails.textContent=[info.duration?'Duration '+timecode(info.duration):'',info.width&&info.height?info.width+' × '+info.height:'',info.codec||'',info.artist||'',info.album||''].filter(Boolean).join(' · ')||'Media information unavailable';}).catch(()=>mediaDetails.textContent='Media information unavailable');}
   else if(k==='link'&&a.captureMetadata){const metadata=a.captureMetadata;const source=section('Website');const details=el('dl','properties');for(const [label,value]of [['Original URL',metadata.pageUrl],['Website title',metadata.pageTitle],['Domain',metadata.pageUrl?new URL(metadata.pageUrl).hostname:''],['Capture date',metadata.capturedAt?new Date(metadata.capturedAt).toLocaleString():'']])if(value)details.append(el('dt','',label),el('dd','',String(value)));source.append(details);box.append(source);}
-  // Tags are typed, not chosen from a list: the field below takes one word or
-  // several separated by commas and saves them on Enter or when it loses
-  // focus. The words this file already carries sit above it as chips.
   const tags=el('section');
   const tagHead=el('div','inspector-section-head');
   tagHead.append(el('h3','','Tags'));
@@ -559,8 +552,6 @@ function renderInspector() {
     tagWords=[...tagWords,...added];
     for(const word of added)tagChips.append(tagChip(word));
     tagChips.hidden=false;
-    // Saving leaves the panel alone, so the field keeps the cursor and a
-    // second word can be typed straight away.
     update({tags:tagWords},{repaint:false});
   }
   const tagInput=field('','Add tags, separated by commas',text=>{addTags(text);tagInput.value='';});
@@ -572,8 +563,6 @@ function renderInspector() {
   tagChips.hidden=!tagWords.length;
   tags.append(tagHead,tagChips,tagInput,tagMatches,suggestions.results);
   box.append(tags);
-  // A collection is typed too: a name the library knows joins it to the file,
-  // a new name becomes a collection and is added in the same breath.
   const coll=section('Collections');
   let collNames=[...a.folders];
   const collChips=el('div','chips');
@@ -590,8 +579,6 @@ function renderInspector() {
   function addCollection(text){
     const name=text.trim();
     if(!name||collNames.includes(name))return;
-    // A name the library does not know yet is created first, so the sidebar
-    // lists it straight away.
     if(!folders.includes(name)){
       folders.push(name);folders.sort((one,two)=>one.localeCompare(two));
       safe(()=>api.addFolder(name));
@@ -601,17 +588,28 @@ function renderInspector() {
     collChips.hidden=false;
     update({folders:collNames},{repaint:false});
   }
-  const collInput=field('','Add to collection, then Enter',text=>{addCollection(text);collInput.value='';});
-  collInput.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();addCollection(collInput.value);collInput.value='';}};
+  const createCollection=action('',()=>{addCollection(collInput.value);collInput.value='';createCollection.hidden=true;});
+  createCollection.hidden=true;
+  const chooseExisting=text=>{
+    const match=folders.find(name=>name.toLowerCase()===text.trim().toLowerCase());
+    if(match){addCollection(match);collInput.value='';createCollection.hidden=true;}
+  };
+  const collInput=field('','Choose a collection',chooseExisting);
+  collInput.addEventListener('input',()=>{
+    const name=collInput.value.trim();
+    createCollection.hidden=!name||folders.some(f=>f.toLowerCase()===name.toLowerCase());
+    createCollection.textContent='Create “'+name+'”';
+  });
+  collInput.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();chooseExisting(collInput.value);}};
   const collMatches=entrySuggestions(collInput,()=>folders);
   for(const name of collNames)collChips.append(collChip(name));
   collChips.hidden=!collNames.length;
-  coll.append(collChips,collInput,collMatches);
-  box.append(coll);
+  coll.append(collChips,collInput,collMatches,createCollection);
+  box.append(coll,notes);
   if(k==='image'){
-   const props=section('Image properties'),dl=el('dl','properties'),sizeLabel=el('dt','','Dimensions'),sizeValue=el('dd','','Reading…');
+   const props=el('details','image-properties'),dl=el('dl','properties'),sizeLabel=el('dt','','Dimensions'),sizeValue=el('dd','','Reading…');
    dl.append(el('dt','','Type'),el('dd','',(a.ext||'File').toUpperCase()),sizeLabel,sizeValue,el('dt','','Imported'),el('dd','',new Date(a.imported).toLocaleDateString()),el('dt','','Created'),el('dd','',new Date(a.created).toLocaleDateString()));
-   props.append(dl);box.append(props);
+   props.append(el('summary','','Image properties'),dl);box.append(props);
    api.imageSize(a.id).then(size=>{
     if(!sizeValue.isConnected)return;
     if(size?.width&&size?.height)sizeValue.textContent=size.width+' × '+size.height;
@@ -646,8 +644,6 @@ function renderColorDetails(box){
   for(const [name,value] of [['IMAGES',count('image')],['GIFS',count('gif')],['VIDEOS',count('video')],['LINKS',count('link')]]){
     const line=el('div','color-stat');line.append(el('span','',name),el('span','',String(value)));types.append(line);
   }
-  // The Nearby colours section paints its own hairline. Adding a divider here
-  // as well drew two rules a few pixels apart.
   box.append(stats,el('div','color-detail-divider'),types);
 
   const nearby=section('Nearby colours');
@@ -655,9 +651,6 @@ function renderColorDetails(box){
   const base=rgb(hex);
   const between=(a,b)=>{const x=rgb(a),y=rgb(b);return (x[0]-y[0])**2+(x[1]-y[1])**2+(x[2]-y[2])**2;};
   const distance=value=>between(value,hex);
-  // Every indexed image contributes its palette; the closest colours win, and
-  // near-duplicates are skipped so the strip shows a real variety rather than
-  // ten shades of the same colour.
   const colors=new Map();
   for(const a of assets){
    if(a.trash)continue;
@@ -691,9 +684,6 @@ function mountRasterPreview(a,unsupported){
  image.alt=a.name;image.draggable=false;
  image.style.visibility='hidden';
  image.onload=()=>{image.style.visibility='';fit();};
- // The picture, not the stage, wears the rounded corners: size the element to
- // the fitted photograph so its radius sits on the photo's own edges instead
- // of in the empty letterbox around it.
  function fit(){
   if(!image.naturalWidth||!image.naturalHeight)return;
   const width=element.clientWidth,height=element.clientHeight;
@@ -705,8 +695,6 @@ function mountRasterPreview(a,unsupported){
  const cached=mounted.get(a.id)?.querySelector('.card-surface img');
  image.src=cached?.naturalWidth?cached.currentSrc:'asset://thumb/'+a.id+'?v=2&cached';
  element.append(image);
- // Scrubbing a picture is only useful if it can be reached: the controls
- // zoom in and out, and the picture can then be pulled around by hand.
  const controls=el('div','raster-preview-controls');
  const zoomOut=el('button','raster-preview-button','\u2212'),zoomLabel=el('span','raster-preview-zoom','100%'),zoomIn=el('button','raster-preview-button','+');
  zoomOut.setAttribute('aria-label','Zoom out');zoomIn.setAttribute('aria-label','Zoom in');
@@ -769,27 +757,20 @@ function mountRasterPreview(a,unsupported){
   dispose(){disposed=true;api.previewZoomActive(false);clearTimeout(timer);observer.disconnect();image.removeAttribute('src');element.remove();}};
 }
 function renderPreview(){previewPlayer?.dispose();previewPlayer=null;const a=current();if(!a)return;const scope=previewScope||visible;const i=scope.findIndex(x=>x.id===a.id),total=pagedCatalog&&!previewScope?catalogTotal:scope.length;$('#preview').setAttribute('aria-label','Preview: '+a.name);$('#preview-index').textContent=(i+1).toLocaleString()+' / '+total.toLocaleString();$('#previous').disabled=i<=0;$('#next').disabled=i>=total-1;
-  // Disabling the focused arrow drops focus to <body> while the modal is open.
-  // Keep it inside the dialog by handing focus to its opposite control.
   const arrow=document.activeElement;
   if(arrow===$('#previous')&&$('#previous').disabled)($('#next').disabled?$('#close-preview'):$('#next')).focus({preventScroll:true});
   else if(arrow===$('#next')&&$('#next').disabled)($('#previous').disabled?$('#close-preview'):$('#previous')).focus({preventScroll:true});
   const content=$('#preview-content');content.replaceChildren();const unsupported=()=>{const div=el('div','unsupported');div.append(placeholder(a),el('p','','Open this file with macOS Quick Look.'),action('Quick Look',()=>api.quickLook(a.id)));content.replaceChildren(div);};
 if(SmartCards.isNote(a)){previewPlayer=SmartCards.mountNote(a);content.append(previewPlayer.element);}else if(CanvasFormats.supports(a.ext)){previewPlayer=CanvasFormats.mount(a);content.append(previewPlayer.element);}else if(['video','audio'].includes(kind(a))){previewPlayer=createPlayer(a);content.append(previewPlayer.element);}else if(kind(a)==='image'&&/^(png|jpe?g|jfif|jpe|insp|avif|bmp|heic|heif|tiff?)$/.test(a.ext)){previewPlayer=mountRasterPreview(a,unsupported);content.append(previewPlayer.element);}else if(kind(a)==='image'){const img=el('img','image-preview');img.alt=a.name;const nativeOnly=['psd','psb','eps','jpegxl','jxl','insp','heic','heif','tiff','tif'].includes(a.ext);img.src='asset://'+(nativeOnly?'preview':'file')+'/'+a.id;img.onerror=()=>{if(img.parentElement!==content)return;if(img.dataset.nativeAttempt){unsupported();return;}img.dataset.nativeAttempt='1';img.src='asset://preview/'+a.id;};if(nativeOnly)img.dataset.nativeAttempt='1';content.append(img);}else if(kind(a)==='pdf'){const frame=el('iframe');frame.title=a.name;frame.src='asset://file/'+a.id;content.append(frame);}else if(kind(a)==='link'){previewPlayer=mountBookmark(a);content.append(previewPlayer.element);}else if(['md','txt','json','csv','css','js','ts','xml','log'].includes(a.ext)&&a.size<=2*1024*1024){const text=el('pre','text-preview','Loading…');content.append(text);api.readText(a.id).then(value=>{if(text.isConnected)text.textContent=value;}).catch(e=>{text.textContent=e.message;});}else {const img=el('img','image-preview');img.alt=a.name;img.src='asset://preview/'+a.id;img.onerror=()=>{if(img.parentElement!==content)return;unsupported();const message=content.querySelector('.unsupported p');if(message)message.textContent=['swf','epub'].includes(a.ext)?'This format needs a compatible preview plugin. Importing, organizing and exporting remain available.':'No compatible preview decoder is available for this file on this Mac.';};content.append(img);}}
-// Palette hits can come from the paged catalog and may not be in memory. Put
-// the returned asset in the map before selecting it, then open it so a click
-// in the palette actually shows the file instead of only highlighting a card.
 async function openPaletteAsset(asset){
  if(!asset)return;
  const currentAsset=assetById.get(asset.id);
  const merged=currentAsset?Object.assign(currentAsset,asset):asset;
  if(!currentAsset)assetById.set(asset.id,merged);
  if(!merged.searchText)merged.searchText=SmartCards.enrichSearch(merged);
- // Clear any previous preview and selection so the clicked file is the one
- // shown, not the last one viewed from the palette.
  if(!$('#preview').hidden)closePreview();
  selection.clear();selected=null;
- if(view!=='all')setView('all');
+ if(view!=='all')setView('all',null,false,{clearSearch:true});
  select(asset.id);
  revealGallerySelection();
  openPreview();
@@ -804,14 +785,8 @@ function revealGallerySelection(){
  else if(bottom>gallery.scrollTop+gallery.clientHeight)gallery.scrollTop=Math.max(p.y,bottom-gallery.clientHeight);
  scheduleGallery();
 }
-// Show a file in the library from somewhere else in the app (a canvas, a
-// bookmark). The catalogue is paged, so the file is often not loaded yet and
-// select() would silently do nothing. Load the catalogue first, then select.
 async function revealAssetInLibrary(id){
  if(!id)return;
- // Switching the view starts a page load. Selecting before it finishes is
- // pointless: the load replaces the catalogue and clears the selection. Wait
- // for the catalogue to go quiet, then load the whole library and select.
  const quiet=async()=>{
   for(let i=0;i<200;i++){
    if(!catalogLoading&&!catalogHydration)return;
@@ -823,13 +798,17 @@ async function revealAssetInLibrary(id){
  await quiet();
  if(!assets.some(a=>a.id===id)&&pagedCatalog)await refreshCurrent();
  await quiet();
- // render() returns early when the page key is stale, so selection.index can
- // still be missing the file even though it is loaded.
  if(!selection.index.has(id)&&assets.some(a=>a.id===id))selection.sync(assets.map(a=>a.id));
  select(id);
  revealGallerySelection();
 }
 window.revealAssetInLibrary=revealAssetInLibrary;
+api.onRevealCapture(id=>safe(async()=>{
+  if(!$('#preview').hidden)closePreview();
+  $('#search').value='';$('#type').value='all';tagFilter=null;
+  setView('all',null,false,{type:'all'});
+  await revealAssetInLibrary(id);
+}));
 function move(delta,extend=false,direction=''){
  const isPreview=!$('#preview').hidden,pool=isPreview?(previewScope||visible):visible;if(!pool.length)return;
  const scope=isPreview?previewScope:null;
@@ -886,25 +865,21 @@ if(viewMenu){
  viewMenu.addEventListener('click',event=>{
   const typeOption=event.target.closest('[data-view-type]');
   const sortOption=event.target.closest('[data-view-sort]');
+  const zoomOption=event.target.closest('[data-view-zoom]');
   if(typeOption){$('#type').value=typeOption.dataset.viewType;syncMenu(viewMenu,'data-view-type',typeOption.dataset.viewType);viewMenu.hidePopover();pagedCatalog?safe(()=>refreshCurrent()):render();return;}
-  if(sortOption){$('#sort').value=sortOption.dataset.viewSort;localStorage.setItem('sort-order',sortOption.dataset.viewSort);syncMenu(viewMenu,'data-view-sort',sortOption.dataset.viewSort);viewMenu.hidePopover();pendingGalleryPosition=null;$('#gallery').scrollTop=0;render();}
+  if(sortOption){$('#sort').value=sortOption.dataset.viewSort;localStorage.setItem('sort-order',sortOption.dataset.viewSort);syncMenu(viewMenu,'data-view-sort',sortOption.dataset.viewSort);viewMenu.hidePopover();pendingGalleryPosition=null;$('#gallery').scrollTop=0;pagedCatalog?safe(()=>refreshCurrent()):render();return;}
+  if(zoomOption){viewMenu.hidePopover();setZoomSize(zoomOption.dataset.viewZoom==='in'?zoomTarget+30:zoomOption.dataset.viewZoom==='out'?zoomTarget-30:230);}
  });
 }
 if(importMenu){importMenu.addEventListener('click',event=>{if(event.target.closest('button'))importMenu.hidePopover();});}
 $('#gallery').addEventListener('scroll',()=>{stopHover();scheduleGallery();},{passive:true});
 let lastGalleryWidth=0;
 new ResizeObserver(entries=>{
-  // Setting the layer height can change the scrollbar, which re-fires this
-  // observer with the same width. Rebuilding the masonry for a subpixel
-  // change re-places every visible card and makes the field shake while a
-  // window corner is being dragged.
   const width=entries[0]?.contentRect.width??$('#gallery').clientWidth;
   if(Math.abs(width-lastGalleryWidth)<1)return;
   lastGalleryWidth=width;
   scheduleGallery();
 }).observe($('#gallery'));
-// Thumbnail zoom springs from the value actually on screen, so repeated
-// presses retarget mid-flight instead of waiting for a fixed animation.
 let zoomAnimation=null,zoomDisplay=230,zoomTarget=230,zoomVelocity=0,zoomLastAt=0;
 const savedSize=Number(localStorage.getItem('tile-size'));if(savedSize>=140&&savedSize<=360)$('#zoom').value=savedSize;
 zoomDisplay=Number($('#zoom').value)||230;zoomTarget=zoomDisplay;
@@ -924,9 +899,6 @@ function setZoomSize(target){
 }
 $('#zoom').oninput=()=>setZoomSize(Number($('#zoom').value)||230);
 $('#show-extension').onclick=()=>safe(()=>api.showExtension());
-// The details panel needs room. Under 880px it would take a third of the
-// window and leave the gallery one narrow column, so it steps aside and
-// returns as a sheet over the gallery instead of a column beside it.
 const narrowInspectorWidth=880;
 let narrowPanelOpen=false;
 function closeNarrowInspector(){
@@ -950,11 +922,6 @@ function applyNarrowLayout(){
 }
 applyNarrowLayout();
 addEventListener('resize',applyNarrowLayout);
-// A live resize is a burst of resize events. While the native window is being
-// dragged by an edge, Chromium is often a frame behind the window; animating
-// the rails and blurring large layers at the same time turns that lag into
-// visible jitter and stale tiles. Freeze the chrome until the drag settles,
-// then render once more so the settled frame is painted top to bottom.
 let resizeSettle=0;
 function endResize(){
   clearTimeout(resizeSettle);
@@ -962,8 +929,6 @@ function endResize(){
   renderWindow();
 }
 addEventListener('resize',event=>{
-  // Panel drags dispatch a synthetic resize to refresh the layout; that is
-  // not a window drag and should not freeze the chrome or force a repaint.
   if(event.isTrusted===false)return;
   document.body.classList.add('resizing');
   clearTimeout(resizeSettle);
@@ -979,11 +944,9 @@ $('#toggle-inspector').onclick=()=>{
  document.body.classList.toggle('hide-inspector');
  localStorage.setItem('hide-inspector',String(document.body.classList.contains('hide-inspector')));
 };
-if(localStorage.getItem('hide-inspector')==='true')document.body.classList.add('hide-inspector');
+if(localStorage.getItem('hide-inspector')!=='false')document.body.classList.add('hide-inspector');
 $('#add-folder').onclick=()=>SidebarUI.inlineCreate('collections');$('#folder-dialog').addEventListener('close',()=>{if($('#folder-dialog').returnValue==='create')safe(async()=>{const name=$('#folder-name').value.trim();await api.addFolder(name);await refreshCurrent();const f=CanvasWorkspace.folderRecords.find(f=>f.name===name);if(f)await WorkbenchUI.created('folder:'+f.id,'collection');});});
 $('#previous').replaceChildren(glyph('chevronLeft'));$('#next').replaceChildren(glyph('chevronRight'));$('#close-preview').onclick=closePreview;$('#previous').onclick=()=>move(-1);$('#next').onclick=()=>move(1);
-// Clicking the empty surface of the viewer dismisses it, like the Cosmos
-// lightbox. Clicks on the media or its controls keep their own behaviour.
 $('#preview').addEventListener('click',event=>{
  const target=event.target;
  if(target===$('#preview')||target.classList.contains('preview-body')||target.id==='preview-content'||target.classList.contains('raster-preview'))closePreview();
@@ -1020,8 +983,6 @@ async function trashSelection(){
 }
 let infiniteToggleAt=0;
 function toggleInfiniteCanvas(){
- // The native menu accelerator and the renderer shortcut can both observe the
- // same key press; ignore a second toggle within a moment.
  const now=performance.now();
  if(now-infiniteToggleAt<120)return;
  infiniteToggleAt=now;
@@ -1033,20 +994,13 @@ document.addEventListener('keydown',e=>{
  const command=e.metaKey||e.ctrlKey,key=e.key.toLowerCase();
  const typing=e.target.matches?.('input:not([type="range"]),textarea,select,[contenteditable="true"]');
  const editing=e.target.matches?.('input,textarea,select,[contenteditable="true"],canvas[role="slider"]');
- // ⌥O toggles the infinite canvas. On macOS Option+O produces "ø", so match
- // the physical KeyO as well as the character. This is handled before the
- // dialog guard so it still works with Settings open.
  if(e.altKey&&!command&&!e.shiftKey&&!e.repeat&&(e.code==='KeyO'||key==='o'||key==='ø')){
   e.preventDefault();e.stopPropagation();
   document.querySelector('dialog[open]')?.close();
   toggleInfiniteCanvas();
   return;
  }
- // A modal dialog owns the keyboard while it is up. Open popovers keep their
- // own key handlers and must not swallow global shortcuts.
  if(document.querySelector('dialog[open]'))return;
- // ⌘K is the one command entry point, including from inside the canvas where
-// CanvasWorkspace otherwise claims the same chord for its tray search.
  if(command&&key==='k'&&!e.altKey){e.preventDefault();if(!$('#preview').hidden)closePreview();window.CommandPalette?.open();return;}
  if(e.code==='Space'&&e.target.closest?.('button,summary,input[type="checkbox"],input[type="radio"]'))return;
  const preview = $('#preview');
@@ -1083,8 +1037,6 @@ document.addEventListener('keydown',e=>{
  if(e.key!=='Escape'&&e.target.closest?.('.canvas-selection-tools'))return;
  if(view==='canvas'&&$('#preview').hidden&&!typing&&['Backspace','Delete'].includes(e.key)){e.preventDefault();if(!e.repeat)CanvasWorkspace.removeSelected();return;}
  if(view==='canvas'&&CanvasWorkspace.keydown(e))return;
- // The thumbnail slider is gone, so the library zooms with the same keys the
- // canvas uses: Command + / - to resize, Command + 0 to reset.
  if(command&&!e.altKey&&!typing&&$('#preview').hidden&&['+','=','-','_','0'].includes(key)){
   if(view==='infinite'){
    e.preventDefault();
@@ -1096,9 +1048,7 @@ document.addEventListener('keydown',e=>{
   else setZoomSize(zoomTarget+(key==='-'||key==='_'?-30:30));
   e.preventDefault();return;
  }
- // ⌘B and ⌘S both toggle the sidebar. The app saves continuously, so there is
- // no Save command for ⌘S to conflict with.
- if(command&&!e.shiftKey&&!e.altKey&&(key==='b'||key==='s')&&!editing){e.preventDefault();if(!e.repeat)$('#toggle-sidebar').click();return;}
+ if(command&&!e.shiftKey&&!e.altKey&&['s','b'].includes(key)&&!editing){e.preventDefault();if(!e.repeat)$('#toggle-sidebar').click();return;}
  if(command&&!e.shiftKey&&!e.altKey&&key===','){e.preventDefault();if(!$('#preview').hidden)closePreview();$('#show-settings').click();return;}
  if(command&&key==='f'){e.preventDefault();if(!$('#preview').hidden)closePreview();if(view==='canvas'){CanvasWorkspace.toggleTray(true);$('#canvas-tray-search').focus();}else $('#search').focus();return;}
  if(command&&!e.shiftKey&&!e.altKey&&['Backspace','Delete'].includes(e.key)&&!typing){e.preventDefault();if(!e.repeat)safe(trashSelection);return;}
@@ -1111,9 +1061,6 @@ document.addEventListener('keydown',e=>{
   e.preventDefault();
   safe(async()=>{
    if(pagedCatalog&&assets.length<catalogTotal)await hydrateCatalog();
-   // Hydration fills `assets` with the whole library but only re-syncs
-   // selection.order for the infinite wall. Outside the wall, re-sync from
-   // the full set matching the current view/filter instead of the loaded page.
    if(pagedCatalog&&!['infinite','canvas'].includes(view))selection.sync(filteredAssets(assets).map(a=>a.id));
    selection.all();selected=selection.focus;stopHover();paintSelection();scheduleInspector();
   });
@@ -1129,7 +1076,7 @@ document.addEventListener('keydown',e=>{
 
 document.addEventListener('paste',e=>{if(document.querySelector('dialog[open]')||e.target.matches('input,textarea,[contenteditable="true"]'))return;e.preventDefault();if(view==='canvas'){if(!$('#preview').hidden)closePreview();safe(()=>CanvasWorkspace.paste());}else safe(()=>importing(()=>api.paste(collection)));});
 let dragDepth=0;document.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;document.body.classList.add('dragging');});document.addEventListener('dragover',e=>e.preventDefault());document.addEventListener('dragleave',()=>{if(dragDepth>0&&--dragDepth===0)document.body.classList.remove('dragging');});document.addEventListener('drop',e=>{e.preventDefault();if(document.querySelector('dialog[open]')){dragDepth=0;document.body.classList.remove('dragging');return;}dragDepth=0;document.body.classList.remove('dragging');const paths=[...e.dataTransfer.files].map(f=>api.filePath(f)).filter(Boolean);if(paths.length)safe(()=>importing(()=>api.importPaths(paths,collection)));else{const url=(e.dataTransfer.getData('text/uri-list')||e.dataTransfer.getData('text/plain')).split('\n').find(line=>/^https?:\/\//i.test(line.trim()));if(url)safe(()=>importing(()=>api.importURL(url.trim(),collection)));}});
-const brandIcon=el('img');brandIcon.src='assets/app-icon.png';brandIcon.alt='';$('.brand-icon').replaceChildren(brandIcon);$('#toggle-inspector').replaceChildren(glyph('sidebar'));$('#toggle-sidebar').replaceChildren(glyph('sidebar'));$('#show-sidebar').replaceChildren(glyph('sidebar'));$('#view-menu-button').append(glyph('viewOptions'));$('#import-menu-button').append(glyph('plus'));window.addEventListener('blur',stopHover);let captureRefreshTimer,needsFullRefresh=false;
+const brandIcon=el('img');brandIcon.src='assets/app-icon.png';brandIcon.alt='';$('.brand-icon').replaceChildren(brandIcon);$('#toggle-inspector').replaceChildren(glyph('sidebar'));$('#toggle-sidebar').replaceChildren(glyph('sidebar'));$('#show-sidebar').replaceChildren(glyph('sidebar'));$('#view-menu-button').append(glyph('viewOptions'));$('#import-menu-button').replaceChildren(glyph('plus'));window.addEventListener('blur',stopHover);let captureRefreshTimer,needsFullRefresh=false;
 const pendingCaptures=new Set();
 library.onFloatingRestore(state=>safe(async()=>{
  if(!document.querySelector('#preview').hidden)closePreview();
@@ -1158,8 +1105,6 @@ api.onLibraryChanged(ids=>{
    safe(full?refresh:()=>refreshCaptured(changed));
  },100);
 });api.onCaptureStatus(job=>{if(job.state==='running')return;notify(job.errors.length?'Capture finished with '+job.errors.length+' issue'+(job.errors.length===1?'':'s'):'Saved '+job.imported+' browser captures');});initContextUI();initReliabilityUI();initViewPreferences();syncViewMenu();initBookmarks();CanvasWorkspace.init();SmartSearch.init();WorkbenchUI.init();SidebarUI.init();safe(loadLibraryPage);
-// A capture that arrived while this view was loading, or while the window was
-// in the background, is picked up here so the library is never out of date.
 let lastCaptureSeen=0;
 async function syncCaptures(){
  try{
@@ -1170,12 +1115,8 @@ async function syncCaptures(){
  }catch{}
 }
 window.addEventListener('focus',()=>{safe(syncCaptures);});
-// The menu owns Settings, Help and Check for Updates so those commands exist
-// where a Mac user looks for them, with the accelerators macOS expects.
 api.onMenuSettings?.(()=>{safe(()=>{if(!$('#preview').hidden)closePreview();$('#show-settings').click();});});
 api.onShowShortcuts?.(()=>{safe(()=>WorkbenchUI.shortcuts());});
 api.onCheckUpdates?.(()=>{safe(()=>{$('#show-settings').click();SettingsUI.open('about');});});
-// Native apps draw their chrome differently when the window is not the active
-// one. The page never blurs by itself, so the main process reports it.
 api.onWindowFocus?.(focused=>{document.body.classList.toggle('window-inactive',!focused);});
 setTimeout(()=>{safe(syncCaptures);},600);

@@ -1,5 +1,3 @@
-// The view must be able to ask the app whether a capture arrived that it did
-// not see, and pick it up without a restart.
 process.env.ASSET_TEST_MODE='1';
 process.env.AGAGWU_DATA_DIR='/private/tmp/canvas-capture-sync-'+Date.now();
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),net=require('node:net');
@@ -26,7 +24,6 @@ const request=(socketPath,message)=>new Promise((resolve,reject)=>{
   const win=global.assetTestWindow;
   if(!win)throw new Error('No window.');
   if(win.webContents.isLoading())await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
-  // Before any capture the app reports nothing pending.
   const quiet=await win.webContents.executeJavaScript('api.captureSync(0)');
   assert.equal(quiet.pending,false,'The app reported a capture before one happened.');
   const {jobId}=await request(socketPath,{version:1,op:'capture',items:[{kind:'image',title:'Sync probe',mediaUrl:base+'/image.png',pageUrl:base+'/post'}]});
@@ -38,12 +35,9 @@ const request=(socketPath,message)=>new Promise((resolve,reject)=>{
     await new Promise(r=>setTimeout(r,50));
   }
   assert.equal(job.state,'complete',JSON.stringify(job));
-  // The app must now report a pending capture, so a view that missed the
-  // event can still pick it up.
   const pending=await win.webContents.executeJavaScript('api.captureSync(0)');
   assert.equal(pending.pending,true,'The app did not report the capture as pending.');
   assert.ok(pending.at>0,'The app did not record when the capture arrived.');
-  // And the view can pick it up on its own.
   let rendered=0,inList=0;
   for(let i=0;i<80;i++){
     const state=await win.webContents.executeJavaScript(`(()=>{const a=assets.find(x=>x.name&&x.name.startsWith('Sync probe'));const cards=[...document.querySelectorAll('.card')].map(c=>c.textContent||'');return {inList:a?1:0,rendered:cards.some(t=>t.includes('Sync probe'))?1:0};})()`);

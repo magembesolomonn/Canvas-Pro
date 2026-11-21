@@ -1,6 +1,3 @@
-// A capture that arrives while the app is still starting must still appear in
-// the library without a restart. This is what happens when the browser
-// extension launches Canvas Pro and immediately saves a file.
 process.env.ASSET_TEST_MODE='1';
 process.env.AGAGWU_DATA_DIR='/private/tmp/canvas-capture-startup-'+Date.now();
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),net=require('node:net');
@@ -24,7 +21,6 @@ const request=(socketPath,message)=>new Promise((resolve,reject)=>{
   server=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'image/png','Content-Length':png.length});res.end(png);});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const base='http://127.0.0.1:'+server.address().port;
-  // The capture arrives now, while the window may still be loading.
   const {jobId}=await request(socketPath,{version:1,op:'capture',items:[{kind:'image',title:'Startup probe',mediaUrl:base+'/image.png',pageUrl:base+'/post'}]});
   let job;
   for(let i=0;i<200;i++){

@@ -1,8 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-// Publish prebuilt release assets with a GitHub personal access token.
-// Usage: GITHUB_TOKEN=... node scripts/publish-release.cjs v1.1.6 dist/release/*
 const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 if (!token) {
   console.error('Set GITHUB_TOKEN (or GH_TOKEN) to a token with "repo" scope.');

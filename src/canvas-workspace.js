@@ -1,13 +1,6 @@
 const CanvasWorkspace=(()=>{
  const clone=value=>structuredClone(value),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-  // A repaint runs for every visible node on every frame. Writing a style that
-  // already has that value still invalidates the element, so only touch what
-  // actually changed.
   const setStyle=(node,prop,value)=>{if(node.style[prop]!==value)node.style[prop]=value;};
- // Where a flick would come to rest. Apple's projection: the distance a
- // gesture keeps travelling as it slows, so the glide ends where the hand
- // was heading rather than where it let go. The rate is gentler than a
- // scroll's, so a board glides a little further and then settles.
  const projectMomentum=(velocity,rate=0.97)=>(velocity/1000)*rate/(1-rate);
  const releaseVelocity=(samples,axis)=>{
   if(!samples||samples.length<2)return 0;
@@ -26,6 +19,25 @@ const CanvasWorkspace=(()=>{
    this.selectionTools.hidden=true;this.viewport.append(this.selectionTools);
    this.snapGuides={x:el('div','canvas-snap-guide snap-x'),y:el('div','canvas-snap-guide snap-y')};
    for(const guide of Object.values(this.snapGuides)){guide.hidden=true;this.viewport.append(guide);}
+   const sample=$('#empty-sample');
+   sample.onclick=()=>safe(async()=>{
+     if(sample.disabled)return;
+     sample.disabled=true;
+     try{
+       const board=await api.canvasCreate('Field Notes · packaging study');
+       this.updateSummary(board);
+       const panels=[
+         {x:0,y:0,width:400,height:270,color:'#ece5d2',textColor:'#242b24',text:'Field Notes',fontSize:48},
+         {x:416,y:0,width:156,height:270,color:'#ad4534',textColor:'#ffffff',text:'Clay',fontSize:24},
+         {x:588,y:0,width:156,height:270,color:'#364b3e',textColor:'#ffffff',text:'Pine',fontSize:24},
+         {x:0,y:286,width:744,height:94,color:'#292e29',textColor:'#ffffff',text:'Uncoated paper  /  Two spot inks  /  Botanical series',fontSize:20}
+       ];
+       const upsert=panels.map((panel,z)=>({id:crypto.randomUUID(),kind:'shape',z,data:{shape:'rectangle',...panel}}));
+       await api.canvasApply(board.id,{upsert});
+       await this.open(board.id);
+       if(this.doc?.board.id===board.id)this.fit();
+     }finally{sample.disabled=false;}
+   });
    $('#canvas-save-files').onclick=()=>CanvasExport.choose(true);
    $('#canvas-export').onclick=()=>CanvasExport.choose();
    $('#canvas-undo').append(glyph('undo'));$('#canvas-redo').append(glyph('redo'));$('#canvas-undo').onclick=()=>this.undo();$('#canvas-redo').onclick=()=>this.undo(true);$('#canvas-zoom-in').onclick=()=>this.zoom(1.25);$('#canvas-zoom-out').onclick=()=>this.zoom(.8);$('#canvas-fit').onclick=()=>this.fit();$('#canvas-library').onclick=event=>this.toggleTray($('#canvas-tray').hidden,event.detail>0?event.currentTarget:null);$('#canvas-empty-library').onclick=event=>this.toggleTray(true,event.detail>0?event.currentTarget:null);$('#canvas-tray-close').onclick=()=>this.toggleTray(false);
@@ -35,8 +47,6 @@ const CanvasWorkspace=(()=>{
     event.stopPropagation();
     this.toggleTray(false);
    });
-    // The Library button leaves focus on the viewport, so Escape from there
-    // never reaches the tray's own handler. Close it wherever focus sits.
     document.addEventListener('keydown', event => {
      if (event.key !== 'Escape' || $('#canvas-tray').hidden) return;
      event.preventDefault();
@@ -46,8 +56,6 @@ $('#canvas-import').onclick=()=>importDialog();$('#canvas-retry').onclick=()=>sa
    this.viewport.addEventListener('dblclick',e=>this.doubleClick(e));this.viewport.addEventListener('pointerdown',e=>this.pointerDown(e));this.viewport.addEventListener('pointermove',e=>this.pointerMove(e));this.viewport.addEventListener('pointerup',e=>this.pointerUp(e));this.viewport.addEventListener('pointercancel',()=>this.cancelGesture());this.viewport.addEventListener('wheel',e=>this.wheel(e),{passive:false});this.viewport.oncontextmenu=e=>{e.preventDefault();const world=this.point(e),hit=this.doc?.index.hit(world.x,world.y);if(hit&&!this.doc.selection.has(hit.id))this.select([hit.id]);this.showItemMenu(e);};
    this.viewport.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';};this.viewport.ondrop=e=>this.drop(e,this.doc?.board.id,this.point(e));this.resizeObserver=new ResizeObserver(()=>this.schedule());this.resizeObserver.observe(this.viewport);document.addEventListener('keyup',e=>{if(e.code==='Space'&&this.space){e.preventDefault();this.space=false;this.viewport.classList.remove('space-pan');if(view==='canvas'&&!this.spaceDragged&&!this.gesture)this.previewSelected();}});window.addEventListener('blur',()=>{this.space=false;this.viewport.classList.remove('space-pan');if(this.gesture)this.finishGesture();});
    $('#canvas-dialog-cancel').onclick=()=>$('#canvas-dialog').close();const canvasTarget=AppSelect.attach($('#canvas-target'));this.canvasTarget=canvasTarget;$('#canvas-target').onchange=()=>this.updateDialog();$('#canvas-dialog-form').onsubmit=e=>{e.preventDefault();safe(()=>this.submitDialog());};let searchTimer;$('#canvas-tray-search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>this.refreshTray(true),70);};for(const b of document.querySelectorAll('[data-canvas-tab]'))b.onclick=()=>{this.trayTab=b.dataset.canvasTab;this.refreshTray(true);};$('#canvas-tray-scroll').onscroll=()=>this.renderTray();
-    // The tray tiles are absolutely positioned from the scroller's width, so a
-    // window resize (or a panel drag) has to invalidate that cached layout.
     this.trayResizeObserver=new ResizeObserver(()=>{if(!$('#canvas-tray').hidden)this.invalidateTrayLayout();});this.trayResizeObserver.observe($('#canvas-tray-scroll'));
    api.onCanvasFlush(async token=>{const surfaces=[$('main'),$('.sidebar'),$('#inspector')],previous=surfaces.map(node=>node.inert);try{this.finishGesture();document.activeElement?.blur();for(const surface of surfaces)surface.inert=true;await this.flushAll();surfaces.forEach((node,i)=>node.inert=previous[i]);api.canvasFlushed(token,null);}catch(error){surfaces.forEach((node,i)=>node.inert=previous[i]);api.canvasFlushed(token,error.message);}});
   }
@@ -239,15 +247,9 @@ $('#canvas-import').onclick=()=>importDialog();$('#canvas-retry').onclick=()=>sa
    before=before||this.snapshot([...upserts.map(i=>doc.items.get(i.id)),...removes.map(id=>doc.items.get(id))].filter(Boolean));for(const item of upserts){const old=before.get(item.id);if(item.kind==='text'&&(!old||old.data.text!==item.data.text||old.data.fontSize!==item.data.fontSize))this.fitText(item);doc.items.set(item.id,item);doc.index.update(item);doc.maxZ=Math.max(doc.maxZ,item.z);}for(const id of removes){doc.items.delete(id);doc.index.remove(id);doc.selection.delete(id);}this.history(doc,before,this.snapshot(upserts));this.stage(doc,upserts,removes);this.paintCount();this.renderInspector();this.schedule();}
   armSave(doc,reset=true){if(reset)clearTimeout(doc.saveTimer);else if(doc.saveTimer)return;doc.saveTimer=setTimeout(()=>{doc.saveTimer=null;safe(()=>this.flush(doc));},250);}
   stage(doc,upserts=[],removes=[],camera=true){for(const item of upserts){doc.pending.set(item.id,clone(item));doc.removed.delete(item.id);}for(const id of removes){doc.pending.delete(id);doc.removed.add(id);}if(!upserts.length&&!removes.length&&camera)doc.cameraDirty=true;doc.error='';this.armSave(doc);this.markDirty();this.updateSaveState();}
-  // A wheel or a glide changes the camera many times a second. The camera is
-  // one value, so keep the dirty flag fresh but let a single debounced save
-  // cover the whole burst instead of re-arming the timer on every frame.
   stageCamera(doc){doc.cameraDirty=true;doc.error='';this.armSave(doc,false);this.markDirty();this.updateSaveState();}
   markDirty(){const dirty=[...this.documents.values()].some(d=>d.pending.size||d.removed.size||d.cameraDirty||d.savePromise)||!!this.gesture?.mutated;if(dirty!==this.dirtyFlag){this.dirtyFlag=dirty;api.canvasDirty(dirty);}}
   async flush(doc){clearTimeout(doc.saveTimer);doc.saveTimer=null;if(doc.savePromise){await doc.savePromise;if(doc.savePromise||doc.pending.size||doc.removed.size||doc.cameraDirty)return this.flush(doc);return;}if(!doc.pending.size&&!doc.removed.size&&!doc.cameraDirty)return;const upsert=[...doc.pending.values()].map(clone),remove=[...doc.removed],camera=doc.cameraDirty?{...doc.camera}:null;doc.pending.clear();doc.removed.clear();doc.cameraDirty=false;doc.savePromise=api.canvasApply(doc.board.id,{upsert,remove,...(camera?{viewport:camera}:{})}).then(board=>{doc.error='';this.updateSummary(board);}).catch(error=>{if(/Canvas not found/i.test(error.message||'')){this.forget(doc);return;}for(const item of upsert)if(!doc.pending.has(item.id)&&!doc.removed.has(item.id))doc.pending.set(item.id,item);for(const id of remove)if(!doc.pending.has(id))doc.removed.add(id);if(camera)doc.cameraDirty=true;doc.error=error.message;throw error;});this.markDirty();try{await doc.savePromise;}finally{doc.savePromise=null;this.markDirty();this.updateSaveState();}if(doc.pending.size||doc.removed.size||doc.cameraDirty)return this.flush(doc);}
-  // The canvas was deleted while its board was open. There is nothing left to
-  // save, so the board is let go instead of failing every save and keeping
-  // the app from closing.
   forget(doc){doc.pending.clear();doc.removed.clear();doc.cameraDirty=false;doc.error='';this.documents.delete(doc.board.id);this.boards=this.boards.filter(board=>board.id!==doc.board.id);if(this.doc===doc){this.doc=null;setView('all');}this.renderNav();this.updateSaveState();}
   async flushAll(){this.finishGesture();this.finishText();for(const doc of this.documents.values())await this.flush(doc);this.markDirty();}
   updateSaveState(){if(!this.doc)return;const d=this.doc,label=$('#canvas-save-state'),state=this.gesture?.mutated?'Editing…':d.error?'Not saved':d.savePromise||d.pending.size||d.removed.size||d.cameraDirty?'Saving…':'Saved';if(label.textContent!==state)label.textContent=state;const retry=$('#canvas-retry'),undo=$('#canvas-undo'),redo=$('#canvas-redo');if(retry.hidden!==!d.error)retry.hidden=!d.error;if(undo.disabled!==!d.undo.length)undo.disabled=!d.undo.length;if(redo.disabled!==!d.redo.length)redo.disabled=!d.redo.length;}
@@ -376,17 +378,12 @@ $('#canvas-import').onclick=()=>importDialog();$('#canvas-retry').onclick=()=>sa
   }
   pointerUp(e){
    if(this.gesture&&this.gesture.pointer!==e.pointerId)return;
-   // Pointer moves can be coalesced. Commit the release position for item drags.
    if(this.gesture?.type==='move'||this.gesture?.type==='stroke')this.pointerMove(e);
    const gesture=this.gesture;
    this.finishGesture();
-   // A flick keeps travelling. The glide carries the hand's speed, so there
-   // is no seam between the drag and the movement that follows it.
    if(gesture?.type==='pan'&&gesture.mutated)this.glide(gesture);
    try{this.viewport.releasePointerCapture(e.pointerId);}catch{}
   }
-  // The glide ends where the hand was heading, and it can be caught at any
-  // point: grabbing the canvas stops it and continues from where it is.
   glide(gesture){
    if(!this.doc||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
    const velocityX=releaseVelocity(gesture.samples,'x'),velocityY=releaseVelocity(gesture.samples,'y');
@@ -553,9 +550,6 @@ $('#canvas-import').onclick=()=>importDialog();$('#canvas-retry').onclick=()=>sa
    this.schedule();
   }
   refreshTray(force=false){if($('#canvas-tray').hidden||!this.doc)return;for(const b of document.querySelectorAll('[data-canvas-tab]'))b.setAttribute('aria-pressed',String(b.dataset.canvasTab===this.trayTab));const q=$('#canvas-tray-search').value.trim().toLowerCase(),data=this.trayTab==='collections'?this.folderRecords.filter(f=>!q||f.name.toLowerCase().includes(q)):assets.filter(a=>!a.trash&&(this.trayTab!=='links'||kind(a)==='link')&&(!q||a.searchText?.includes(q))),signature=this.trayTab+'\0'+q+'\0'+data.map(a=>a.id+':'+(a.aspectRatio||'')).join(',');
-  // render() calls this on every board repaint. Reuse the tray when its data
-  // has not changed: rebuilding the tiles (and resetting the scroll position)
-  // each time makes a repaint tear down work the compositor already did.
   if(!force&&signature===this.traySignature)return this.renderTray();
   if(this.activePlayer?.tray)this.stopPlayer();this.trayData=data;this.traySignature=signature;this.trayLayout=null;this.traySelection=new Set([...this.traySelection].filter(id=>data.some(a=>a.id===id)));
   if(force){$('#canvas-tray-scroll').scrollTop=0;this.releaseTray();$('#canvas-tray-items').replaceChildren();}

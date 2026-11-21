@@ -1,7 +1,3 @@
-// Invariants that the app depends on but that no existing test pinned down.
-// Each one is a place where a silent change would corrupt behaviour without
-// throwing: duplicate detection missing pairs, the canvas index dropping
-// items, or a URL guard letting a private address through.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -23,8 +19,6 @@ function flipBits(hash, count) {
 }
 
 test('two fingerprints within the duplicate threshold always share two bands', () => {
-  // The band index is what keeps duplicate review fast. If this invariant
-  // breaks, real duplicates stop being found and nothing reports an error.
   for (let trial = 0; trial < 4000; trial += 1) {
     const left = randomHash();
     const right = flipBits(left, Math.floor(Math.random() * 7));

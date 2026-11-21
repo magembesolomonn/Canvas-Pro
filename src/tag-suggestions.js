@@ -1,9 +1,3 @@
-// Tag suggestions from the model on this Mac.
-//
-// The inspector asks this module for a control and a place to show the
-// answers. The module owns the request, the wording and the chips; it only
-// needs to be told how to add a tag. Nothing leaves the Mac: the picture and
-// the words are compared by the local model.
 const TagSuggestions=(()=>{
  function mount(asset,{add}){
   const results=el('div','ai-suggestions');
@@ -17,8 +11,6 @@ const TagSuggestions=(()=>{
    button.disabled=true;
    results.replaceChildren(el('p','hint','Asking the local model…'));
    try{
-    // A description of the picture is better than a fixed word list, so it is
-    // written first when the file has not been described yet.
     if(!asset.smart?.caption)await SmartSearch.describe(asset);
     await SmartSearch.suggestTags(asset,(list,message)=>{
      results.replaceChildren();

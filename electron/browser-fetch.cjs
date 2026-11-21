@@ -2,14 +2,6 @@ const dns=require('node:dns');
 const {isIP}=require('node:net');
 const {isPublicAddress,publicFetch}=require('./public-fetch.cjs');
 
-// Chromium's network stack sends a real browser TLS/HTTP2 fingerprint, which is
-// what Cloudflare-protected recipe sites require. The raw node:https fetcher in
-// public-fetch.cjs is rejected by them (403/402) even with browser headers.
-//
-// Chromium does not pin DNS the way a custom `lookup` does, so the guard has to
-// happen here instead: every hop is resolved first and refused unless it points
-// at a public address. That keeps the same SSRF rule as public-fetch.cjs while
-// the request itself goes through the browser stack.
 function assertWebURL(value){
   let url;
   try{url=new URL(value);}catch{throw new Error('Automatic previews require a public HTTP address.');}
@@ -40,8 +32,6 @@ function createBrowserFetch(net){
         url=assertWebURL(new URL(location,url).href);
         continue;
       }
-      // Chromium leaves url empty for a manually followed redirect, and the
-      // parser needs the final address to resolve relative images and links.
       if(!response.url)Object.defineProperty(response,'url',{value:url.href});
       return response;
     }
@@ -49,8 +39,6 @@ function createBrowserFetch(net){
   };
 }
 let chromeFetch;
-// Only the prepared module instance is reused; the Electron import stays lazy so
-// unit tests can load this file without an app.
 function browserFetch(url,options){
   if(!chromeFetch){
     const {net}=require('electron');
@@ -58,10 +46,6 @@ function browserFetch(url,options){
   }
   return chromeFetch(url,options);
 }
-// Chromium is the one that gets past the block, but a machine with a proxy or a
-// broken browser network should still fall back to the guarded Node fetch
-// rather than fail closed. Address refusals are never retried: the Node path
-// enforces the same rule and would reject them too.
 async function previewFetch(url,options){
   try{return await browserFetch(url,options);}
   catch(error){

@@ -1,6 +1,3 @@
-/* The collector is the extension's browser side panel. Chrome and Helium dock
-   it on the right; this inset shell gives the content the same 8px radius as
-   the rest of the extension instead of sitting flush against the browser edge. */
 body.collector {
   max-width: none;
   margin: 0;
@@ -17,14 +14,11 @@ body.collector {
   overflow-wrap: anywhere;
 }
 
-/* Keep the sticky controls inside the rounded shell while the panel scrolls. */
 body.collector .collect-toolbar,
 body.collector .download-activity {
   top: 8px;
 }
 
-/* Light OS appearance uses the popup's light palette so the side panel reads
-   as the same product. Dark above stays the default. */
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;

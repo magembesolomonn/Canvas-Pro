@@ -9,11 +9,6 @@ const SYMBOL = /^[a-z0-9]+(?:\.[a-z0-9]+)*$/;
 const KEY = /^[A-Za-z]+$/;
 const WEIGHTS = new Set(['ultralight', 'thin', 'light', 'regular', 'medium', 'semibold', 'bold', 'heavy', 'black']);
 
-// Renders SF Symbols through AppKit on demand and keeps the results in a disk
-// cache. The cache key includes the OS version, so a system update naturally
-// invalidates old artwork. If the native helper is missing (for example a
-// source checkout that has not run `npm run build:native`), the handler falls
-// back to the checked-in PNG masks.
 class SymbolRenderer {
   constructor({ root, cacheDir, helper, version = process.getSystemVersion?.() || '' }) {
     this.root = root;

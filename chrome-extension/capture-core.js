@@ -20,7 +20,6 @@ function inspectPage(mode,source=''){
   for(const e of document.images){const extra={title:e.alt||base.title,alt:e.alt||'',width:e.naturalWidth||0,height:e.naturalHeight||0};add(e.currentSrc||e.src,'image',extra);for(const key of ['data-src','data-original','data-full','data-zoom-image'])add(e.getAttribute(key),'image',extra);}
   for(const e of document.querySelectorAll('meta[property],meta[name]')){const key=e.getAttribute('property')||e.name;if(/^(og:video(?::url|:secure_url)?|twitter:player:stream)$/.test(key))add(e.content,'video');if(/^(og:image(?::url|:secure_url)?|twitter:image)$/.test(key))add(e.content,'image');}
   for(const entry of performance.getEntriesByType('resource'))add(entry.name);
-  // Lazy media and JSON configuration, including Apple's inline media sources.
   for(const e of document.querySelectorAll('*')){if(e.closest('[data-canvas-capture-activity]'))continue;for(const attr of e.attributes){if(!/^(data-|href$|src$|style$)/.test(attr.name))continue;const value=attr.value.replaceAll('\\/','/').replaceAll('&amp;','&');if(/\.(mp4|m4v|mov|webm|gifv|gif|png|jpe?g|webp|avif)(?:[?#]|$)/i.test(value)&&!/[\s"'<>]/.test(value))add(value);for(const match of value.matchAll(/(?:https?:)?\/\/[^\s"'<>),]+|(?:\/|\.\.?\/)[^\s"'<>),]+\.(?:mp4|m4v|mov|webm|gifv|gif|png|jpe?g|webp|avif)(?:\?[^\s"'<>),]*)?/gi))add(match[0]);}
    if(mode!=='videos'){const bg=getComputedStyle(e).backgroundImage;for(const match of bg.matchAll(/url\(["']?(.+?)["']?\)/g))add(match[1],'image');}
   }

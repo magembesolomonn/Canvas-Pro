@@ -110,17 +110,14 @@ const SmartSearch=(()=>{
   if(!query){render();return;}
   queryTimer=setTimeout(async()=>{
    try{
-    // Keep search predictable: lexical/FTS (and indexed text/description fields)
-    // drive typed results. Automatic visual-vector merging is disabled because it
-    // can surface unrelated matches and hide what the user typed.
-    const lexical=await api.smartSearch(query);
+    const lexical=await api.smartSearch(query,undefined,version);
     if(version!==queryVersion||query!==$('#search').value.trim())return;
     matches=new Set(lexical);matchedQuery=query;
     render();
    }catch(error){
     if(version===queryVersion)updateStatus(error.message);
    }
-  },90);
+  },280);
  }
  function includes(a,query){
    return a.searchText.includes(query)||(matchedQuery.toLowerCase()===query&&matches?.has(a.id));
@@ -148,11 +145,9 @@ const SmartSearch=(()=>{
  const idleLabel=el('label','ai-idle-policy');idleLabel.append(idle,el('span','','Only while idle and plugged in'));
  idle.onchange=()=>safe(async()=>{lastIndexState=await api.smartIdlePolicy(idle.checked);updateActivityLabel();});
  const retry=action('Retry failed indexing',async()=>{await api.workbench('retry-index');});
- const statusRow=el('div','settings-row settings-row-plain');const statusCopy=el('span','settings-copy');statusCopy.append(el('strong','','Status'));statusRow.append(statusCopy);
- const actions=el('div','settings-row settings-row-actions settings-ai-actions');
+ const statusHeading = el('strong', 'smart-settings-heading', 'Status');
+ const actions=el('div','settings-ai-actions');
  actions.append(pause,retry);
- // The models the app can use. Each one says what it is for, and each is
- // downloaded on its own.
  const MODELS=[
   {name:'clip',title:'Visual similarity',size:'156 MB',icon:'sparkles',
    detail:'Powers Find similar and tag suggestions by comparing images with CLIP vectors.'},
@@ -162,10 +157,10 @@ const SmartSearch=(()=>{
    detail:'Understands a whole sentence in your documents and notes, so you can search in your own words.'}];
  const modelRows=new Map();
  const modelsBox=el('div','settings-models');
- const modelsLabel=el('div','settings-section-label','Models');
- const modelsSection=el('div','settings-models-section');
+ const modelsLabel=el('h3','settings-section-label','On-device models');
+ const modelsSection=el('section','settings-models-section');
  for(const model of MODELS){
-  const entry=el('div','settings-model');
+  const entry=el('div','settings-card settings-model');
   const icon=el('span','settings-model-icon');
   icon.append(glyph(model.icon));
   const copy=el('span','settings-copy');
@@ -188,20 +183,14 @@ const SmartSearch=(()=>{
   button.textContent=state.ready?'Installed':state.state==='failed'?'Retry download':'Download';
  };
  Promise.all(MODELS.map(model=>api.modelState(model.name))).then(states=>states.forEach(paintModel));
- // The models are their own section, the way the rest of Settings is laid
- // out: a heading above, then the rows.
  modelsSection.append(modelsLabel,modelsBox);
- $('#settings-local-intelligence').before(modelsSection);
- box.append(statusRow,progress,modelStatus,actions,idleLabel);$('#settings-local-intelligence').append(box);
+ $('#settings-local-intelligence').after(modelsSection);
+ box.append(statusHeading,progress,modelStatus,actions,idleLabel);$('#settings-local-intelligence').append(box);
  api.onSmartWork(wakeIndex);
  api.onModelProgress(model=>{paintModel(model);updateStatus(model.state==='downloading'?('Downloading '+(model.model||model.name)+' · '+Math.round(model.bytes/Math.max(1,model.total)*100)+'%'):model.error||status);});
  api.onSmartChanged(({id,smart,name})=>{const a=assetById.get(id);if(!a)return;a.smart=smart;if(name&&name!==a.name){a.name=name;const card=mounted.get(id);const label=card?.querySelector('.card-name');if(label)label.textContent=name;card?.setAttribute('aria-label',name);}a.searchText=SmartCards.enrichSearch(a);if(SmartCards.isNote(a)){const card=mounted.get(id),surface=card?.querySelector('.card-surface');if(surface&&!surface.querySelector('.smart-note-card')){surface.querySelector('img,.file-placeholder')?.remove();surface.prepend(SmartCards.fileVisual(a));layoutDirty=true;scheduleGallery();}}const active=document.activeElement;
- // The panel is not redrawn under the pointer: a field with the caret in it,
- // or a list of choices that is open, owns the panel until it is done.
  if(selected===id&&!active?.matches('input,textarea,select,[contenteditable=true]')&&!active?.closest('.select')&&!AppSelect.anyOpen())scheduleInspector();});
- // The index status lives with the rest of the local intelligence settings,
- // not in the sidebar.
- const activity=el('div','settings-row ai-activity-row');
+ const activity=el('div','ai-activity-row');
  activity.id='ai-activity';activity.append(glyph('sparkles'),el('span','ai-activity-label','AI activity'));
  box.append(activity);
  let polling=false,lastPoll=0;
@@ -218,9 +207,6 @@ const SmartSearch=(()=>{
      updateActivityLabel();
    }finally{polling=false;}
  }
- // An adaptive poll instead of a fixed 4 second timer: wake up often while the
- // index is working, back off to half a minute when nothing is happening, and
- // stay out of the way entirely while the window is hidden.
  let pollTimer=0;
  function schedulePoll(delay){
    clearTimeout(pollTimer);
@@ -262,13 +248,10 @@ const SmartSearch=(()=>{
   for(let index=0;index<a.length;index++)sum+=a[index]*b[index];
   return sum;
  }
- // A caption is one sentence about a picture, written by the description
- // model. It is kept beside the file so its words can be found by a search,
- // and it is what names the file and suggests its tags.
  async function describe(asset){
-  if(!enabled){notify('Turn on local intelligence in Settings → Search & models first.');return '';}
+  if(!enabled){notify('Turn on local intelligence in Settings → Search first.');return '';}
   const model=await api.modelState('florence-2');
-  if(!model.ready){notify('Download the description model in Settings → Search & models first.');return '';}
+  if(!model.ready){notify('Download the description model in Settings → Search first.');return '';}
   const {caption}=await call('caption',{assetId:asset.id});
   const text=String(caption||'').trim();
   if(!text)return '';
@@ -280,18 +263,13 @@ const SmartSearch=(()=>{
   }
   return text;
  }
- // Tag suggestions come from the model on this Mac: the picture is compared
- // with the words, and the closest ones are offered. Nothing leaves the Mac.
  async function suggestTags(asset,onTags){
-  if(!enabled||!modelReady){onTags([],'Turn on local intelligence in Settings → Search & models to get tag suggestions.');return;}
+  if(!enabled||!modelReady){onTags([],'Turn on local intelligence in Settings → Search to get tag suggestions.');return;}
   try{
    const {vector}=await call('image',{assetId:asset.id});
    if(!vector){onTags([],'A preview is not available for this file yet.');return;}
-   // The words the caption used are the best guesses the model has made about
-   // this picture, so they are the first candidates.
    const described=String(asset.smart?.caption||'').toLowerCase().match(/[a-z]{3,}/g)?.slice(0,14)||[];
    const candidates=[...new Set([...described,...libraryTags(),...TAG_VOCABULARY])].filter(tag=>tag&&tag.length<=40).slice(0,80);
-   // Compare with text embeddings in small batches so the worker stays responsive.
    const vectors=[];
    const batch=8;
    for(let i=0;i<candidates.length;i+=batch){
@@ -309,5 +287,5 @@ const SmartSearch=(()=>{
    onTags([],'Could not suggest tags for this file yet.');
   }
  }
- return{init,schedule,includes,call,start,resultIds,setEnabled,ensureVisualModel,suggestTags,describe,get enabled(){return enabled;},get visualModelReady(){return modelReady;}};
+ return{init,schedule,includes,call,start,resultIds,setEnabled,ensureVisualModel,suggestTags,describe,get status(){return enabled?status:'Visual search is turned off.';},get enabled(){return enabled;},get visualModelReady(){return modelReady;}};
 })();

@@ -88,8 +88,6 @@ body { display: flex; align-items: stretch; justify-content: stretch; -webkit-ap
   -webkit-app-region: no-drag;
 }
 .floating-seek::-webkit-slider-runnable-track { height: 4px; background: transparent; }
-/* A 0x0 thumb hid the playback position from keyboard users. A small white
-   dot shows it; the negative margin centres it on the 4px track. */
 .floating-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -107,8 +105,6 @@ body { display: flex; align-items: stretch; justify-content: stretch; -webkit-ap
   border-radius: 50%;
   background: #fff;
 }
-/* This window loads only this stylesheet, so it needs its own focus ring.
-   It rides on top of the opacity-only idle fade; no layout is animated. */
 .floating-seek:focus-visible {
   outline: 1px solid #fff;
   outline-offset: 4px;
@@ -119,8 +115,6 @@ body.light-mode .floating-corner,
 body.light-mode .floating-round { background: #2b2b3a52; border-color: #ffffff50; }
 
 
-/* Controls fade with the pointer: hidden when it leaves, visible when it
-   returns. No timers, so there is no stale state after a window swap. */
 .floating-top, .floating-center, .floating-seek {
   opacity: 0;
   transition: opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -137,7 +131,6 @@ body.light-mode .floating-round { background: #2b2b3a52; border-color: #ffffff50
   opacity: 1;
 }
 
-/* Faded controls must not capture clicks meant for the video underneath. */
 .floating-card:not(:hover):not(:focus-within):not(.controls-visible) .floating-top,
 .floating-card:not(:hover):not(:focus-within):not(.controls-visible) .floating-center,
 .floating-card:not(:hover):not(:focus-within):not(.controls-visible) .floating-seek { pointer-events: none; }

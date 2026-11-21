@@ -23,8 +23,6 @@ test('symbol renderer falls back to the checked-in PNG when the helper is missin
   const renderer = new SymbolRenderer({ root, cacheDir, helper: path.join(root, 'missing-tool') });
   const result = await renderer.render(params());
   assert.equal(result.buffer.toString(), 'fallback-png');
-  // The fallback must not be cached as a native render, or a later helper
-  // build would never be used.
   assert.equal(fs.existsSync(cacheDir), true);
   assert.deepEqual(fs.readdirSync(cacheDir), []);
 });

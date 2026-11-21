@@ -1,10 +1,3 @@
-/* A select that reads like a field and opens a list of options.
-   ------------------------------------------------------------------
-   The trigger is a field: the same surface, hairline and radius as every
-   other field in the app. The list that drops from it is the app's own
-   menu: a solid card, a shadow, plain rows and a tick beside the chosen
-   option. In the light appearance the field is white and the card is the
-   one soft grey, the way every other panel is. */
 
 .select {
   position: relative;
@@ -33,8 +26,6 @@
   width: 100%;
   min-height: 34px;
   padding: 7px 9px;
-  /* The same fill and hairline as every other field in the app, so a select
-     never reads as a black hole beside the input next to it. */
   background: var(--fill-field, #ffffff05);
   border: 1px solid var(--line-field, #ffffff14);
   border-radius: var(--radius-input);
@@ -48,8 +39,6 @@
   background: var(--fill-hover, #ffffff0b);
 }
 
-/* The native select is the tabbable control; forward its focus to the visible
-   trigger so keyboard users can see which field is active. */
 .select:focus-within .select-trigger {
   outline: 1px solid var(--focus);
   outline-offset: 2px;
@@ -91,7 +80,6 @@
   opacity: 0.8;
 }
 
-/* The answer, when there is more than one. */
 .select-chip {
   display: inline-flex;
   align-items: center;
@@ -122,14 +110,12 @@
   background: var(--selection);
 }
 
-/* The list. */
 .select-popover {
   position: fixed;
   inset: auto;
   z-index: 40;
   margin: 0;
   padding: 5px;
-  /* The list scrolls; the field for a new answer stays where it is. */
   overflow: hidden;
   max-height: 280px;
   background: var(--surface-menu, #28292d);
@@ -139,7 +125,6 @@
   color: var(--text);
 }
 
-/* Only an open list is laid out: a popover that is closed must stay gone. */
 .select-popover:popover-open {
   display: flex;
   flex-direction: column;
@@ -214,8 +199,6 @@
   font-size: 12px;
 }
 
-/* Light appearance: the field is white with a hairline and the card is white.
-   The fills themselves come from the app's tokens. */
 body.light-mode .select-popover {
   box-shadow: none;
 }

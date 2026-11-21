@@ -1,7 +1,3 @@
-// Real-interaction audit of the smaller UI fixes: sidebar counts and add
-// buttons clear the card edge, the file-details panel stays usable while the
-// viewer is open, and the colour details strip uses round, varied swatches
-// that still navigate to matching files.
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
@@ -35,7 +31,6 @@ require('../electron/main.cjs');
  }
  await run('refresh()');
 
- // Counts and the section add button stay inside the sidebar card.
  const spacing=JSON.parse(await run(`(()=>{
   const sidebar=$('.sidebar').getBoundingClientRect();
   const badge=$('#navigation button .badge').getBoundingClientRect();
@@ -48,14 +43,12 @@ require('../electron/main.cjs');
  assert.ok(spacing.addGap>=8,'The collection add button crowds the sidebar edge: '+spacing.addGap+'px');
  assert.ok(spacing.badgeRight<=spacing.sidebarRight,'The count badge overflows the sidebar');
 
- // The viewer leaves File Details interactive; only the gallery is inert.
  await run(`select('${ids['Landscape.png']}');openPreview()`);
  await until(()=>run("!$('#preview').hidden"),'preview opens');
  const viewer=JSON.parse(await run(`JSON.stringify({mainInert:$('main').inert,inspectorInert:$('#inspector').inert,inspectorVisible:!$('#inspector').hidden})`));
  console.log('VIEWER_INERT',JSON.stringify(viewer));
  assert.equal(viewer.mainInert,true,'The gallery should be inert behind the viewer');
  assert.equal(viewer.inspectorInert,false,'File Details must stay interactive during the viewer');
- // Clicking the empty raster stage around the photograph dismisses the viewer.
  const blank=JSON.parse(await run(`(()=>{const r=document.querySelector('#preview-content .raster-preview').getBoundingClientRect();for(const [fx,fy] of [[.5,.02],[.02,.5],[.98,.5],[.5,.98]]){const x=Math.round(r.left+r.width*fx),y=Math.round(r.top+r.height*fy);if(document.elementFromPoint(x,y)?.classList.contains('raster-preview'))return JSON.stringify({x,y,hit:'raster-preview'});}return JSON.stringify({hit:document.elementFromPoint(r.left+8,r.top+8)?.className});})()`));
  assert.equal(blank.hit,'raster-preview','The viewer stage is not exposed around the picture');
  win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,x:blank.x,y:blank.y});
@@ -63,7 +56,6 @@ require('../electron/main.cjs');
  await until(()=>run("$('#preview').hidden"),'viewer closes on a stage click');
  console.log('VIEWER_BACKDROP_CLOSE_OK');
 
- // Nearby colours: round swatches, a varied set, and a working navigation.
  const paletteHex=await run(`assetById.get('${ids['Landscape.png']}').smart.palette[0].hex`);
  await run(`showColorDetails('${paletteHex}')`);
  await until(()=>run("!!document.querySelector('#inspector .color-palette .color-swatch')"),'nearby colours render');
@@ -84,26 +76,21 @@ require('../electron/main.cjs');
  assert.equal(new Set(colours.colours).size,colours.count,'Nearby colours repeat, so the set is not varied');
  assert.ok(colours.section.includes('Nearby colours'),'The Nearby colours section is missing');
 
- // One rule between the two stat groups; the Nearby colours section paints
- // its own, so adding another divider here double-ruled the panel.
  const detail=JSON.parse(await run(`(()=>{const dividers=[...document.querySelectorAll('#inspector .color-detail-divider')];const row=getComputedStyle(document.querySelector('#inspector .color-stat'));return JSON.stringify({dividers:dividers.length,rowPadding:row.paddingTop,rowFont:row.fontSize});})()`));
  console.log('COLOUR_DETAIL_SPACING',JSON.stringify(detail));
  assert.equal(detail.dividers,1,'The colour panel draws more than one explicit divider');
  assert.equal(detail.rowPadding,'7px','The colour stat rows are still cramped');
 
- // Menu rows are contiguous within and between groups, so the pointer never
- // travels over pixels that belong to no row. The highlight itself is inset.
  await run(`$('#view-menu-button').click()`);
  await until(()=>run("$('#view-menu').matches(':popover-open')"),'view menu opens');
  const menu=JSON.parse(await run(`(()=>{const groups=[...document.querySelectorAll('#view-menu .view-menu-group')];const rows=groups.map(g=>[...g.querySelectorAll('button')]);const joins=[];for(let i=1;i<rows.length;i++){const a=rows[i-1].at(-1).getBoundingClientRect(),b=rows[i][0].getBoundingClientRect();joins.push(Math.round((b.top-a.bottom)*10)/10);}const before=getComputedStyle(rows[0][0],'::before');return JSON.stringify({groups:groups.length,joins,padding:groups.map(g=>getComputedStyle(g).paddingTop).join(','),fillInset:before.inset,fillTop:before.top,rowGap:Math.round((rows[0][1].getBoundingClientRect().top-rows[0][0].getBoundingClientRect().bottom)*10)/10});})()`));
  console.log('MENU_ROWS',JSON.stringify(menu));
  assert.ok(menu.joins.every(gap=>Math.abs(gap)<=1),'The view menu leaves a dead band between groups: '+menu.joins);
  assert.ok(Math.abs(menu.rowGap)<=1,'The view menu leaves a dead band between rows: '+menu.rowGap);
- assert.equal(menu.padding,'0px,0px,0px','The view menu groups still add padding around the rows');
+ assert.equal(menu.padding,'0px,0px,0px,0px','The view menu groups still add padding around the rows');
  assert.equal(menu.fillTop,'2px','The menu highlight is not inset from the full-height row');
  await run(`$('#view-menu').hidePopover()`);
 
- // Click the first swatch with a real mouse press and land on the matches.
  const point=JSON.parse(await run(`(()=>{const r=document.querySelector('#inspector .color-palette .color-swatch').getBoundingClientRect();return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2});})()`));
  win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,x:Math.round(point.x),y:Math.round(point.y)});
  win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x:Math.round(point.x),y:Math.round(point.y)});

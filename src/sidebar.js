@@ -5,12 +5,18 @@ const SidebarUI = (() => {
   let frame = 0, hovered = null, pointer = null, drawerOpen = false, gesture = null;
   let compact = localStorage.getItem('hide-sidebar') === 'true';
   let drawerMotion = null;
+  let borderLeft = 0, borderTop = 0;
+
+  function measureChrome() {
+    if (!sidebar) return;
+    const style = getComputedStyle(sidebar);
+    borderLeft = parseFloat(style.borderLeftWidth) || 0;
+    borderTop = parseFloat(style.borderTopWidth) || 0;
+  }
 
   function syncAccessibility() {
     if (!sidebar) return;
     const previewOpen = !$('#preview').hidden;
-    // The viewer keeps the sidebar and File Details on screen, so only the
-    // gallery under it is inert. A hidden or drawer-closed sidebar is inert.
     sidebar.inert = (narrow.matches ? !drawerOpen : compact);
     $('main').inert = previewOpen || drawerOpen || document.body.classList.contains('infinite-mode');
     $('#inspector').inert = drawerOpen;
@@ -31,15 +37,10 @@ const SidebarUI = (() => {
       return;
     }
     const bounds = target.getBoundingClientRect(), root = sidebar.getBoundingClientRect();
-    // The sidebar is a card with a hairline, and an absolutely placed child
-    // starts inside that line, so its width is taken off the offset.
-    const edge = getComputedStyle(sidebar);
-    const left = parseFloat(edge.borderLeftWidth) || 0;
-    const top = parseFloat(edge.borderTopWidth) || 0;
     pill.style.width = bounds.width + 'px';
     pill.style.height = bounds.height + 'px';
-    pill.style.transform = 'translate(' + (bounds.left - root.left - left) + 'px,' +
-      (bounds.top - root.top + sidebar.scrollTop - top) + 'px)';
+    pill.style.transform = 'translate(' + (bounds.left - root.left - borderLeft) + 'px,' +
+      (bounds.top - root.top + sidebar.scrollTop - borderTop) + 'px)';
     if (pill.hidden) pill.hidden = false;
   }
 
@@ -63,7 +64,6 @@ const SidebarUI = (() => {
   }
 
   function updateSections() {
-    // Categories are always open. The heading no longer collapses a list.
     for (const section of sidebar.querySelectorAll('.sidebar-section')) section.open = true;
   }
 
@@ -118,8 +118,6 @@ const SidebarUI = (() => {
     drawerOpen = narrow.matches && open;
     hovered = null;
     syncMode();
-    // The sidebar may have just become inert, and the browser drops focus from
-    // an element that turns inert. Move focus on the next frame so it lands.
     requestAnimationFrame(() => $(drawerOpen ? '#toggle-sidebar' : '#show-sidebar').focus({ preventScroll: true }));
 
     const target = drawerOpen ? 0 : -width;
@@ -197,7 +195,6 @@ const SidebarUI = (() => {
     drawGesture(offset, bounds.width);
     document.body.classList.add('sidebar-dragging');
     capture.setPointerCapture(event.pointerId);
-    // Track within the window even if the title bar interrupts pointer capture.
     document.addEventListener('pointermove', drag, true);
     document.addEventListener('pointerup', endGesture, true);
     document.addEventListener('pointercancel', cancelGesture, true);
@@ -219,6 +216,7 @@ const SidebarUI = (() => {
     sidebar = $('.sidebar');
     sidebar.id = 'app-sidebar';
     sidebar.setAttribute('aria-label', 'Navigation');
+    measureChrome();
     activePill = el('div', 'sidebar-pill sidebar-active-pill');
     hoverPill = el('div', 'sidebar-pill sidebar-hover-pill');
     for (const pill of [activePill, hoverPill]) {
@@ -241,7 +239,6 @@ const SidebarUI = (() => {
     window.addEventListener('blur', () => {
       if (gesture) setDrawer(gesture.startedOpen);
     });
-    // The closing panel is inert. Its visible handle can still be re-grabbed.
     document.addEventListener('pointerdown', event => {
       if (drawerOpen || !drawerMotion || event.target === edge || event.button !== 0) return;
       const bounds = handle.getBoundingClientRect();
@@ -252,8 +249,6 @@ const SidebarUI = (() => {
       beginGesture(event, edge);
     }, true);
     for (const section of sidebar.querySelectorAll('.sidebar-section')) {
-      // Always open, and the heading does nothing when clicked. The add button
-      // inside the heading still creates a new canvas or collection.
       section.open = true;
       section.querySelector(':scope > summary')?.addEventListener('click', event => {
         if (!event.target.closest('.section-add')) event.preventDefault();
@@ -273,7 +268,6 @@ const SidebarUI = (() => {
       if (!event.target.classList.contains('sidebar-pill')) schedule();
     });
     sidebar.addEventListener('click', event => {
-      // Navigation can replace its button before this event reaches the sidebar.
       const path = event.composedPath();
       if (drawerOpen && path.some(node => node.nodeName === 'NAV') &&
           path.some(node => node.nodeName === 'BUTTON')) setDrawer(false);
@@ -300,6 +294,7 @@ const SidebarUI = (() => {
       attributeFilter: ['class','aria-current','aria-pressed','open'] });
     new ResizeObserver(schedule).observe(sidebar);
     addEventListener('resize', schedule);
+    addEventListener('resize', measureChrome);
     narrow.addEventListener('change', () => {
       drawerOpen = false;
       clearGesture();
@@ -312,9 +307,6 @@ const SidebarUI = (() => {
     syncMode();
   }
 
-  // A small input in the rail is faster than a sheet for the two things
-  // people create constantly. Enter commits, Escape backs out, and the rest
-  // of the app still uses the full dialogs when it needs templates or targets.
   function inlineCreate(section) {
     if (!sidebar) return null;
     const details = sidebar.querySelector('.sidebar-section[data-section="' + section + '"]');

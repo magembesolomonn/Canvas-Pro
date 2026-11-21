@@ -1,31 +1,13 @@
-/* Canvas Pro — island layout
-   ------------------------------------------------------------------
-   The window is one dark surface. The library sidebar and the details
-   panel are separate pieces that sit on it as rounded islands, and the
-   gallery between them is a tight field of tiles.
-
-   Everything here is a layer on top of the existing design: only the
-   tokens below change, and every rule is scoped so the rest of the app
-   keeps working. */
 
 :root {
-  /* The window. */
   --surface-app: #1a1a1a;
-  /* The islands sit a shade above the window so they read as separate
-     pieces without a heavy border. */
   --island-surface: #212121;
   --island-line: #ffffff12;
   --island-radius: 12px;
   --island-gap: 10px;
-  /* Tiles sit close together, the way a contact sheet does. */
-  --gallery-gap: 8px;
-  --gallery-pad: 12px;
+  --gallery-gap: 12px;
+  --gallery-pad: 16px;
   --radius-card: 6px;
-  /* With titleBarStyle:'hiddenInset' the renderer starts at x=0 and the
-     native traffic lights float above it (x=22, ~52px wide). Any toolbar
-     that sits at the very left of the window has to clear them. The sidebar
-     normally covers that band; when it is hidden or becomes a drawer the
-     toolbar owns the space, so it switches to this inset. */
   --traffic-light-inset: 104px;
   --toolbar-left: 10px;
 }
@@ -38,7 +20,6 @@ body.hide-sidebar {
   }
 }
 
-/* The window itself ---------------------------------------------------- */
 
 body:not(.light-mode) {
   --surface-app: #1a1a1a;
@@ -49,16 +30,11 @@ body.light-mode {
 }
 
 body {
-  /* One dark surface across the whole window, with rounded corners. The
-     panels sit on top of it rather than dividing it up. */
   background: var(--surface-canvas);
   border-radius: 14px;
   overflow: hidden;
   padding: 0;
   gap: 0;
-  /* The sidebar island keeps its own margin inside its track, so the window
-     shows the same gap on both sides of it and the gallery is not pushed
-     against it. */
   --sidebar-track: calc(var(--sidebar) + var(--island-gap) * 2);
   grid-template-columns: var(--sidebar-track) minmax(360px, 1fr) var(--inspector);
 }
@@ -66,7 +42,6 @@ body.hide-sidebar {
   --sidebar-track: 0px;
 }
 
-/* The two panels sit on the background ---------------------------------- */
 
 .sidebar,
 .inspector {
@@ -78,29 +53,24 @@ body.hide-sidebar {
 }
 
 .sidebar {
-  /* 16px of inset on both sides, 16px under the last row. */
   padding: 0 16px 16px;
-  /* The island is solid: the window no longer has a translucent sidebar. */
   --sidebar-surface: var(--island-surface);
 }
 
 .inspector {
-  padding: 24px 18px;
+  padding: var(--ui-panel-inset);
 }
 
-/* The work area is the background itself. */
 main {
   background: transparent;
 }
 
-/* Sidebar -------------------------------------------------------------- */
 
 .sidebar .section-label {
   color: var(--section-ink);
   letter-spacing: 0.08em;
 }
 
-/* The chosen row is marked with a fill, as before. */
 .sidebar nav button.active {
   background: #ffffff12;
 }
@@ -109,18 +79,15 @@ main {
   color: var(--muted);
 }
 
-/* The gallery ----------------------------------------------------------- */
 
 .gallery {
   background: transparent;
 }
 
-/* A tile is the picture itself: no frame around it. */
 .card-surface {
   border-radius: var(--radius-card);
 }
 
-/* The name sits under the picture, with its own room in the layout. */
 .card-meta {
   padding: 4px 3px 0;
   background: transparent;
@@ -135,21 +102,19 @@ main {
   text-shadow: none;
 }
 
-/* Toolbar -------------------------------------------------------------- */
 
 .filter-bar.library-header {
   background: transparent;
   border-bottom: 0;
-  padding: 0 10px;
-  /* Keep the traffic-light inset here rather than in a separate, less
-     specific rule: `.filter-bar.library-header` would otherwise win the
-     cascade and slide the show-sidebar button and the Library title under
-     the window controls on small windows. */
-  padding-left: var(--toolbar-left);
+  padding: 0 var(--gallery-pad);
+  padding-left: max(var(--gallery-pad), var(--toolbar-left));
+  font-family: var(--ui-font);
 }
 
 .library-header h1 {
   color: var(--text);
+  font-size: var(--ui-title);
+  font-weight: 600;
 }
 
 .toolbar-count,
@@ -157,13 +122,40 @@ main {
   color: var(--muted);
 }
 
-/* The round buttons at the right of the bar. */
-.toolbar-button,
 .icon-button {
   border-radius: 999px;
 }
 
-/* The details island ---------------------------------------------------- */
+.library-header .toolbar-actions {
+  gap: var(--ui-copy-gap);
+}
+.library-header .toolbar-button {
+  width: var(--ui-control-height);
+  height: var(--ui-control-height);
+  border-color: transparent;
+  border-radius: var(--ui-control-radius);
+  background: transparent;
+  color: var(--muted);
+  corner-shape: squircle;
+}
+.library-header .toolbar-button:is(:hover, :focus-visible) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+.library-header .toolbar-button:is([aria-expanded="true"], [aria-pressed="true"]) {
+  background: var(--fill-active);
+  color: var(--text);
+}
+.filter-bar.library-header .search {
+  height: var(--ui-control-height);
+  margin-inline: var(--ui-copy-gap);
+  padding-inline: var(--ui-row-inset);
+  background: var(--fill-field);
+}
+.filter-bar.library-header .search input {
+  font-family: var(--ui-font);
+  font-size: var(--ui-caption);
+}
 
 .inspector-label,
 .inspector .inspector-section-head {
@@ -177,27 +169,21 @@ main {
   color: #1c1c1e;
 }
 
-/* Light appearance ----------------------------------------------------- */
 
 body.light-mode {
-  /* Light mirrors the dark theme: the rails are the one soft grey and the
-     window behind them is white. */
   --island-surface: #f7f7f7;
   --island-line: #00000012;
 }
 
-/* Light: the window is the recessed grey and the panels are raised white. */
 body.light-mode {
   --surface-canvas: #ffffff;
   background: var(--surface-canvas);
 }
 
-/* The work area shows the background instead of painting over it. */
 body.light-mode main {
   background: transparent;
 }
 
-/* Both islands are raised white in light appearance. */
 body.light-mode .sidebar,
 body.light-mode .inspector {
   background: var(--island-surface);
@@ -211,20 +197,12 @@ body.light-mode .sidebar nav button.active {
   background: transparent;
 }
 
-/* A narrow window keeps the details panel as a sheet over the gallery. */
 @media (max-width: 880px) {
   body.narrow-inspector {
     grid-template-columns: var(--sidebar-track) minmax(0, 1fr) 0px;
   }
 }
 
-/* Live window resize --------------------------------------------------- */
-/* Dragging a window edge feeds resize events faster than Chromium can
-   repaint. Keeping the sidebar spring, the panel transitions and the
-   translucent layers alive during the drag makes the tile field judder and
-   leaves stale pixels along the newly exposed edges. The renderer marks the
-   window while a resize is in flight; everything here just holds still until
-   it settles. */
 body.resizing .sidebar,
 body.resizing .sidebar *,
 body.resizing .inspector,
@@ -243,3 +221,226 @@ body.resizing .preview-drag-region {
   -webkit-backdrop-filter: none !important;
 }
 
+
+#toggle-inspector svg,#toggle-inspector img { transform:scaleX(-1) }
+
+#canvas-output-menu{position:fixed;inset:auto;margin:0;padding:5px;background:var(--window-surface);color:inherit;border:1px solid currentColor;border-radius:8px}
+#canvas-output-menu button{display:block;width:100%;text-align:left}
+.image-properties summary{cursor:pointer;font-weight:600}
+.color-swatch{outline:1px solid color-mix(in srgb,currentColor 35%,transparent);outline-offset:-1px}
+.color-swatch:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+
+#clear-result-filter{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+#clear-result-filter[hidden]{display:none}
+.active-colour-swatch{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid currentColor}
+
+.sidebar nav { gap: 2px; }
+.sidebar nav button {
+  min-height: var(--ui-control-height);
+  gap: var(--ui-icon-gap);
+}
+.sidebar nav button .badge {
+  padding: 2px 4px;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar .sidebar-bottom {
+  position: sticky;
+  bottom: -16px;
+  z-index: 2;
+  flex-shrink: 0;
+  margin-inline: -8px;
+  margin-bottom: -6px;
+  padding: 6px 0 2px;
+  background: var(--sidebar-surface);
+}
+.sidebar .sidebar-bottom #show-settings {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-icon-gap);
+  min-height: 36px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+.sidebar .sidebar-bottom #show-settings:is(:hover,:focus-visible) {
+  background: var(--fill-hover);
+}
+.sidebar .settings-icon,
+.sidebar .settings-icon .sf-symbol {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+@media (max-width: 1040px) {
+  body.hide-sidebar .sidebar .sidebar-bottom { margin-inline: 0; }
+  body.hide-sidebar .sidebar .sidebar-bottom #show-settings { padding-inline: 10px; gap: 8px; }
+}
+
+.settings-dialog {
+  --settings-rail: #272728;
+  --settings-content: #222223;
+  --settings-card: #252526;
+  --settings-secondary: #bdbdc2;
+  --settings-line: #313133;
+  --settings-selected: #353537;
+}
+body.light-mode .settings-dialog {
+  --settings-rail: var(--island-surface);
+  --settings-content: #f6f6f7;
+  --settings-card: #ffffff;
+  --settings-secondary: #53535b;
+  --settings-line: #e6e6e9;
+  --settings-selected: #e2e2e5;
+}
+.settings-dialog {
+  border-color: var(--settings-line);
+}
+@media (prefers-contrast: more) {
+  .settings-dialog,
+  body.light-mode .settings-dialog {
+    --settings-line: #888;
+  }
+}
+.settings-dialog .settings-sidebar { background: var(--settings-rail); border-color: var(--settings-line); }
+.settings-dialog .settings-body { background: var(--settings-content); }
+.settings-dialog .settings-sidebar .settings-nav-item.active { background: var(--settings-selected); }
+.settings-dialog .settings-search {
+  height: var(--ui-control-height);
+  margin: var(--ui-row-inset);
+  border-color: transparent;
+  border-radius: var(--ui-control-radius);
+  background: var(--fill-hover);
+}
+.settings-dialog .settings-search:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.settings-dialog .settings-nav {
+  padding-inline: var(--ui-row-inset);
+}
+.settings-dialog .settings-nav-item {
+  min-height: var(--ui-control-height);
+  border-radius: var(--ui-control-radius);
+}
+.settings-dialog :is(.settings-header, .settings-scroll) {
+  padding-inline: var(--ui-panel-inset);
+}
+.settings-dialog .settings-header {
+  border-bottom: 0;
+  padding-top: 16px;
+}
+.settings-dialog .settings-scroll {
+  padding-top: 10px;
+}
+.settings-dialog .settings-card {
+  background: var(--settings-card);
+  border: 1px solid var(--settings-line);
+  border-radius: 10px;
+  overflow: visible;
+}
+.settings-dialog .settings-card > * + .settings-row { border-top: 1px solid var(--settings-line); }
+.settings-dialog :is(.settings-copy small,.settings-note,.settings-subtle,.settings-nav-icon,.settings-search-icon,.settings-chevron),
+.settings-dialog .settings-search input::placeholder { color: var(--settings-secondary); }
+
+.sidebar,
+.inspector,
+.sidebar button,
+.inspector :is(button, input, textarea) {
+  font-family: var(--ui-font);
+}
+.sidebar nav button,
+.settings-dialog .settings-copy strong,
+.inspector h3 {
+  font-size: var(--ui-label);
+  font-weight: 400;
+}
+.sidebar :is(.badge, .section-label),
+.inspector :is(.inspector-label, .inspector-caption, .hint, .properties),
+.settings-dialog :is(.settings-copy small, .settings-note) {
+  font-size: var(--ui-caption);
+}
+.inspector .inspector-name-input,
+.settings-dialog .settings-header h2 {
+  font-size: 21px;
+  font-weight: 600;
+}
+.inspector > section {
+  margin-top: var(--ui-group-gap);
+  padding-top: 0;
+  border-top: 0;
+}
+.inspector section h3 {
+  margin-bottom: var(--ui-copy-gap);
+}
+.settings-dialog .settings-copy {
+  gap: var(--ui-copy-gap);
+}
+.settings-dialog .settings-section-label {
+  padding-bottom: 6px;
+}
+.settings-dialog .settings-row {
+  padding-block: 9px;
+}
+.settings-dialog .settings-row-button {
+  border-radius: 4px;
+}
+.settings-disclosure > summary {
+  width: fit-content;
+  padding-block: 6px;
+  color: var(--settings-secondary);
+  font: 400 var(--ui-caption)/1.4 var(--ui-font);
+  cursor: default;
+}
+.settings-disclosure > summary:is(:hover, :focus-visible) {
+  color: var(--text);
+}
+.settings-disclosure .settings-note {
+  margin-top: var(--ui-copy-gap);
+}
+.settings-disclosure[open] {
+  padding-bottom: 4px;
+}
+.settings-dialog #current-library-name {
+  overflow-wrap: anywhere;
+}
+.settings-dialog .settings-row > .settings-button {
+  flex-shrink: 0;
+}
+
+.settings-dialog .settings-nav-item[hidden],
+.settings-dialog .settings-nav-group[hidden] {
+  display: none;
+}
+
+.settings-dialog .settings-disclosure {
+  padding: 0 var(--settings-inset) 8px;
+}
+.settings-dialog .settings-disclosure :is(.settings-note, .settings-row) {
+  margin-inline: 0;
+  padding-inline: 0;
+}
+.settings-dialog .settings-card .settings-row-button {
+  border-radius: 10px;
+}
+
+.settings-dialog .settings-nav-group + .settings-nav-group {
+  margin-top: 12px;
+}
+.settings-dialog .settings-nav-title {
+  margin-block: 8px 4px;
+}
+.settings-dialog .settings-section-label {
+  padding-inline: 0;
+  font-size: 16px;
+}
+.settings-dialog .settings-note {
+  margin-inline: 0;
+  max-width: none;
+}
+.settings-dialog #current-library-path {
+  user-select: text;
+}

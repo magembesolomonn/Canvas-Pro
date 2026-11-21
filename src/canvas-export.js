@@ -83,8 +83,9 @@ const CanvasExport=(()=>{
   }finally{URL.revokeObjectURL(url);}
  }
  function choose(saveToFiles=false){
+  $('#canvas-output-menu').hidePopover();
   if(!CanvasWorkspace.doc)return;
-  const dialog=el('dialog','workbench-dialog canvas-export-dialog'),title=el('h2','',saveToFiles?'Save moodboard to Files':'Export canvas');
+  const dialog=el('dialog','workbench-dialog canvas-export-dialog'),title=el('h2','',saveToFiles?'Save snapshot to library':'Export canvas');
   const name=el('input');
   name.value=CanvasWorkspace.doc.board.name;name.maxLength=120;name.required=true;
   const options=el('div','canvas-export-options'),format=el('select'),scale=el('select');
@@ -103,7 +104,7 @@ const CanvasExport=(()=>{
   const scope=el('label','canvas-export-scope');scope.append(selected,el('span','','Selected items only'));
   const footer=el('div','canvas-export-actions'),cancel=action('Cancel',()=>dialog.close()),status=el('p','hint');
   status.hidden=true;status.setAttribute('role','status');
-  const submit=action(saveToFiles?'Save to Files':'Export…',async()=>{
+  const submit=action(saveToFiles?'Save snapshot':'Export…',async()=>{
    if(!name.reportValidity())return;
    submit.disabled=cancel.disabled=true;
    status.hidden=true;
@@ -118,7 +119,7 @@ const CanvasExport=(()=>{
     if(saved.cancelled)return;
     dialog.close();
     if(saveToFiles)await refreshCaptured([saved.id]);
-    notify(saveToFiles?(saved.duplicate?'This snapshot is already in Files.':'Moodboard saved to Files.'):'Canvas exported.');
+    notify(saveToFiles?(saved.duplicate?'This snapshot is already in Files.':'Snapshot saved to library.'):'Canvas exported.');
    }catch(error){
     status.textContent=(error.message||String(error)).replace(/^Error invoking remote method '[^']+': (Error: )?/,'');
     status.hidden=false;

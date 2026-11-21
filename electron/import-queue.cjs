@@ -12,10 +12,6 @@ class ImportQueue {
     const job={id:crypto.randomUUID(),paths:[...paths],folder,folderId:folder?this.library.folderRecords().find(f=>f.name===folder)?.id:null,state:'queued',entries:[],failedPaths:[],controller:new AbortController(),result:{imported:0,duplicates:0,errors:[],skipped:0,ids:[],cancelled:false},processed:0,name:''};
     job.done=new Promise(resolve=>job.resolve=resolve);this.jobs.set(job.id,job);this.waiting.push(job);this.emit(true);this.pump();return job;
   }
-  // Finished jobs are kept briefly so the activity view can still show them
-  // and they can be retried, but they are pruned at every state change instead
-  // of lingering until the next pump. 'cancelling' is still in flight, so it is
-  // never pruned and is treated like other cancellable states by the UI.
   prune(){const finished=[...this.jobs].filter(([,j])=>!['queued','running','cancelling'].includes(j.state));for(const [id] of finished.slice(0,Math.max(0,finished.length-20)))this.jobs.delete(id);}
   snapshot(){return [...this.jobs.values()].slice(-20).reverse().map(j=>({id:j.id,state:j.state,name:j.name,processed:j.processed,imported:j.result.imported,duplicates:j.result.duplicates,skipped:j.result.skipped,failed:j.result.errors.length,error:j.error||'',canRetry:j.failedPaths.length>0||['cancelling','cancelled','failed'].includes(j.state),entries:(j.entries.length?j.entries.slice(-50):j.paths.slice(0,50).map(p=>({path:p,name:path.basename(p),state:j.state}))).map(e=>({...e}))}));}
   emit(force=false){if(force||Date.now()-this.lastEvent>=100){this.lastEvent=Date.now();this.onChange(this.snapshot());}}

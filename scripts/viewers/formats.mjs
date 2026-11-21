@@ -6,8 +6,6 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {strFromU8} from 'fflate';
 const models=['3ds','3mf','dae','ifc','ply','stl','glb'];
 const documents=['epub','html','htm','mhtml','mht'];
-// Inflate in a disposable worker so a forged ZIP header cannot lock the main
-// thread. The worker enforces both the declared-size and actual-size caps.
 function unpack(bytes,ownCleanup){
  return new Promise((resolve,reject)=>{
   const worker=new Worker('epub-worker.js');let settled=false;

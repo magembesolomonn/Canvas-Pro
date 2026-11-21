@@ -5,7 +5,6 @@ import ImageIO
 
 @main struct AnalyzeTool {
  static func detailedOCRImage(_ file: URL) -> CGImage? {
-  // PNG screenshots can carry text too small for the gallery thumbnail.
   guard file.pathExtension.lowercased()=="png",
         let source=CGImageSourceCreateWithURL(file as CFURL,[kCGImageSourceShouldCache:false] as CFDictionary),
         let properties=CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString:Any],

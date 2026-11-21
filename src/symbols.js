@@ -1,12 +1,3 @@
-/* SF Symbols, rendered by the main process from AppKit.
- *
- * `SYMBOLS` is the single key -> SF Symbol map shared with native/Symbols.swift.
- * `glyph()` builds a mask span so every icon keeps taking `currentColor` in
- * both themes, while the artwork itself comes from the running macOS version
- * at the requested optical size and weight instead of a checked-in raster.
- * If the native helper is unavailable the `symbol://` handler falls back to
- * the PNG masks in assets/symbols.
- */
 const SYMBOLS = {
   loop: 'repeat',
   canvas: 'square.dashed',
@@ -67,7 +58,7 @@ const SYMBOLS = {
   toggle: 'switch.2',
   table: 'tablecells',
   library: 'rectangle.stack',
-  viewOptions: 'rectangle.3.group',
+  viewOptions: 'line.3.horizontal.decrease',
   findSimilar: 'sparkle.magnifyingglass',
   plusMagnifier: 'plus.magnifyingglass',
   minusMagnifier: 'minus.magnifyingglass',

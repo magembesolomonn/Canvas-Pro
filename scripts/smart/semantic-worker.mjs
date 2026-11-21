@@ -1,10 +1,6 @@
 import {env,AutoTokenizer,AutoProcessor,CLIPTextModelWithProjection,CLIPVisionModelWithProjection,Florence2Processor,Florence2ForConditionalGeneration,RawImage} from '@huggingface/transformers';
 env.allowRemoteModels=false;env.allowLocalModels=true;env.localModelPath='asset://ai/';env.useBrowserCache=false;env.backends.onnx.wasm.wasmPaths=new URL('vendor/onnx/',self.location.href).href;env.backends.onnx.wasm.numThreads=1;
 
-// The worker does three jobs: it embeds a picture, it embeds a sentence, and
-// it describes a picture in one sentence. The first two make search work; the
-// third is what names a file, suggests its tags and makes it findable by what
-// it shows.
 let visionReady,textReady,captionReady;
 let chain=Promise.resolve();
 function normalize(values){let length=0;for(const v of values)length+=v*v;length=Math.sqrt(length)||1;return Array.from(values,v=>v/length);}

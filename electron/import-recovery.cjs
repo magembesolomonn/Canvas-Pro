@@ -29,11 +29,11 @@ function recoverImports(library) {
     if (fs.lstatSync(journal).isSymbolicLink()) continue;
     let entry;
     try { entry = JSON.parse(fs.readFileSync(journal, 'utf8')); }
-    catch { continue; } // An incomplete journal precedes the file copy; never guess a deletion path.
+    catch { continue; }
     if (!entry || typeof entry !== 'object' || entry.id !== id || typeof entry.stored !== 'string' || !Number.isInteger(entry.pid) || entry.pid <= 0) continue;
     const base = path.basename(entry.stored);
     if (entry.stored !== path.join('originals', base) || !(base === id || base.startsWith(id + '.'))) continue;
-    if (processAlive(entry.pid)) continue; // Other live connections may still be importing.
+    if (processAlive(entry.pid)) continue;
     const retained = library.db.prepare('SELECT id FROM assets WHERE stored=?').get(entry.stored);
     if (!retained) fs.rmSync(managedPath(library, entry.stored), { force: true });
     fs.rmSync(journal, { force: true });

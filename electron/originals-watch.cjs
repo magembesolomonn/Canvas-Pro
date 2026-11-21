@@ -3,10 +3,6 @@ const path = require('node:path');
 
 const ASSET_ID = /^[a-f0-9-]{36}$/;
 
-// The library's managed originals can be changed from Finder: someone may
-// delete one, or put it back from the macOS Trash. This watcher keeps the
-// records honest without ever touching the files themselves. A missing file
-// moves its item to Trash; a file that returns restores it.
 function createOriginalsWatch({ library, onChange = () => {}, debounce = 90 }) {
   const directory = path.join(library.root, 'originals');
   const pending = new Set();
@@ -20,15 +16,17 @@ function createOriginalsWatch({ library, onChange = () => {}, debounce = 90 }) {
 
   function report(ids) {
     if (closed || !ids.length) return;
-    try { onChange([...new Set(ids)]); } catch { /* A closed window must not stop the watcher. */ }
+    try { onChange([...new Set(ids)]); } catch {  }
   }
 
   function apply(id) {
     if (closed || library.deleting.has(id)) return false;
-    let asset;
-    try { asset = library.asset(id); } catch { return false; }
-    const exists = fs.existsSync(originalPath(asset.stored));
-    return exists ? library.markPresent(id) : library.markMissing(id);
+    let row;
+    try { row = library.db.prepare('SELECT stored,trash,missing FROM assets WHERE id=?').get(id); } catch { return false; }
+    if (!row) return false;
+    const exists = fs.existsSync(originalPath(row.stored));
+    if (exists) return row.missing ? library.markPresent(id) : false;
+    return !row.trash && !row.missing ? library.markMissing(id) : false;
   }
 
   function flush() {
@@ -45,26 +43,26 @@ function createOriginalsWatch({ library, onChange = () => {}, debounce = 90 }) {
     timer = setTimeout(flush, debounce);
   }
 
-  // A full pass is used at startup, after sleep and when the window returns
-  // to the front. It is one stat per asset and no hashing, but it runs
-  // asynchronously in chunks so startup and focus stay responsive.
   async function scan() {
     if (closed) return [];
     let rows;
-    try { rows = library.db.prepare('SELECT id,stored FROM assets').all(); }
+    try { rows = library.db.prepare('SELECT id,stored,missing FROM assets WHERE trash=0 OR missing=1').all(); }
     catch { return []; }
     const changed = [];
     const batchSize = 250;
     for (let i = 0; i < rows.length; i += batchSize) {
       if (closed) break;
       const batch = rows.slice(i, i + batchSize);
+      const present = [], missing = [];
       await Promise.all(batch.map(async row => {
         if (closed || library.deleting.has(row.id)) return;
         let exists = false;
         try { await fs.promises.access(originalPath(row.stored), fs.constants.F_OK); exists = true; }
         catch { exists = false; }
-        if (exists ? library.markPresent(row.id) : library.markMissing(row.id)) changed.push(row.id);
+        if (exists) { if (row.missing) present.push(row.id); }
+        else if (!row.missing) missing.push(row.id);
       }));
+      if (present.length || missing.length) changed.push(...library.applyPresence(present, missing));
       if (i + batchSize < rows.length) await new Promise(resolve => setImmediate(resolve));
     }
     report(changed);
@@ -72,15 +70,13 @@ function createOriginalsWatch({ library, onChange = () => {}, debounce = 90 }) {
   }
 
   try {
-    // The originals live directly inside this folder, so one non-recursive
-    // watcher sees every add, delete and restore.
     watcher = fs.watch(directory, { persistent: false }, (event, filename) => {
       if (!filename) return;
       const id = String(filename).split('.')[0];
       if (ASSET_ID.test(id)) schedule(id);
     });
-    watcher.on('error', () => { /* A later scan still catches any change. */ });
-  } catch { /* Watching is an optimisation; scanning is the safety net. */ }
+    watcher.on('error', () => {  });
+  } catch {  }
 
   return {
     scan,
@@ -88,7 +84,7 @@ function createOriginalsWatch({ library, onChange = () => {}, debounce = 90 }) {
       closed = true;
       if (timer) clearTimeout(timer);
       timer = null;
-      try { watcher?.close(); } catch { /* Already closed. */ }
+      try { watcher?.close(); } catch {  }
       watcher = null;
     },
     get watching() { return !!watcher; },

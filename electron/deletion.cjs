@@ -7,8 +7,6 @@ function recoverDeletions(library){
  for(const name of fs.readdirSync(base)){
   if(!/^[a-f0-9-]{36}$/.test(name))continue;
   const dir=path.join(base,name);
-  // A damaged staging folder must never stop the app from launching. Skip it
-  // and leave its files in place so the pending deletion can be inspected.
   try{
    if(fs.lstatSync(dir).isSymbolicLink())continue;
    const file=path.join(dir,'manifest.json');

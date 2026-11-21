@@ -9,7 +9,10 @@ config.local.json
 .prototype/
 /bin/
 electron/rss-engine.cjs
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/delete-comment
 /audits/
 /Canvas Pro Capture.zip
 /skills-lock.json

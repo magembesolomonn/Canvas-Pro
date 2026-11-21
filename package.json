@@ -1,13 +1,13 @@
 {
   "name": "canvas-pro",
-  "version": "1.1.14",
+  "version": "1.1.15",
   "private": true,
   "description": "A native Mac library and browser capture companion",
   "main": "electron/main.cjs",
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/*.test.cjs",
-    "check": "node scripts/check.cjs",
+    "check": "node scripts/check.cjs && npm run lint:comments",
     "build:fuses": "node scripts/set-fuses.cjs",
     "build:mac": "npm run build:native && node scripts/build-mac.cjs",
     "update:mac": "node scripts/update-mac.cjs",
@@ -31,7 +31,7 @@
     "test:sidebar": "electron tests/sidebar-electron.cjs",
     "test:traffic": "electron tests/traffic-light-electron.cjs",
     "test:video-aspect": "electron tests/video-aspect-electron.cjs",
-    "test:ui": "electron tests/audit-missing-file-electron.cjs && electron tests/bookmark-workflows-electron.cjs && electron tests/canvas-electron.cjs && electron tests/canvas-inspector-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-momentum-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/capture-canvas-view-electron.cjs && electron tests/capture-network-electron.cjs && electron tests/capture-refresh-electron.cjs && electron tests/capture-startup-electron.cjs && electron tests/capture-sync-electron.cjs && electron tests/context-trash-electron.cjs && electron tests/drag-out-electron.cjs && electron tests/formats-electron.cjs && electron tests/infinite-canvas-electron.cjs && electron tests/infinite-perf-electron.cjs && electron tests/library-startup-failure-electron.cjs && electron tests/library-switch-electron.cjs && electron tests/navigation-canvas-electron.cjs && electron tests/paste-smoke-electron.cjs && electron tests/preferences-electron.cjs && electron tests/prototype-electron.cjs && electron tests/reliability-electron.cjs && electron tests/sidebar-electron.cjs && electron tests/traffic-light-electron.cjs && electron tests/smart-features-electron.cjs && electron tests/smoke-electron.cjs && electron tests/stress-electron.cjs && electron tests/native-macos-electron.cjs && electron tests/ui-audit-electron.cjs && electron tests/video-aspect-electron.cjs",
+    "test:ui": "electron tests/audit-missing-file-electron.cjs && electron tests/bookmark-workflows-electron.cjs && electron tests/canvas-electron.cjs && electron tests/canvas-inspector-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-momentum-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/capture-canvas-view-electron.cjs && electron tests/capture-network-electron.cjs && electron tests/capture-refresh-electron.cjs && electron tests/capture-startup-electron.cjs && electron tests/capture-sync-electron.cjs && electron tests/context-trash-electron.cjs && electron tests/drag-out-electron.cjs && electron tests/formats-electron.cjs && electron tests/infinite-canvas-electron.cjs && electron tests/infinite-perf-electron.cjs && electron tests/library-startup-failure-electron.cjs && electron tests/library-switch-electron.cjs && electron tests/navigation-canvas-electron.cjs && electron tests/paste-smoke-electron.cjs && electron tests/preferences-electron.cjs && electron tests/prototype-electron.cjs && electron tests/reliability-electron.cjs && electron tests/reference-workflow-electron.cjs && electron tests/sidebar-electron.cjs && electron tests/traffic-light-electron.cjs && electron tests/smart-features-electron.cjs && electron tests/smoke-electron.cjs && electron tests/stress-electron.cjs && electron tests/native-macos-electron.cjs && electron tests/ui-audit-electron.cjs && electron tests/video-aspect-electron.cjs",
     "test:perf": "electron tests/infinite-perf-electron.cjs",
     "test:bookmarks": "electron tests/bookmark-workflows-electron.cjs",
     "test:canvas": "electron tests/canvas-electron.cjs && electron tests/canvas-polish-electron.cjs && electron tests/canvas-lifecycle-electron.cjs && electron tests/canvas-viewer-actions-electron.cjs && electron tests/canvas-inspector-electron.cjs && electron tests/canvas-momentum-electron.cjs && electron tests/navigation-canvas-electron.cjs",
@@ -47,9 +47,13 @@
     "build:symbols": "swiftc -module-name CanvasSymbols -module-cache-path /private/tmp/asset-swift-module-cache native/Symbols.swift -o /private/tmp/canvas-symbols && /private/tmp/canvas-symbols src/assets/symbols",
     "shot": "electron tests/library-shot-electron.cjs",
     "test:native": "electron tests/native-macos-electron.cjs",
-    "test:invariants": "node --test tests/invariants.test.cjs"
+    "test:invariants": "node --test tests/invariants.test.cjs",
+    "lint:comments": "node scripts/comment-lint.cjs"
   },
   "devDependencies": {
+    "@ast-grep/lang-swift": "^0.0.8",
+    "@ast-grep/napi": "^0.51.3",
+    "@csstools/css-tokenizer": "^4.0.3",
     "@electron/fuses": "^2.1.3",
     "@huggingface/transformers": "^3.8.1",
     "@jspawn/ghostscript-wasm": "^0.0.2",

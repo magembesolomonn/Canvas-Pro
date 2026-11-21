@@ -1,12 +1,8 @@
-// Isolated integration tests: no user's clipboard or library is modified.
 process.env.ASSET_TEST_MODE='1';
 process.env.AGAGWU_DATA_DIR='/private/tmp/asset-library-upgrade-test-'+Date.now();
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
 const {app,clipboard,ClipboardItem}=require('electron');const {Library}=require('../electron/library.cjs');const {DatabaseSync}=require('node:sqlite');
 require(process.env.ASSET_LIBRARY_MAIN||'../electron/main.cjs');
-// Optional real-library fixture: explicit env override, then the product's
-// Application Support folders (main.cjs uses "Canvas Pro" and still honours
-// the legacy "Asset Library" data directory).
 function realLibraryRoot(){
   const support=path.join(os.homedir(),'Library','Application Support');
   const candidates=process.env.CANVAS_TEST_LIBRARY
@@ -21,7 +17,6 @@ function realLibraryRoot(){
   else console.log('SMOKE_FIXTURE_SKIPPED real-library fixture unavailable (set CANVAS_TEST_LIBRARY to the folder containing library.sqlite); real-library MP4/m4a video/audio assertions disabled.');
   await lib.importFile(path.join(__dirname,'fixtures/test-tone.wav'));
   for(const name of ['Portrait','Square','Landscape']){const result=await lib.importFile(path.join(__dirname,'fixtures',name+'.png'));lib.update(result.imported,{name:name+' study.png'});}
-  // Synthetic metadata reuses one tiny managed image; only this isolated database is populated.
   const tiny=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aPa0AAAAASUVORK5CYII=','base64');
   fs.writeFileSync(path.join(lib.root,'originals','fixture.png'),tiny);
   const insert=lib.db.prepare('INSERT INTO assets(id,name,ext,size,hash,stored,created,imported) VALUES(?,?,?,?,?,?,?,?)');lib.db.exec('BEGIN');for(let i=0;i<10000;i++)insert.run(crypto.randomUUID(),'Performance fixture '+i+'.png','png',tiny.length,'fixture-'+i,'originals/fixture.png','2020-01-01','2020-01-01');lib.db.exec('COMMIT');lib.close();
@@ -34,9 +29,6 @@ function realLibraryRoot(){
   console.log('GALLERY',JSON.stringify(perf));
   if(perf.mounted>100)throw new Error('Gallery did not virtualize');
   const previewLayout=await evalJS(`(async()=>{setView('all');const a=assets.find(a=>a.name==='Portrait study.png');select(a.id);openPreview();const image=$('#preview-content img');if(!image.naturalWidth)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Photo preview did not load within eight seconds')),8000);image.addEventListener('load',()=>{clearTimeout(timer);resolve();},{once:true});});const wait=ms=>new Promise(r=>setTimeout(r,ms));
-// The preview reveals from its trigger, so its boxes move for a few frames
-// after the image loads. Wait for the footer to stop moving before measuring,
-// otherwise "footerBelow" is a coin flip.
 let lastFooter=null;
 for(let i=0;i<80;i++){
  await wait(25);
@@ -81,7 +73,6 @@ const previous=$('#previous').getBoundingClientRect(),counter=$('#preview-index'
   if(audio){const result=await evalJS(`(async()=>{select('${audio}');openPreview();const info=await window.library.mediaInfo('${audio}',true);return {duration:info.duration,peaks:info.peaks?.length,artwork:info.artwork,playing:!previewPlayer.media.paused,controls:!!document.querySelector('.full-player .seek'),nativeControls:previewPlayer.media.controls};})()`);console.log('AUDIO',JSON.stringify(result));if(result.peaks!==512)throw new Error('Audio waveform was not generated');await evalJS('closePreview()');}
   await evalJS("setView('audio')");
   const hover=await evalJS(`(async()=>{const card=document.querySelector('.card');card.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));await new Promise(resolve=>setTimeout(resolve,400));const playing=!!hoverPlayer&&!hoverPlayer.media.paused;card.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));return {playing,released:hoverPlayer===null};})()`);console.log('HOVER',JSON.stringify(hover));if(!hover.playing||!hover.released)throw new Error('Hover playback failed');await new Promise(resolve=>setTimeout(resolve,1000));
-  // Artwork-specific hover checks require an M4A fixture; the WAV fallback is covered below.
   if(audio){const audioSpace=await evalJS(`(async()=>{
     const card=document.querySelector('.card[data-id="${audio}"]');card.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
     await new Promise(r=>setTimeout(r,250));
@@ -109,7 +100,6 @@ const previous=$('#previous').getBoundingClientRect(),counter=$('#preview-index'
     $('#search').focus();const searchOutline=getComputedStyle($('#search')).outlineStyle;
     return {waveHeight,fallbackVisible,inspectorFallback,inspectorArtwork,naturalRatio,dimensions,searchOutline};
   })()`);console.log('PREVIEW_POLISH',JSON.stringify(polish));
-  // The full audio player uses a tall centred waveform; compact cards stay short.
   if(polish.waveHeight>200||!polish.fallbackVisible||!polish.inspectorFallback||!polish.inspectorArtwork||!polish.naturalRatio||!/^\d+ × \d+$/.test(polish.dimensions)||polish.searchOutline!=='none')throw new Error('Audio, inspector, dimensions or search styling regression');
   await evalJS(`setView('all');const fixture=assets.find(a=>a.ext==='wav');select(fixture.id);openPreview()`);
 

@@ -6,7 +6,6 @@ function renderImportActivity(jobs=importJobs){
  importJobs=jobs;const active=jobs.filter(j=>['queued','running','cancelling'].includes(j.state)).length;
  if(!$('#activity-dialog').open)return;
  const list=$('#import-jobs');
- // FLIP: remember where each existing row was before the list is reordered.
  const animateOrder=matchMedia('(prefers-reduced-motion: no-preference)').matches;
  const firstTops=new Map();
  if(animateOrder)for(const card of list.children)firstTops.set(card,card.getBoundingClientRect().top);
@@ -35,7 +34,6 @@ function renderImportActivity(jobs=importJobs){
   const current=list.children[index];
   if(current!==card)list.insertBefore(card,current||null);
  }
- // Animate surviving rows from their old positions to the new ones.
  if(animateOrder)for(const card of list.children){
   const first=firstTops.get(card);
   if(first===undefined)continue;
@@ -69,7 +67,7 @@ function renderHealth(state=latestHealth){
 function initReliabilityUI(){
  SettingsUI.init();
  $('#show-settings .settings-icon').append(glyph('settings'));
- $('#show-settings').onclick=()=>{stopHover();SettingsUI.open();safe(async()=>{const info=await api.libraryLocation();$('#current-library-name').textContent=info.name;$('#current-library-path').textContent=info.root;});};
+ $('#show-settings').onclick=()=>{stopHover();SettingsUI.open();};
  $('#new-library').onclick=()=>safe(()=>api.switchLibrary('new'));$('#open-library').onclick=()=>safe(()=>api.switchLibrary('open'));
  $('#settings-close').onclick=()=>$('#settings-dialog').close();
  $('#activity-close').onclick=()=>$('#activity-dialog').close();

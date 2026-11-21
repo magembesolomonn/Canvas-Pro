@@ -24,9 +24,6 @@ const plist = path.join(output, 'Contents/Info.plist');
 for (const [key, value] of Object.entries({CFBundleIconFile:'AssetLibrary.icns',CFBundleName:'Canvas Pro',CFBundleDisplayName:'Canvas Pro',CFBundleIdentifier:'local.assetlibrary.desktop',CFBundleShortVersionString:pkg.version,CFBundleVersion:'1'})) {
   execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} ${value}`, plist]);
 }
-// Record what went into this bundle so packaging can prove the native helpers
-// came from the current source tree. Ad-hoc signing changes helper bytes, so a
-// plain source-vs-dist byte comparison is not meaningful.
 const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const helpers = ['media-tool','analysis-tool','text-tool','symbols-tool'];
 const nativeManifest = {};

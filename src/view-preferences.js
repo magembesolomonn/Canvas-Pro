@@ -15,7 +15,7 @@ function setShowFileNames(show){
  renderWindow();
 }
 function setGalleryLayout(mode){
- if(!['masonry','waterfall','justified'].includes(mode))return;
+ if(!['masonry','waterfall','justified','list'].includes(mode))return;
  const gallery=$('#gallery'),anchor=layout?AssetLayout.anchorAt(layout,gallery.scrollTop,gallery.clientHeight):null;
  stopHover();galleryLayout=mode;localStorage.setItem('gallery-layout',mode);document.body.dataset.layout=mode;
  for(const option of document.querySelectorAll('#view-menu [data-view-layout]'))option.setAttribute('aria-checked',String(option.dataset.viewLayout===mode));
@@ -26,9 +26,9 @@ function applyAppearance(state){
  document.body.classList.toggle('light-mode',state.dark===false);document.documentElement.style.colorScheme=state.dark===false?'light':'dark';
 }
 function initViewPreferences(){
- const saved=localStorage.getItem('gallery-layout');galleryLayout=['masonry','waterfall','justified'].includes(saved)?saved:'masonry';document.body.dataset.layout=galleryLayout;
+ const saved=localStorage.getItem('gallery-layout');galleryLayout=['masonry','waterfall','justified','list'].includes(saved)?saved:'masonry';document.body.dataset.layout=galleryLayout;
  applyFileNamesPreference();
- const savedSort=localStorage.getItem('sort-order');if(['new','old','name','size'].includes(savedSort))$('#sort').value=savedSort;
+ const savedSort=localStorage.getItem('sort-order');if(['new','old','name','name-desc','size','size-asc','kind','rating'].includes(savedSort))$('#sort').value=savedSort;
  const menu=$('#view-menu'),button=$('#view-menu-button'),options=[...menu.querySelectorAll('[data-view-layout]')];
  for(const option of options){option.setAttribute('aria-checked',String(option.dataset.viewLayout===galleryLayout));option.onclick=()=>{setGalleryLayout(option.dataset.viewLayout);menu.hidePopover();button.focus({preventScroll:true});};}
  function positionMenu(){if(!menu.matches(':popover-open'))return;const rect=button.getBoundingClientRect();menu.style.top=(rect.bottom+8)+'px';menu.style.left=Math.max(8,Math.min(innerWidth-menu.offsetWidth-8,rect.right-menu.offsetWidth))+'px';}
@@ -48,10 +48,6 @@ function initViewPreferences(){
   }
   pointerOpening = false;
  });
- // Arrow navigation is owned by the generic popover handler in app.js so it
- // works uniformly across every menu item. This listener only handles the
- // keys unique to this menu and stops them reaching the document; it must not
- // stop propagation to the app.js listener on this same element.
  menu.addEventListener('keydown',event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();menu.hidePopover();button.focus();}else if(event.key==='Enter'||event.code==='Space'){event.preventDefault();document.activeElement.click();}});
  menu.addEventListener('focusout',()=>requestAnimationFrame(()=>{if(menu.matches(':popover-open')&&!menu.contains(document.activeElement)&&document.activeElement!==button)menu.hidePopover();}));
  addEventListener('resize',positionMenu);

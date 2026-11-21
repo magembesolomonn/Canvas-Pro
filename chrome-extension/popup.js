@@ -5,8 +5,6 @@ const TOAST_GLYPHS = { success: '✓', error: '!', info: 'i' };
 const TOAST_TITLES = { success: 'Saved', error: 'Something went wrong', info: 'Canvas Pro' };
 const MAX_TOASTS = 3;
 const recentToasts = new Map();
-// The same failure can arrive twice: once from the capture record and once
-// from the request that started it. Only one card is shown.
 function toastKey(options, message) {
   return `${options.title || TOAST_TITLES[options.type || 'info']}|${String(message ?? '')}`;
 }
@@ -18,8 +16,6 @@ function alreadyShown(key) {
   return false;
 }
 
-// A toast is a small status card with an icon, a title, an optional detail and
-// an optional remaining-time bar. Duration 0 keeps it until dismissed.
 function toast(message, options = {}) {
   const stack = $('#toasts');
   if (!stack) return { dismiss() {} };
@@ -115,6 +111,16 @@ function hint(text, error = false) {
   status.classList.toggle('error', error);
 }
 
+function revealCapture(jobId,title) {
+  const button=$('#reveal-capture');
+  button.hidden=!jobId;
+  button.textContent=title?'Show “'+title+'” in Canvas Pro':'Show in Canvas Pro';
+  button.onclick=async()=>{
+    try{await send({type:'reveal-capture',jobId});window.close();}
+    catch(error){hint(error.message,true);}
+  };
+}
+
 function setConnection(state, text) {
   const connection = $('#connection');
   connection.textContent = text;
@@ -145,7 +151,7 @@ function captureSummary(result) {
     };
   }
   if (result.count !== undefined) {
-    return { type: 'info', title: 'Media found', message: `${result.count} images found` };
+    return { type: 'info', title: 'Media found', message: `${result.count} media item${result.count === 1 ? '' : 's'} found` };
   }
   return { type: 'success', title: 'Saved to Canvas Pro', message: 'Capture added to your library.' };
 }
@@ -163,6 +169,7 @@ document.querySelectorAll('[data-action]').forEach(button => {
         await chrome.sidePanel.open({ tabId });
       }
       pending = toast(`${label}…`, { type: 'info', title: 'Working', duration: 0 });
+      const destination = $('#folder').selectedOptions[0]?.textContent || 'All files';
       const promise = send({ type: 'action', action, tabId });
       if (action === 'region') {
         await promise;
@@ -171,9 +178,11 @@ document.querySelectorAll('[data-action]').forEach(button => {
       }
       const result = await promise;
       pending.dismiss();
+      const saved=result.results?.find(item=>item.id);
+      if(saved)revealCapture(result.id,saved.title);
       const summary = captureSummary(result);
-      toast(summary.message, { type: summary.type, title: summary.title });
-      if (action === 'fullpage') hint('Full page saved to Canvas Pro.');
+      toast(summary.message, { type: summary.type, title: result.imported > 0 ? 'Saved to '+destination : summary.title });
+      if (action === 'fullpage' && !result.errors?.length) hint(result.partialLabel || 'Full page saved to Canvas Pro.');
     } catch (error) {
       pending?.dismiss();
       hint(error.message, true);
@@ -225,8 +234,6 @@ if (globalThis.chrome?.storage?.onChanged) {
     if (area !== 'session' || !changes.lastCapture) return;
     const job = changes.lastCapture.newValue;
     if (!job) return;
-    // The popup keeps one plain status line. The capture itself reports on
-    // the page, so no card is left behind here.
     if (job.state === 'running') {
       hint(`Saving ${job.done || 0} of ${job.total || 1}…`);
       return;
@@ -257,9 +264,6 @@ if (globalThis.chrome?.storage?.onChanged) {
   } catch {}
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
-  // Opening the popup grants access to the page behind it. That is the moment
-  // a tab which was already open when the extension was updated can receive
-  // the current scripts, so Alt+click and drag-and-drop work there again.
   if (tabId) chrome.runtime.sendMessage({ type: 'reinject-quick-save', tabId }).catch(() => {});
   const { folder } = await chrome.storage.local.get('folder');
   const watch = (await chrome.storage.session.get(`media-watch:${tabId}`))[`media-watch:${tabId}`];
@@ -283,6 +287,8 @@ if (globalThis.chrome?.storage?.onChanged) {
   }
 
   const { lastCapture } = await chrome.storage.session.get('lastCapture');
+  const saved=lastCapture?.results?.find(item=>item.id);
+  if(saved&&lastCapture.jobId)revealCapture(lastCapture.jobId,saved.title);
   if (lastCapture && lastCapture.state === 'failed') {
     const message = lastCapture.errors?.[0] || 'Last capture failed';
     hint(message, true);

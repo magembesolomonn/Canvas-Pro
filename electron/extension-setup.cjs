@@ -47,7 +47,6 @@ function installExtension({ appPath = '/Applications/Canvas Pro.app', extensionS
     'export CANVAS_APP_PATH="$app"\n' +
     'exec "$app/Contents/MacOS/Electron" "$app/Contents/Resources/app/electron/native-host.cjs" "$@"\n', 0o755);
   const host = { name: 'com.canvaspro.capture', description: 'Canvas Pro local capture bridge', path: launcher, type: 'stdio', allowed_origins: ['chrome-extension://' + id + '/'] };
-  // Registration can precede Chrome installation. No browser preferences are edited.
   const directories = ['Google/Chrome', 'net.imput.helium'].map(browser =>
     path.join(homeDirectory, 'Library/Application Support', browser, 'NativeMessagingHosts'));
   const installed = [], failures = [];

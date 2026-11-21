@@ -1,6 +1,3 @@
-// Regression: the macOS traffic lights must never cover the show-sidebar
-// button or the Library wordmark, and a live resize must not leave the app
-// chrome animating while Chromium is catching up with the window.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { app } = require('electron');
@@ -16,7 +13,6 @@ async function until(check, label) {
   throw Error(label + ' timed out');
 }
 const toolbar = "(()=>{const bar=$('.filter-bar.library-header');const t=$('#view-title').getBoundingClientRect();const s=$('#show-sidebar').getBoundingClientRect();return {pad:parseFloat(getComputedStyle(bar).paddingLeft),title:t.left,show:s.left,showVisible:getComputedStyle($('#show-sidebar')).display!=='none'};})()";
-// trafficLightPosition is y=22 with a ~12px button, so its centre is y=28.
 const toggleCentre = selector => run(`(()=>{const r=$('${selector}').getBoundingClientRect();return r.top+r.height/2;})()`);
 async function assertAligned(selector, label) {
   const y = await toggleCentre(selector);
@@ -30,8 +26,6 @@ async function assertAligned(selector, label) {
   if (win.webContents.isLoading()) await new Promise(resolve => win.webContents.once('did-finish-load', resolve));
   await until(() => run("!!$('#view-title') && !!$('#show-sidebar')"), 'startup');
 
-  // Wide window: the sidebar occupies the traffic-light band, so the toolbar
-  // can keep its normal inset.
   win.setSize(1440, 900);
   await pause(250);
   const wide = await run(toolbar);
@@ -41,8 +35,6 @@ async function assertAligned(selector, label) {
   await pause(250);
   await assertAligned('#toggle-sidebar', 'large');
 
-  // Hiding the sidebar at any width hands the top-left corner to the toolbar;
-  // it has to start after the traffic lights.
   await run("document.body.classList.add('hide-sidebar')");
   await pause(250);
   const compact = await run(toolbar);
@@ -53,7 +45,6 @@ async function assertAligned(selector, label) {
   await run("document.body.classList.remove('hide-sidebar')");
   await pause(250);
 
-  // Narrow window: the sidebar is a drawer, so the same safe area applies.
   win.setSize(900, 700);
   await until(() => run("matchMedia('(max-width:1040px)').matches"), 'narrow media query');
   await pause(250);
@@ -69,7 +60,6 @@ async function assertAligned(selector, label) {
   await run("document.body.classList.remove('sidebar-drawer-open')");
   await pause(250);
 
-  // A resize marks the window while events are arriving, then settles.
   win.setSize(1100, 720);
   await pause(30);
   assert.equal(await run("document.body.classList.contains('resizing')"), true, 'Resize state should be active during a drag');

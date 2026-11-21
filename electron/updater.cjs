@@ -1,7 +1,3 @@
-// Canvas Pro updates: find the newest public release on GitHub, download the
-// signed DMG and its checksum, verify both, then hand the app bundle swap to a
-// detached helper that runs after this process exits. Nothing here touches the
-// library; only the .app bundle is replaced.
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');

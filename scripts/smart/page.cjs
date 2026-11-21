@@ -3,10 +3,6 @@ const {parseHTML}=require('linkedom');
 const {Readability}=require('@mozilla/readability');
 const text=value=>typeof value==='string'?value.replace(/\s+/g,' ').trim().slice(0,4000):'';
 const name=value=>typeof value==='string'?text(value):Array.isArray(value)?value.map(name).filter(Boolean).join(', '):text(value?.name||'');
-// Recipe JSON-LD nests steps inside HowToSection and writes ingredients as
-// either strings or objects. A flat map loses the nested ones, so both shapes
-// are walked in document order. Newline-joined blobs are split only on lines,
-// where the separation is unambiguous.
 function recipeValues(value){
   const out=[];
   const add=item=>{
@@ -25,8 +21,6 @@ function recipeValues(value){
   add(value);
   return out;
 }
-// Schema durations are ISO 8601, but recipe microdata often prints "45 mins".
-// Both are normalised to ISO so the card has one formatter.
 function isoDuration(value){
   const raw=text(value);
   if(!raw)return '';
@@ -42,8 +36,6 @@ const ingredientSelectors=['[itemprop="recipeIngredient"]','[itemprop="ingredien
 const methodSelectors=['[itemprop="recipeInstructions"]','.recipe-instructions','[class*="recipe-instructions"]','.recipe-method','[class*="recipe-method"]','[class*="instructions"]'];
 function domRecipe(document,resolve){
   const selector=ingredientSelectors.join(',');
-  // A wrapper like .recipe-ingredients also matches the class rule; its text
-  // would swallow every ingredient into one line. Keep only leaf entries.
   const roots=[...new Set([...document.querySelectorAll(selector)])].filter(node=>!node.querySelector(selector));
   const ingredients=[];
   for(const node of roots){
@@ -56,7 +48,6 @@ function domRecipe(document,resolve){
   for(const method of methods){
     const steps=[...method.querySelectorAll('li,[itemprop="text"],p')];
     for(const step of steps){
-      // A nested paragraph inside a step is the same step, not another one.
       if(step.querySelector('li,[itemprop="text"],p'))continue;
       const value=text(step.getAttribute('content')||step.textContent)
         .replace(/^\s*(?:step\s*)?\d+\s*[.):-]\s*/i,'')
@@ -153,9 +144,6 @@ function readerBlocks(root,resolve){
  return blocks;
 }
 function analyzePage(html,url){
- // An anti-bot interstitial is tiny and full of block copy. Parsing it would
- // produce a one-word title and then look like a real (empty) page. Say what
- // happened instead so the card can offer a retry.
  if(typeof html==='string'&&html.length<2048&&/(?:access denied|just a moment|attention required|enable javascript|captcha)/i.test(html)){
   let site='';try{site=new URL(url).hostname.replace(/^www\./,'');}catch{}
   return {type:'webpage',title:'',description:'',imageURL:'',author:'',site,details:{},tags:[],state:'fallback',error:'site blocked automatic preview',trace:html.slice(0,200)};
@@ -173,8 +161,6 @@ function analyzePage(html,url){
  const ogBook=/^(?:books?)(?:\.|$)/i.test(meta['og:type']||'')||meta['book:isbn']||meta['books:isbn'];
  const isBook=o=>[].concat(o['@type']).includes('Book');
  const isFilm=o=>[].concat(o['@type']).some(t=>['Movie','TVSeries','TVEpisode'].includes(t));
- // A recipe page often carries WebPage/Article objects alongside the Recipe.
- // The one with actual ingredients or steps is the card the reader wants.
  const isRecipe=o=>[].concat(o['@type']).includes('Recipe');
  const recipeObject=objects.find(o=>isRecipe(o)&&(recipeValues(o.recipeIngredient).length||recipeValues(o.recipeInstructions).length));
  const obj=objects.find(isBook)||(['movie','series'].includes(platform)&&objects.find(isFilm))||recipeObject||objects.find(o=>[].concat(o['@type']).some(t=>typeMap[t]))||{},schemaType=[].concat(obj['@type']||'').find(t=>typeMap[t]);
@@ -212,8 +198,6 @@ function analyzePage(html,url){
  if(type==='recipe'){
   let ingredients=recipeValues(obj.recipeIngredient).slice(0,100);
   let instructions=recipeValues(obj.recipeInstructions).slice(0,100);
-  // Some sites publish Recipe metadata without the actual lists, or publish
-  // one half only. The visible microdata fills the gap.
   const fallback=ingredients.length&&instructions.length?null:domRecipe(document,resolve);
   if(fallback){
    if(!ingredients.length)ingredients=fallback.ingredients;
@@ -229,9 +213,6 @@ function analyzePage(html,url){
   d.ingredients=ingredients;
   d.instructions=instructions;
  }else if(!['book','movie','series'].includes(type)){
-  // The rest of the recipe web: no Recipe JSON-LD, but markup with recipe
-  // microdata. Only a page that actually yields a list becomes a recipe card;
-  // a page that merely says "recipe" stays an article.
   const structured=document.querySelector('[itemtype*="schema.org/Recipe"]');
   const hasIngredients=document.querySelector(ingredientSelectors.join(','));
   const hasMethod=document.querySelector(methodSelectors.join(','));
@@ -239,7 +220,6 @@ function analyzePage(html,url){
    const fallback=domRecipe(document,resolve);
    if(fallback){
     type='recipe';
-    // The page's own headline beats a <title> suffix like " | Site".
     if(fallback.title)result.title=fallback.title;
     if(!result.description)result.description=fallback.description;
     if(!result.imageURL)result.imageURL=fallback.imageURL;
@@ -252,12 +232,9 @@ function analyzePage(html,url){
    }
   }
  }
- // The DOM fallback can promote a page to a recipe after the result object was
- // built from the JSON-LD type.
  result.type=type;
  const categories={movie:['movie','film','cinema'],series:['series','tv show','television'],book:['book','reading'],album:['album','music'],song:['song','music','track'],playlist:['playlist','music'],article:['article','reading'],recipe:['recipe','food','cooking'],product:['product','shopping'],social:['social','post'],video:['video']};result.tags=[...new Set([...(categories[type]||[]),...name(obj.genre).split(',').map(t=>t.trim().toLowerCase()).filter(Boolean)])];
  let article,readerRoot;
- // Shopping lookbooks use a feature grid whose lead and product grouping Readability strips.
  const feature=document.querySelector('main');
  const packages=feature?.querySelector('.multi-packages');
  const productSelector='[class*="UnifiedProductCardWrapper-"]';

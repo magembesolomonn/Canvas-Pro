@@ -1,8 +1,3 @@
-// Performance regression coverage for the virtualised infinite wall.
-// The wall used to materialise every item nine times (45,000 DOM nodes for a
-// 5,000-item library), which made wheel frames take ~100 ms and selection
-// ~18 ms. These thresholds are deliberately generous enough for CI jitter but
-// still fail hard if the wall stops virtualising or selection rescans the DOM.
 process.env.ASSET_TEST_MODE = '1';
 process.env.AGAGWU_DATA_DIR = '/private/tmp/canvas-infinite-perf-' + Date.now();
 const path = require('node:path'), fs = require('node:fs'), crypto = require('node:crypto');

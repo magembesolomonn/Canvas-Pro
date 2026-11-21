@@ -1,5 +1,3 @@
-// A library that cannot be opened must say so. Before this, a throw while
-// starting up ended the process with no message at all.
 process.env.ASSET_TEST_MODE='1';
 process.env.AGAGWU_DATA_DIR='/private/tmp/canvas-startup-failure-'+Date.now();
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
@@ -8,7 +6,6 @@ const seen=[];
 dialog.showErrorBox=(title,content)=>{seen.push({title,content});};
 const realExit=app.exit.bind(app);
 app.exit=code=>{seen.push({exit:code});};
-// A database that is not a database: the library cannot be opened.
 const library=path.join(process.env.AGAGWU_DATA_DIR,'Library');
 fs.mkdirSync(library,{recursive:true});
 fs.writeFileSync(path.join(library,'library.sqlite'),'this is not a database');

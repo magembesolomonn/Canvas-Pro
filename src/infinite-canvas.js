@@ -1,20 +1,8 @@
-// The infinite view is a justified wall of items that wraps on both axes, so
-// there is no edge to reach. The navigation panels stay above it: items pass
-// behind them while panning. Motion is 1:1 with the pointer or trackpad and
-// coasts briefly when released, like a native scroll view.
-//
-// Only the rows near the viewport are materialised. The wall's geometry is a
-// pure function of `assets` and the viewport, so the rest of the tiling (three
-// pages, measured row pitch, wrapped offsets) is kept as data and row DOM is
-// mounted or recycled as the view moves. A 5,000-item library used to create
-// 45,000 nodes; it now keeps a few hundred at any time.
 const InfiniteCanvas=(()=>{
   const MIN_ZOOM=0.45, MAX_ZOOM=2.6;
   const ROW_PITCH=172, ROW_GAP=3, OVERSCAN=320;
   let root=null,strip=null,pages=[],rowModels=[],layoutCache=[];
   let active=false,pageWidth=1000,sourceHeight=0,groups=1,hasBuilt=false;
-  // Offsets are measured in screen pixels. paint() wraps them by the scaled
-  // page size, which keeps drag and trackpad motion exactly 1:1 at every zoom.
   let offsetX=0,offsetY=0,zoom=1,dragging=false,dragStart=null,lastMove=null,moved=false,samples=[];
   let momentumFrame=0,paintFrame=0,vx=0,vy=0;
   let returnView='all',builtFor='',returnState=null,resizeTimer=0;
@@ -24,8 +12,6 @@ const InfiniteCanvas=(()=>{
 
   const mod=(value,span)=>((value%span)+span)%span;
   const clampZoom=value=>Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,value));
-   // A fling follows the speed of the last ~90 ms, not the whole drag: using
-   // total displacement made even a slow 100 px drag coast over 1000 px.
    const releaseVelocity=(points,axis)=>{
     if(!points||points.length<2)return 0;
     const last=points.at(-1),first=points.find(point=>last.time-point.time<=90)||points[0];
@@ -40,9 +26,6 @@ const InfiniteCanvas=(()=>{
    let row=[],total=0;
    const flush=()=>{
     if(!row.length)return;
-    // Scale the row to fill the page exactly, which is what makes it justified.
-    // The 3px gaps are part of the page width, otherwise neighbouring pages
-    // would overlap by the total gap width.
     const gaps=(row.length-1)*ROW_GAP;
     const scale=Math.max(0,(pageWidth-gaps))/total;
     const model=[];
@@ -95,7 +78,14 @@ const InfiniteCanvas=(()=>{
     node.setAttribute('aria-label',asset.name);
     node.title=asset.name;
     markSelection(node,asset.id);
-    node.append(thumb(asset,'infinite-thumb'));
+    const image=thumb(asset,'infinite-thumb',false,'eager');
+    node.classList.add('awaiting-thumbnail');
+    const showThumbnail=()=>node.classList.remove('awaiting-thumbnail');
+    image.addEventListener('error',showThumbnail,{once:true});
+    image.decode().then(showThumbnail,()=>{
+     if(image.complete&&!image.naturalWidth)showThumbnail();
+    });
+    node.append(image);
     if(showFileNamesEnabled())node.append(el('span','infinite-name',asset.name));
     row.append(node);
     indexNode(asset.id,node);
@@ -118,12 +108,9 @@ const InfiniteCanvas=(()=>{
 
   function build(){
    if(!root||!strip)return;
-   // Rebuilding while more of the library loads must not teleport the wall:
-   // keep the same fraction of the old and new scaled tiling.
    const oldSpanX=pageWidth*zoom,oldSpanY=Math.max(1,sourceHeight)*zoom;
    const fx=oldSpanX?offsetX/oldSpanX:0,fy=oldSpanY?offsetY/oldSpanY:0;
    clearRows();
-   // Wide enough that three pages cover the window even at the smallest zoom.
    pageWidth=Math.max(innerWidth/MIN_ZOOM+4,900);
    buildModels();
    groups=2+Math.max(1,Math.ceil(innerHeight/Math.max(1,sourceHeight*MIN_ZOOM)));
@@ -133,8 +120,6 @@ const InfiniteCanvas=(()=>{
    for(const at of [-pageWidth,0,pageWidth]){
     const page=el('div','infinite-page');
     page.style.transform=`translateX(${at}px)`;
-    // Rows are absolutely positioned, so the page needs an explicit width to
-    // keep its bounding box (and the seamless tiling) at every zoom.
     page.style.width=pageWidth+'px';
     page.style.height=(groups*sourceHeight)+'px';
     strip.append(page);pages.push(page);
@@ -145,8 +130,6 @@ const InfiniteCanvas=(()=>{
    focusSnapshot=typeof selected!=='undefined'?selected:null;
    paint();
   }
-  // A cheap composite signature. Joining thousands of ids into one huge string
-  // on every view switch used to dominate the cost of entering the wall.
   function itemsSignature(){
    const n=assets.length;
    let trashed=0;
@@ -159,8 +142,6 @@ const InfiniteCanvas=(()=>{
    const spanX=Math.max(1,pageWidth*zoom),spanY=Math.max(1,sourceHeight*zoom);
    const wrapX=mod(offsetX,spanX),wrapY=mod(offsetY,spanY);
    strip.style.transform=`translate3d(${-wrapX}px, ${-(sourceHeight*zoom+wrapY)}px, 0) scale(${zoom})`;
-   // Mount only rows whose screen rectangle can be seen. All three pages keep
-   // the same rows so the tiling stays seamless at every wrapped position.
    const want=new Set();
    const rowHeight=ROW_PITCH*zoom;
    const base=-sourceHeight*zoom-wrapY;
@@ -194,9 +175,6 @@ const InfiniteCanvas=(()=>{
    if(!root)init();
    root.hidden=!active;
    document.body.classList.toggle('infinite-mode',active);
-   // The gallery is hidden behind the wall but stays in the accessibility tree.
-   // Sync it whenever the mode changes so leaving the wall restores the library
-   // instead of leaving it inert (and unclickable) afterwards.
    if(typeof SidebarUI!=='undefined')SidebarUI.syncAccessibility();
    if(!active){clearTimeout(resizeTimer);stopMomentum();cancelPaint();dragging=false;dragStart=null;root.classList.remove('dragging');clearRows();}
    if(active&&builtFor!==itemsSignature())build();
@@ -254,8 +232,6 @@ const InfiniteCanvas=(()=>{
     if(score<bestScore){bestScore=score;best=node;}
    }
    if(!best)return;
-   // Keyboard navigation centres an item that moved off-screen; returning from
-   // the viewer must not shift the wall beyond the exact restore.
    const r=best.getBoundingClientRect();
    const margin=16;
    if(center&&(r.left<margin||r.right>innerWidth-margin||r.top<margin||r.bottom>innerHeight-margin)){
@@ -265,15 +241,9 @@ const InfiniteCanvas=(()=>{
    }
    best.focus({preventScroll:true});
   }
-  // Arrow-key navigation follows the wall layout rather than the hidden
-  // gallery: lateral keys walk a row, vertical keys pick the nearest column in
-  // the neighbouring row. The layout is cached when the wall is built.
   function wallLayout(){return layoutCache;}
   function moveSelection(direction){
    if(!layoutCache.length)return null;
-   // The global key handler passes KeyboardEvent.key ("ArrowRight"); other
-   // callers may use the short form. Accept both so horizontal arrows really
-   // walk the row instead of falling through to the vertical branch.
    const dir=String(direction).startsWith('Arrow')?String(direction).slice(5).toLowerCase():direction;
    const layout=wallLayout();
    const currentId=typeof selected!=='undefined'?selected:null;
@@ -311,8 +281,6 @@ const InfiniteCanvas=(()=>{
    offsetX=state.offsetX;
    offsetY=state.offsetY;
    paint();
-   // If the opened item is still on screen, leave the wall exactly where it
-   // was. Only nudge it back when it drifted out of view.
    const rect=bestRect(state.id);
    if(!rect)return;
    const margin=24;
@@ -323,8 +291,6 @@ const InfiniteCanvas=(()=>{
    paint();
   }
 
-  // Zoom around a screen point, keeping whatever is under it in place. The
-  // same helper serves ctrl/pinch wheel and the keyboard zoom shortcuts.
   function zoomTo(next,clientX,clientY){
    next=clampZoom(next);
    if(next===zoom)return;
@@ -355,8 +321,6 @@ const InfiniteCanvas=(()=>{
 
    stage.addEventListener('pointerdown',e=>{
     if(e.button!==0)return;
-    // Thumbnails are plain images; without this a real mouse drag starts the
-    // browser's native image drag and the wall stops receiving pointer moves.
     e.preventDefault();
     stopMomentum();
     dragStart={x:e.clientX,y:e.clientY,offsetX,offsetY,item:e.target.closest?.('.infinite-item')};
@@ -372,7 +336,6 @@ const InfiniteCanvas=(()=>{
      samples.push({time:now,x:e.clientX,y:e.clientY});
      while(samples.length>2&&now-samples[0].time>90)samples.shift();
      lastMove={dx,dy,at:now};
-    // Both axes are screen pixels: the transform translates in screen space.
     offsetX=dragStart.offsetX-dx;
     offsetY=dragStart.offsetY-dy;
     paint();
@@ -385,8 +348,6 @@ const InfiniteCanvas=(()=>{
     if(moved&&lastMove&&performance.now()-lastMove.at<120)
      pushMomentum(-projectMomentum(releaseVelocity(samples,'x')),-projectMomentum(releaseVelocity(samples,'y')));
     else if(!moved&&dragStart?.item){
-     // A click only picks the item. Opening is a deliberate double-click or
-     // Space, exactly as it is in the library grid.
      select(dragStart.item.dataset.id);
     }
     dragStart=null;
@@ -401,9 +362,6 @@ const InfiniteCanvas=(()=>{
     select(item.dataset.id);
     openPreview(scope());
    });
-   // Capture can be lost when a native drag or another window takes the
-   // pointer. The window fallback releases the wall instead of leaving it
-   // stuck in the dragging state.
    addEventListener('pointerup',endDrag);
    addEventListener('pointercancel',endDrag);
    stage.addEventListener('contextmenu',e=>{
@@ -427,9 +385,6 @@ const InfiniteCanvas=(()=>{
      requestPaint();
     }
    },{passive:false});
-   // Resizing fires continuously while the window is dragged. Rebuilding the
-   // tiling re-creates rows, so wait until the drag settles instead of doing
-   // it on every frame.
    addEventListener('resize',()=>{
     if(!active)return;
     clearTimeout(resizeTimer);
@@ -438,8 +393,6 @@ const InfiniteCanvas=(()=>{
   }
 
   return {init,show,toggle,start,exit,scope,rememberPreview,restorePreview,syncSelection,focusSelected,moveSelection,
-   // Geometry data for tests and diagnostics: DOM rows are virtualised, so the
-   // stable model is exposed here instead of being inferred from mounted nodes.
    model(){return {rows:rowModels.length,pitch:ROW_PITCH,pageWidth,sourceHeight,groups,pageHeight:groups*sourceHeight,period:rowModels.length,mounted:mountedRows.size,effectiveRows:groups*rowModels.length};},
    zoomBy(factor,reset=false){if(!active)return;zoomTo(reset?1:zoom*factor,innerWidth/2,innerHeight/2);},get active(){return active;},get returnView(){return returnView;},get state(){return {offsetX,offsetY,zoom,pageWidth,sourceHeight};}};
  })();

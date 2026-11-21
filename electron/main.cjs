@@ -57,9 +57,6 @@ function closeFloating(){
  floatingWindow=null;
 }
 let pendingLibrarySwitch=null;
-// Files dropped on the Dock icon, or opened with Canvas Pro from Finder, arrive
-// as open-file events. They are collected until the library is ready, then
-// imported, so a drop during launch is not lost.
 const pendingOpenFiles=[];
 let openFilesReady=false;
 function drainOpenFiles(){
@@ -76,6 +73,7 @@ function flushWorkspaces(){if(!canvasDirty||!win||win.isDestroyed())return Promi
 app.on('second-instance',()=>{if(app.isReady())ensureWindow();});
 const thumbPending = new Map();
 const thumbnailMisses = new Set();
+const dimensionPending = new Set();
 let thumbnailActive = 0;
 const thumbnailQueue = [];
 let visibleThumbnails=null;
@@ -143,6 +141,28 @@ async function generateCompactThumbnail(file,base,ext){
     await fs.promises.rm(temp,{force:true}).catch(()=>{});
   }
 }
+async function rememberDimensions(id,file){
+  if(dimensionPending.has(id))return null;
+  dimensionPending.add(id);
+  try{
+    const {stdout}=await run('/usr/bin/sips',['-g','pixelWidth','-g','pixelHeight',file],{timeout:15000,maxBuffer:1024*1024});
+    const width=Number((/pixelWidth:\s*(\d+)/i.exec(stdout)||[])[1]);
+    const height=Number((/pixelHeight:\s*(\d+)/i.exec(stdout)||[])[1]);
+    if(width>0&&height>0){library.setDimensions(id,width,height);return {width,height};}
+  }catch{  }
+  finally{dimensionPending.delete(id);}
+  return null;
+}
+async function rememberImportDimensions(ids){
+  for(const id of ids||[]){
+    try{
+      const asset=library.asset(id);
+      if(asset.width&&asset.height)continue;
+      if(!rasterThumbnail.test(asset.ext))continue;
+      await rememberDimensions(id,library.file(id));
+    }catch{  }
+  }
+}
 async function thumbnail(id,full=false,gallery=false,detail=null) {
   if(library.deleting.has(id))return null;
   const {ext}=library.asset(id);
@@ -168,7 +188,11 @@ async function thumbnail(id,full=false,gallery=false,detail=null) {
   }
   const promise=thumbnailSlot(async()=>{
     if(compact){
-      try{return await generateCompactThumbnail(library.file(id),base,ext);}
+      try{
+        const generated=await generateCompactThumbnail(library.file(id),base,ext);
+        if(generated)setImmediate(()=>{try{rememberDimensions(id,library.file(id));}catch{}});
+        return generated;
+      }
       catch{
         thumbnailMisses.add(cacheKey);
         if(thumbnailMisses.size>4096)thumbnailMisses.delete(thumbnailMisses.values().next().value);
@@ -199,7 +223,6 @@ async function thumbnail(id,full=false,gallery=false,detail=null) {
       const image=await nativeImage.createThumbnailFromPath(file,{width:full?1800:600,height:full?1800:600});
       if(!image.isEmpty()){await fs.promises.writeFile(target,image.toPNG());return target;}
     } catch { }
-    // ImageIO can decode image formats whose extension has no Quick Look generator.
     try {
       await run('/usr/bin/sips',['-s','format','png','-Z',full?'1800':'600',file,'--out',target],{timeout:15000,maxBuffer:1024*1024});
       if(fs.existsSync(target))return target;
@@ -225,8 +248,6 @@ async function downloadMediaToTemp(mediaUrl,pageUrl,title,kind='video'){
   try{
     const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),300000);
     try{
-      // Large videos take longer than the 12-second preview default; the
-      // controller above is the real 5-minute deadline.
       const response=await publicFetch(mediaUrl,{signal:controller.signal,timeout:300000,referrer:pageUrl,referrerPolicy:'strict-origin-when-cross-origin'});
       if(!response.ok)throw new Error('Download failed ('+response.status+')');
       const type=(response.headers.get('content-type')||'').split(';')[0].trim();
@@ -269,7 +290,7 @@ async function importSocialMediaURL(value,folder){
       }finally{await fs.promises.rm(dl.tempDir,{recursive:true,force:true});}
     }catch(e){results.errors.push((item.title||'Media')+': '+e.message);} 
   }
-  if(!results.ids.length && results.errors.length) return null; // fall back to bookmark
+  if(!results.ids.length && results.errors.length) return null;
   return results.ids.length?results:null;
 }
 async function importExtractableVideoURL(value,folder){
@@ -296,8 +317,6 @@ async function importURL(value,folder){
     const video=await importExtractableVideoURL(value,folder);
     if(video) return video;
   }catch(e){
-    // Fall through to other handlers; a bad/unsupported extractor result should
-    // not prevent saving the link or trying other resolvers.
   }
   const social=await importSocialMediaURL(value,folder).catch(()=>null);
   if(social) return social;
@@ -310,11 +329,11 @@ function canvasPNG(value){
  return bytes;
 }
 async function importPaths(paths, folder) {
-  return importQueue.enqueue(paths, folder).done;
+  const result=await importQueue.enqueue(paths, folder).done;
+  if(result?.ids?.length)setImmediate(()=>rememberImportDimensions(result.ids));
+  return result;
 }
 
-// Appearance preferences are the user's own: the system look is the default and
-// any override is stored beside the library, never in the app bundle.
 const appearancePrefs={theme:'system'};
 function appearancePrefsPath(){return path.join(app.getPath('userData'),'appearance.json');}
 function loadAppearancePrefs(){
@@ -339,8 +358,6 @@ function appearanceState(){
 function applyAppearanceWindow(){
  if(!win||win.isDestroyed())return;
  const state=appearanceState();
- // The window is opaque so macOS draws the real window shape and its native
- // shadow. The colour matches the app surface, so a resize never flashes.
  win.setBackgroundColor(state.dark?'#0a0a0a':'#ffffff');
  win.webContents.send('appearance-changed',state);
  if(floatingWindow&&!floatingWindow.isDestroyed())floatingWindow.webContents.send('appearance-changed',state);
@@ -348,9 +365,6 @@ function applyAppearanceWindow(){
 loadAppearancePrefs();
 nativeTheme.themeSource=appearancePrefs.theme;
 nativeTheme.on('updated',()=>applyAppearanceWindow());
-// A capture can arrive while the window is still loading. The change is then
-// remembered here and handed to the view once it is ready, so a file saved
-// from the browser shows up straight away instead of after a restart.
 const pendingLibraryChanges=new Set();
 let pendingLibraryRefreshAll=false;
 let lastCaptureAt=0;
@@ -367,8 +381,6 @@ function notifyLibraryChanged(ids){
     for(const id of ids)pendingLibraryChanges.add(id);
     if(pendingLibraryChanges.size>4000){pendingLibraryRefreshAll=true;pendingLibraryChanges.clear();}
   }
-  // The change is only remembered while the view cannot receive it. Once it
-  // has been handed over, it must not be replayed later.
   if(canSend){
     if(pendingLibraryRefreshAll){pendingLibraryRefreshAll=false;pendingLibraryChanges.clear();win.webContents.send('library-changed');}
     else{const pending=[...pendingLibraryChanges];pendingLibraryChanges.clear();win.webContents.send('library-changed',pending);}
@@ -381,10 +393,6 @@ function flushLibraryChanges(){
   const ids=[...pendingLibraryChanges];pendingLibraryChanges.clear();
   win.webContents.send('library-changed',ids);
 }
-// The window remembers where it was: native apps reopen at the same size and
-// place. Saved bounds are checked against the displays that exist now, so a
-// window last used on a disconnected monitor comes back on screen rather than
-// somewhere off it.
 function windowStatePath(){return path.join(app.getPath('userData'),'window-state.json');}
 function savedWindowBounds(){
  const fallback={width:1480,height:940};
@@ -395,7 +403,6 @@ function savedWindowBounds(){
  if(!width||!height)return fallback;
  if(!Number.isFinite(saved.x)||!Number.isFinite(saved.y))return {width,height};
  const bounds={x:Math.round(saved.x),y:Math.round(saved.y),width,height};
- // Some of the title bar has to be reachable, not just a sliver of the window.
  const reachable=screen.getAllDisplays().some(display=>{
   const area=display.workArea;
   const overlapX=Math.min(bounds.x+bounds.width,area.x+area.width)-Math.max(bounds.x,area.x);
@@ -407,8 +414,6 @@ function savedWindowBounds(){
 let windowStateTimer=null;
 function saveWindowBounds(){
  if(!win||win.isDestroyed())return;
- // getNormalBounds is the un-maximised frame, so restoring after a zoomed
- // session does not reopen the window filling the screen.
  const bounds=win.getNormalBounds();
  if(!Number.isFinite(bounds.width)||bounds.width<760||bounds.height<600)return;
  try{fs.mkdirSync(path.dirname(windowStatePath()),{recursive:true});fs.writeFileSync(windowStatePath(),JSON.stringify(bounds));}catch(error){}
@@ -416,9 +421,6 @@ function saveWindowBounds(){
 function scheduleWindowBoundsSave(){clearTimeout(windowStateTimer);windowStateTimer=setTimeout(saveWindowBounds,400);}
 function createWindow() {
   const appearance=appearanceState();
-  // A window that is shown before its first frame is painted flashes the
-  // window background. Show it on ready-to-show instead; the test harness keeps
-  // an immediately visible window so capturePage stays deterministic.
   win = new BrowserWindow({ ...savedWindowBounds(), minWidth: 760, minHeight: 600, show: testMode, title: 'Canvas Pro', backgroundColor: appearance.dark?'#0a0a0a':'#ffffff', transparent: false, titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 22 }, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required', contextIsolation: true, nodeIntegration: false, sandbox: true } });
   previewZoomActive=false;
   win.webContents.on('before-input-event',(_event,input)=>{
@@ -427,9 +429,6 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   const target=win;
   if(!testMode)target.once('ready-to-show',()=>{if(!target.isDestroyed())target.show();});
-  // Native apps tell their content when the window loses focus so the chrome
-  // can take on the unfocused look. The page never blurs on its own, because
-  // it is still the visible document inside the window.
   target.on('focus',()=>{if(!target.isDestroyed())target.webContents.send('window-focus-changed',true);});
   target.on('blur',()=>{if(!target.isDestroyed())target.webContents.send('window-focus-changed',false);});
   target.on('moved',scheduleWindowBoundsSave);
@@ -441,10 +440,6 @@ function createWindow() {
     dialog.showMessageBox(target,{type:'warning',title:'Canvas Pro',message:'The app view stopped unexpectedly.',detail:'Reload to reopen your library. Saved files and canvas changes are kept; edits that had not finished saving may be lost.',buttons:['Reload view','Close window'],defaultId:0,cancelId:1}).then(({response})=>{if(target.isDestroyed()||shutdownStarted)return;if(response===0)target.loadFile(path.join(__dirname,'../src/index.html'));else target.close();}).catch(()=>{if(!target.isDestroyed())target.close();});
   });
   win.webContents.on('will-navigate', e => e.preventDefault());
-  // Resizing a hidden-titlebar window on macOS can leave the freshly exposed
-  // edge painted with the previous frame for a moment. Ask Chromium for one
-  // full repaint once the drag settles so no stale tiles or panel edges are
-  // left behind. Throttle it to the end of the gesture, not every frame.
   let resizeRepaint=0;
   target.on('resized',()=>{
     clearTimeout(resizeRepaint);
@@ -454,8 +449,6 @@ function createWindow() {
   win.on('closed',()=>{webPreview?.close();webPreview=null;});
   win.loadFile(path.join(__dirname, '../src/index.html'));
   win.webContents.on('did-finish-load',()=>{
-    // ready-to-show is the normal path; this only covers a first paint that
-    // never reports itself, so a slow start cannot leave the app invisible.
     if(!testMode&&!win.isDestroyed()&&!win.isVisible())win.show();
     setTimeout(flushLibraryChanges,150);
   });
@@ -474,8 +467,6 @@ async function openImportWindow() {
 }
 app.whenReady().then(async () => {
   if(process.platform==='darwin'){
-    // The About panel is a system surface: give it the real version and the
-    // copyright, so About Canvas Pro is not a blank Electron dialog.
     app.setAboutPanelOptions({
       applicationName:'Canvas Pro',
       applicationVersion:require('../package.json').version,
@@ -498,16 +489,12 @@ app.whenReady().then(async () => {
   else {
     const legacy=path.join(app.getPath('userData'),'Library');
     while(!libraryRoot){try{const saved=locations.read();if(saved.root){libraryRoot=locations.validate(saved.root);savedLibrary=saved;}else if(fs.existsSync(path.join(legacy,'library.sqlite')))libraryRoot=locations.validate(legacy);}catch(error){dialog.showErrorBox('Library unavailable',error.message+' Your library files have not been moved.');}
-      if(!libraryRoot){const answer=await dialog.showMessageBox({type:'question',title:'Welcome to Canvas Pro',message:'Choose your library',detail:'Keep your originals, bookmarks, collections and canvases together in a folder you choose.',buttons:['Create library…','Open existing…','Quit'],cancelId:2});if(answer.response===2){app.quit();return;}try{libraryRoot=await chooseLibrary(answer.response===0?'new':'open');}catch(error){dialog.showErrorBox('Could not open library',error.message);}}
+      if(!libraryRoot){const answer=await dialog.showMessageBox({type:'question',title:'Welcome to Canvas Pro',message:'Choose your library',detail:'Keep references on this Mac in the default library, or choose a library folder.',buttons:['Use default location','Choose location…','Open existing…','Quit'],cancelId:3});if(answer.response===3){app.quit();return;}try{libraryRoot=answer.response===0?locations.create(legacy):await chooseLibrary(answer.response===1?'new':'open');}catch(error){dialog.showErrorBox('Could not open library',error.message);}}
     }
   }
   if(!testMode&&(savedLibrary?.root!==libraryRoot||savedLibrary.recent[0]!==libraryRoot))locations.remember(libraryRoot);
   library = new Library(libraryRoot);
   workbench=new Workbench(library);
-  // Fingerprints are filled in quietly in the background: a review should not
-  // make someone wait while every picture in the library is decoded, and
-  // importing a file should not either. The review dialog polls the pending
-  // count, so it can say what it is still looking at.
   let phashSweeping=false;
   const preparePhashes=async()=>{
     if(phashSweeping||!library)return;
@@ -522,8 +509,6 @@ app.whenReady().then(async () => {
           let value='';
           try{value=hashFile(nativeImage,library.file(row.id));}catch{value='';}
           try{library.setPhash(row.id,value);}catch{return;}
-          // Decoding is synchronous, so yield between pictures: one decode per
-          // turn keeps scrolling responsive instead of a dozen in a row.
           await new Promise(resolve=>setTimeout(resolve,40));
         }
       }
@@ -535,17 +520,12 @@ app.whenReady().then(async () => {
   let switchingLibrary=false;
   async function changeLibrary(mode){if(switchingLibrary)return;switchingLibrary=true;try{await flushWorkspaces();const target=await chooseLibrary(mode);if(!target||target===library.root)return;pendingLibrarySwitch=()=>{locations.remember(target);app.relaunch();};app.quit();}catch(error){dialog.showErrorBox('Could not switch library',error.message);}finally{switchingLibrary=false;}}
   const trusted=event=>{
-   // A late IPC can arrive while the window is closing; reading webContents
-   // on a destroyed window throws instead of failing the check.
    if(!win||win.isDestroyed())throw new Error('Unavailable outside the library.');
    if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Unavailable outside the library.');
   };
   ipcMain.handle('library-location',event=>{trusted(event);return ({root:library.root,name:path.basename(library.root).replace(/\.canvaslibrary$/i,''),recent:locations.read().recent||[]});});
   ipcMain.handle('library-switch',(event,mode)=>{trusted(event);if(!['new','open'].includes(mode))throw Error('Invalid library action.');return changeLibrary(mode);});
   canvasStore=new CanvasStore(library);if(testMode)global.canvasTestStore=canvasStore;
-  // Chromium's stack is what gets past Cloudflare's TLS fingerprint checks; the
-  // guarded Node fetcher stays as a fallback inside previewFetch. Only a
-  // source-launched test process may substitute the raw, unguarded fetcher.
   bookmarks=new Bookmarks({library,fetcher:testNetworkBypass?(url,options)=>net.fetch(url,options):previewFetch,onUpdate:(id,info)=>{if(win&&!win.isDestroyed())win.webContents.send('link-info-changed',{id,info});}});
   mediaCache = new MediaCache(library,path.join(__dirname,'../bin/media-tool'));
   importQueue=new ImportQueue({library,onChange:jobs=>{
@@ -554,14 +534,11 @@ app.whenReady().then(async () => {
     sendProgress(active?{name:active.name||'Preparing import…',count:active.processed+1}:null);
   }});
   localModel=new LocalModel({root:testMode&&process.env.ASSET_MODEL_DIR?path.resolve(process.env.ASSET_MODEL_DIR):path.join(app.getPath('userData'),'Local Models'),fetcher:(url,options)=>net.fetch(url,options),onProgress:value=>{if(win&&!win.isDestroyed())win.webContents.send('model-progress',value);}});
-  // The models the app can use, each with its own download.
   localModel.define('clip',require('./clip-manifest.json')).define('florence-2',require('./florence-manifest.json'));
   let thermalState=testMode?'unknown':powerMonitor.getCurrentThermalState();
   const canAccelerateIndex=()=>thermalState==='nominal'&&!powerMonitor.isOnBatteryPower()&&powerMonitor.getSystemIdleTime()>=60;
   smartIndex=new SmartIndex({library,thumbnail:async id=>{const a=library.asset(id);if(['url','webloc'].includes(a.ext)){const file=bookmarks.path(id);return fs.existsSync(file)?file:null;}return thumbnail(id);},nativeImage,delay:()=>canAccelerateIndex()?350:650,testMode,onWork:()=>{if(win&&!win.isDestroyed())win.webContents.send('smart-work',smartIndex?.paused?'manual':smartIndex?.powerPause);},onUpdate:value=>{if(win&&!win.isDestroyed())win.webContents.send('smart-changed',value);}});
   if(!testMode&&workbench.pref('indexPaused'))smartIndex.pause(true);
-  // Test-only hook: tests drive analysis directly because test mode pauses the
-  // background indexer. Not exposed to the renderer in production.
   if(testMode)global.smartAnalyze=id=>smartIndex.analyze(id);
   let indexIdleTimer,updateIndexPower=()=>{};
   if(!testMode){
@@ -654,10 +631,6 @@ app.whenReady().then(async () => {
   const getUpdater=()=>updater??=new Updater({
     currentVersion:require('../package.json').version,
     appBundle:path.resolve(app.getPath('exe'),'../../..'),
-    // An unpacked Contents/Resources/app folder makes app.isPackaged false in
-    // Electron even for a real .app bundle. process.defaultApp is true only
-    // when Electron was launched with a source path (`electron .`), so it is
-    // the reliable signal for "installed app can replace itself".
     isPackaged: !process.defaultApp,
     fetchImpl:(url,options)=>net.fetch(url,options),
     onProgress:updateProgress,
@@ -665,8 +638,6 @@ app.whenReady().then(async () => {
     requireSignedManifest: signedUpdatesRequired(process.env,process.defaultApp)
   });
   ipcMain.handle('floating-player',(event,op,data={})=>{
-    // The mini player has its own preload bridge; only accept its commands
-    // from that window's main frame, never from arbitrary renderers.
     const mini=floatingWindow&&!floatingWindow.isDestroyed()&&event.sender===floatingWindow.webContents&&event.senderFrame===floatingWindow.webContents.mainFrame;
     if(!mini)trusted(event);
     if(op==='state')return {open:!!floatingWindow&&!floatingWindow.isDestroyed()};
@@ -681,8 +652,6 @@ app.whenReady().then(async () => {
     if(op!=='open')throw new Error('Invalid floating player command.');
     const a=library.asset(data.id);
     const ratio=Number.isFinite(data.aspectRatio)&&data.aspectRatio>0?data.aspectRatio:(a.aspectRatio||16/9);
-    // Safari-style picture in picture: a small window that starts in the
-    // bottom corner of the display the app is on, and stays where it is moved.
     const base=Math.min(440,Math.max(280,Math.round(320*Math.min(1,Math.max(0.45,ratio)))));
     const width=ratio<1?Math.round(base*ratio):base;
     const height=ratio<1?base:Math.round(base/ratio);
@@ -693,8 +662,6 @@ app.whenReady().then(async () => {
       : {x:area.x+Math.max(16,area.width-width-24),y:area.y+Math.max(16,area.height-height-24),width,height};
     bounds.x=Math.max(area.x,Math.min(bounds.x,area.x+area.width-width));
     bounds.y=Math.max(area.y,Math.min(bounds.y,area.y+area.height-height));
-    // Replace any existing mini player before creating the new one. The
-    // closing window's handler must not clear the reference to the new one.
     closeFloating();
     data.theme=appearanceState().dark?'dark':'light';
     floatingWindow=new BrowserWindow({
@@ -805,7 +772,8 @@ app.whenReady().then(async () => {
     return {...smartIndex.state(),idleOnly:value};
   });
   ipcMain.handle('smart-pause',(event,value)=>{trusted(event);return (workbench.pref('indexPaused',!!value),smartIndex.pause(value));});
-  ipcMain.handle('smart-search',(event,query,vector)=>{trusted(event);return smartIndex.search(String(query).slice(0,500),vector);});
+  let latestSearchToken=0;
+  ipcMain.handle('smart-search',(event,query,vector,token)=>{trusted(event);const mine=Number.isFinite(token)?Number(token):++latestSearchToken;if(mine>latestSearchToken)latestSearchToken=mine;return smartIndex.search(String(query).slice(0,500),vector,()=>mine!==latestSearchToken);});
   ipcMain.handle('smart-caption',(event,id,text)=>{trusted(event);return smartIndex.caption(String(id),String(text||''));});
   ipcMain.handle('smart-next-work',event=>{trusted(event);return {...smartIndex.nextVisualWork(),delay:canAccelerateIndex()?250:650};});
   ipcMain.handle('smart-vector-skip',(event,id)=>{trusted(event);return smartIndex.deferVisual(id);});
@@ -822,9 +790,6 @@ app.whenReady().then(async () => {
     if(!Array.isArray(ids)||ids.length>500||ids.some(id=>typeof id!=='string'||! /^[a-f0-9-]{36}$/.test(id)))throw new Error('Invalid captured assets.');
     return library.list(ids);
   });
-  // The view tells the app when it is ready to receive changes, and when it
-  // comes back to the front. A capture that happened in between is handed
-  // over then, so the library never looks out of date.
   ipcMain.handle('capture-sync',(event,seen)=>{
     trusted(event);
     const since=Number.isFinite(seen)?Number(seen):0;
@@ -840,7 +805,8 @@ app.whenReady().then(async () => {
     trusted(event);
     const offset=Math.max(0,Math.min(10000000,Math.floor(Number(data.offset)||0)));
     const limit=Math.max(1,Math.min(500,Math.floor(Number(data.limit)||120)));
-    const result=library.page({offset,limit,view:String(data.view||'all'),folder:String(data.folder||'').slice(0,120),
+    const cursor=data.cursor&&typeof data.cursor==='object'&&typeof data.cursor.imported==='string'&&Number.isFinite(Number(data.cursor.rowid))?{imported:data.cursor.imported,rowid:Number(data.cursor.rowid)}:null;
+    const result=library.page({offset,limit,cursor,view:String(data.view||'all'),folder:String(data.folder||'').slice(0,120),
       tag:String(data.tag||'').slice(0,500),sort:String(data.sort||'new'),query:String(data.query||'').toLowerCase().slice(0,500),
       bookmark:['social','recipe'].includes(String(data.bookmark||''))?String(data.bookmark):'',excludeBookmarks:data.excludeBookmarks===true,
       other:data.other===true,knownExtensions:Array.isArray(data.knownExtensions)?data.knownExtensions.filter(value=>typeof value==='string').slice(0,100):[],
@@ -849,10 +815,11 @@ app.whenReady().then(async () => {
     if(data.navigation)Object.assign(result,libraryNavigation());
     return result;
   });
-  ipcMain.handle('list', (event,limit) => {
+  ipcMain.handle('list', (event,limit,offset) => {
     trusted(event);
     const capped=Number.isFinite(limit)?Math.max(1,Math.min(1000,Math.floor(limit))):0;
-    return { assets: library.list(null,capped), folders: library.folders(), root: library.root,canvases:canvasStore.list(),folderRecords:library.folderRecords(),prototype:!!process.env.CANVAS_PROTOTYPE,workbench:{icons:workbench.icons()} };
+    const start=Number.isFinite(offset)?Math.max(0,Math.min(10000000,Math.floor(offset))):0;
+    return { assets: library.list(null,capped,start), folders: library.folders(), root: library.root,canvases:canvasStore.list(),folderRecords:library.folderRecords(),prototype:!!process.env.CANVAS_PROTOTYPE,workbench:{icons:workbench.icons()} };
   });
   function checkedAssets(ids){return library.selectedAssets(ids);}
   async function deleteFromTrash(ids,empty=false){
@@ -878,6 +845,10 @@ app.whenReady().then(async () => {
     const menu=Menu.buildFromTemplate(template);if(testMode){global.canvasFileMenu=menu;return template.map(item=>({id:item.id,label:item.label,role:item.role,submenu:item.submenu?.map(sub=>({label:sub.label,type:sub.type}))}));}menu.popup({window:win});
   });
   ipcMain.handle('collection-context-menu',(event,name)=>{trusted(event);if(!library.folders().includes(name))throw new Error('Collection not found.');const menu=Menu.buildFromTemplate([{label:name,enabled:false},{type:'separator'},{label:'Add to Canvas…',click:()=>win.webContents.send('context-action',{action:'canvas-collection',name})},{label:'Choose Icon…',click:()=>win.webContents.send('context-action',{action:'choose-icon',key:'folder:'+library.folderRecords().find(f=>f.name===name).id})},{label:'Rename Collection…',click:()=>win.webContents.send('context-action',{action:'rename-collection',name})},{label:'Remove Collection…',click:()=>win.webContents.send('context-action',{action:'delete-collection',name})}]);if(testMode){global.canvasCollectionMenu=menu;return;}menu.popup({window:win});});
+  function tagAssetIds(name){return library.db.prepare('SELECT DISTINCT a.id FROM assets a,json_each(a.tags) WHERE value=?').all(name).map(row=>row.id);}
+  ipcMain.handle('tag-context-menu',(event,name)=>{trusted(event);if(typeof name!=='string'||!name)throw new Error('Tag not found.');const template=[{label:name,enabled:false},{type:'separator'},{label:'Rename Tag…',click:()=>win.webContents.send('context-action',{action:'tag-rename',name})},{label:'Remove Tag…',click:()=>win.webContents.send('context-action',{action:'tag-delete',name})}];const menu=Menu.buildFromTemplate(template);if(testMode){global.canvasTagMenu=menu;return template.map(item=>({id:item.id,label:item.label}));}menu.popup({window:win});});
+  ipcMain.handle('rename-tag',(event,oldName,newName)=>{trusted(event);const name=String(oldName||'').trim();if(!name)throw new Error('Tag not found.');const ids=tagAssetIds(name);if(!ids.length)throw new Error('Tag not found.');workbench.change(ids,()=>library.renameTag(name,String(newName||'').trim()),'Rename tag');return {renamed:ids.length};});
+  ipcMain.handle('delete-tag',async(event,name)=>{trusted(event);const tag=String(name||'').trim();const ids=tagAssetIds(tag);if(!ids.length)throw new Error('Tag not found.');const answer=await dialog.showMessageBox(win,{type:'question',message:'Remove “'+tag+'”?',detail:'The tag will be removed from '+ids.length+' '+(ids.length===1?'file':'files')+'. The files stay in your library.',buttons:['Cancel','Remove Tag'],defaultId:0,cancelId:0});if(answer.response!==1)return {cancelled:true};workbench.change(ids,()=>library.removeTag(tag),'Remove tag');return {removed:ids.length};});
   ipcMain.handle('bulk-update',(event,ids,operation)=>{trusted(event);return workbench.change(ids,()=>library.updateMany(ids,operation),'Edit selection');});
   ipcMain.handle('read-text',async(event,id)=>{trusted(event);const a=library.asset(id);if(!['md','txt','json','csv','css','js','ts','log','xml'].includes(a.ext)||a.size>2*1024*1024)throw new Error('Text preview is unavailable for this file.');return fs.promises.readFile(library.file(id),'utf8');});
   function registerBrowserConnection(){
@@ -885,7 +856,6 @@ app.whenReady().then(async () => {
     if(process.platform!=='darwin'||process.env.CANVAS_PROTOTYPE||(testMode&&!testHome))return null;
     const bundle=path.resolve(process.execPath,'../../..');
     if(!bundle.endsWith('.app')||path.resolve(app.getAppPath())!==path.join(bundle,'Contents/Resources/app'))return null;
-    // A disk image or a translocated copy has a temporary path. Only a copied app registers the host.
     if (!testHome && (bundle.startsWith('/Volumes/') || bundle.includes('/AppTranslocation/'))) return null;
     return require('./extension-setup.cjs').installExtension({appPath:bundle,extensionSource:path.join(app.getAppPath(),'chrome-extension'),...(testHome?{homeDirectory:testHome}:{})});
   }
@@ -912,21 +882,16 @@ app.whenReady().then(async () => {
   ipcMain.on('asset-ratio',(event,id,ratio)=>{trusted(event);if(typeof id!=='string'||!Number.isFinite(ratio)||ratio<=0||ratio>=100000)return;ratioUpdates.set(id,ratio);clearTimeout(ratioTimer);ratioTimer=setTimeout(flushRatioUpdates,200);});
   app.on('before-quit',()=>{clearTimeout(ratioTimer);flushRatioUpdates();});
   ipcMain.handle('media-info', (event,id,priority) => {trusted(event);return mediaCache.get(id,!!priority);});
-  ipcMain.handle('image-size', (event,id) => {
+  ipcMain.handle('image-size', async (event,id) => {
     trusted(event);
     const a=library.asset(id);
     if(!a||a.trash||library.deleting.has(id))return null;
-    const image=nativeImage.createFromPath(library.file(id));
-    if(image.isEmpty())return null;
-    const {width,height}=image.getSize();
-    return width&&height?{width,height}:null;
+    if(a.width&&a.height)return {width:a.width,height:a.height};
+    let file;
+    try{file=library.file(id);}catch{return null;}
+    return await rememberDimensions(id,file);
   });
-  ipcMain.on('visible-assets', (event,ids) => { trusted(event); if(Array.isArray(ids)&&ids.length<=300){setVisibleThumbnails(ids);mediaCache.setVisible(ids);bookmarks.setVisible(ids);prepareDragIcons(ids);} });
-  // The icon must already exist when the drag starts: macOS ends the drag
-  // session as soon as the dragstart event returns, so an await here would
-  // leave nothing to drag. The renderer asks for an icon on pointer-down and
-  // the visible cards are prepared as they appear; the app icon is the
-  // immediate fallback if neither has finished yet.
+  ipcMain.on('visible-assets', (event,ids) => { trusted(event); if(Array.isArray(ids)&&ids.length<=1200){setVisibleThumbnails(ids);mediaCache.setVisible(ids);bookmarks.setVisible(ids);prepareDragIcons(ids);} });
   let dragFallbackIcon=null;
   function fallbackDragIcon(){
     if(dragFallbackIcon)return dragFallbackIcon;
@@ -934,8 +899,6 @@ app.whenReady().then(async () => {
       const image=nativeImage.createFromPath(file);
       if(!image.isEmpty()){dragFallbackIcon=image;return image;}
     }
-    // macOS requires a non-empty image. A transparent pixel is still a valid
-    // drag image, though the app icon is normally found first.
     dragFallbackIcon=nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==','base64'));
     return dragFallbackIcon;
   }
@@ -961,7 +924,6 @@ app.whenReady().then(async () => {
     trusted(event);
     try {
       const ids=Array.isArray(value)?value:[value];
-      // Always hand over the original files, never the thumbnails.
       const records=checkedAssets(ids);
       const files=records.map(a=>library.file(a.id));
       if(!files.length)return;
@@ -1010,9 +972,6 @@ app.whenReady().then(async () => {
     if (process.platform === 'darwin') win.previewFile(library.file(id), library.asset(id).name);
   });
   ipcMain.handle('show-library', event => {trusted(event);return shell.openPath(library.root);});
-  // The app menu is built explicitly rather than with the appMenu role: the
-  // role builds its own submenu, which leaves nowhere to put Settings, and
-  // macOS expects Settings… with ⌘, above Services.
   const appMenu=process.platform==='darwin'?{
     label: app.name,
     submenu: [
@@ -1031,9 +990,6 @@ app.whenReady().then(async () => {
     appMenu,
     { label: 'File', submenu: [{label:'New Library…',click:()=>changeLibrary('new')},{label:'Open Library…',click:()=>changeLibrary('open')},{type:'separator'},{ label: 'Import files…', accelerator: 'CmdOrCtrl+O', click: () => openImportWindow().catch(error=>console.error('Import menu:',error.message)) }, { label: 'Show library folder', click: () => shell.openPath(library.root) }, {type:'separator'},{ role: 'close' }] },
     {label:'Edit',submenu:[{label:'Undo',accelerator:'CmdOrCtrl+Z',click:()=>win?.webContents.send('history-command',false)},{label:'Redo',accelerator:'CmdOrCtrl+Shift+Z',click:()=>win?.webContents.send('history-command',true)},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},
-    // The infinite canvas keeps a native accelerator as well as the renderer
-    // shortcut: the menu path is guaranteed to fire even when the page has an
-    // open popover or a focused control that would otherwise eat the chord.
     {label:'View',submenu:[{label:'Infinite Canvas',accelerator:'Alt+O',click:()=>{try{win?.webContents.executeJavaScript('window.toggleInfiniteCanvas?.()').catch(()=>{});}catch{}}},{type:'separator'},{role:'reload'},{role:'forceReload'},{role:'toggleDevTools'},{type:'separator'},{role:'resetZoom'},{role:'zoomIn'},{role:'zoomOut'},{type:'separator'},{role:'togglefullscreen'}]},
     { role: 'windowMenu' },
     { label: 'Help', role: 'help', submenu: [
@@ -1056,7 +1012,13 @@ app.whenReady().then(async () => {
   powerMonitor.on('resume',()=>{lastFullScan=Date.now();originalsWatch.scan();});
   const bridgeDirectory=(testMode||process.env.CANVAS_PROTOTYPE)?path.join(app.getPath('userData'),'Bridge'):path.join(app.getPath('appData'),'Canvas Pro/Bridge');
   videoDownloader=new YtDlp({root:app.getPath('userData'),fetcher:(url,options)=>net.fetch(url,options)});
-  captureBridge=new CaptureBridge({library,directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);},videoDownloader,allowPrivateCapture:testNetworkBypass});
+  captureBridge=new CaptureBridge({library,onReveal:async id=>{
+    const target=ensureWindow();
+    if(target.webContents.isLoading())await new Promise(resolve=>target.webContents.once('did-finish-load',resolve));
+    if(target.isDestroyed())throw Error('Canvas Pro window closed.');
+    target.webContents.send('reveal-captured-file',id);
+    return {shown:true};
+  },directory:bridgeDirectory,fetcher:(url,options)=>net.fetch(url,options),onChange:ids=>notifyLibraryChanged(ids),onStatus:status=>{if(win&&!win.isDestroyed())win.webContents.send('capture-status',status);},videoDownloader,allowPrivateCapture:testNetworkBypass});
   try{await captureBridge.start();}catch(e){console.error('Browser capture bridge:',e.message);}
   setImmediate(()=>{
     try{
@@ -1066,8 +1028,6 @@ app.whenReady().then(async () => {
   });
   app.on('activate', () => ensureWindow());
 }).catch(error=>{
-  // Starting up must never fail silently. A library that cannot be opened
-  // needs to say so, and the app has to stay alive long enough to show it.
   console.error('Canvas Pro could not start:',error&&error.stack||error);
   try{dialog.showErrorBox('Canvas Pro could not open this library',String(error&&error.message||error));}catch{}
   app.exit(1);

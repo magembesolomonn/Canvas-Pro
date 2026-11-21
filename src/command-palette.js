@@ -1,8 +1,3 @@
-// One ⌘K surface for commands, navigation and everything in the library.
-// Results are assembled from the app's own indexes: the local smart index
-// (which already knows names, tags and AI captions), the live catalog,
-// canvases and collections. File hits are shown as a grid of previews,
-// with a second grid of visually similar frames when a vector is available.
 (() => {
   'use strict';
 
@@ -11,8 +6,6 @@
   let dialog = null;
   let input = null;
   let list = null;
-  // A search is kept for 15s after the palette closes, so ⌘K can bring the
-  // same results straight back. After the window it resets to Quick actions.
   let rememberedQuery = '';
   let rememberedAt = 0;
   let rememberedScroll = 0;
@@ -66,16 +59,15 @@
       { id: 'appearance-dark', label: 'Theme: Dark', icon: 'appearance', group: 'Commands', hint: 'Settings Appearance', keywords: 'appearance dark mode', run: () => api.appearanceSet({ theme: 'dark' }) },
       { id: 'appearance-system', label: 'Theme: System', icon: 'appearance', group: 'Commands', hint: 'Settings Appearance', keywords: 'appearance automatic', run: () => api.appearanceSet({ theme: 'system' }) },
 
-      // Library settings.
       { id: 'library-new', label: 'New Library…', icon: 'folder', group: 'Commands', hint: 'Settings Library', run: () => api.switchLibrary('new') },
       { id: 'library-open', label: 'Open Library…', icon: 'folder', group: 'Commands', hint: 'Settings Library', run: () => api.switchLibrary('open') },
       { id: 'library-show', label: 'Show library folder', icon: 'folder', group: 'Commands', hint: 'Settings Library', run: () => api.showLibrary() },
       { id: 'settings-search', label: 'Search settings…', icon: 'settings', group: 'Commands', hint: 'Settings', run: () => { openPane(); requestAnimationFrame(() => document.querySelector('#settings-search')?.focus()); } },
 
-      // Galleries and view options.
       { id: 'layout-masonry', label: 'Gallery layout: masonry', icon: 'layout', group: 'Commands', hint: 'Settings Galleries View', keywords: 'balanced columns', run: () => setGalleryLayout('masonry') },
       { id: 'layout-waterfall', label: 'Gallery layout: waterfall', icon: 'layout', group: 'Commands', hint: 'Settings Galleries View', keywords: 'fill columns in order', run: () => setGalleryLayout('waterfall') },
       { id: 'layout-justified', label: 'Gallery layout: justified', icon: 'layout', group: 'Commands', hint: 'Settings Galleries View', keywords: 'fit items into rows', run: () => setGalleryLayout('justified') },
+      { id: 'layout-list', label: 'Gallery layout: list', icon: 'layout', group: 'Commands', hint: 'Settings Galleries View', keywords: 'dense rows table details', run: () => setGalleryLayout('list') },
       { id: 'file-names', label: showFileNamesEnabled() ? 'Hide file names' : 'Show file names', icon: 'heading', group: 'Commands', hint: 'Settings Galleries View', run: () => setShowFileNames(!showFileNamesEnabled()) },
       { id: 'zoom-in', label: 'Make thumbnails larger', icon: 'plusMagnifier', group: 'Commands', hint: 'View Thumbnail size', run: () => setZoom(Number(document.querySelector('#zoom')?.value || 230) + 30) },
       { id: 'zoom-out', label: 'Make thumbnails smaller', icon: 'minusMagnifier', group: 'Commands', hint: 'View Thumbnail size', run: () => setZoom(Number(document.querySelector('#zoom')?.value || 230) - 30) },
@@ -85,16 +77,14 @@
         label: 'Show file type: ' + ['All types', 'Images', 'Videos', 'Documents', 'Audio', 'Social posts', 'Recipes', 'Web links', 'Design & other'][index],
         icon: 'filter', group: 'Commands', hint: 'View File type', run: () => setSelect('#type', value)
       })),
-      ...[['new', 'Newest first'], ['old', 'Oldest first'], ['name', 'Name A–Z'], ['size', 'Largest first']].map(([value, label]) => ({
+      ...[['new', 'Newest first'], ['old', 'Oldest first'], ['name', 'Name A–Z'], ['name-desc', 'Name Z–A'], ['size', 'Largest first'], ['size-asc', 'Smallest first'], ['kind', 'File type'], ['rating', 'Highest rated']].map(([value, label]) => ({
         id: 'sort-' + value, label: 'Sort by: ' + label, icon: 'sort', group: 'Commands', hint: 'View Sort order', run: () => setSelect('#sort', value)
       })),
 
-      // About, extensions and feedback.
       { id: 'updates-check', label: 'Check for updates', icon: 'reload', group: 'Commands', hint: 'Settings About Update', run: () => window.SettingsUI?.checkUpdates() },
       { id: 'licenses', label: 'Third-party notices…', icon: 'about', group: 'Commands', hint: 'Settings About', run: () => { openPane('about'); requestAnimationFrame(() => click('#settings-licenses-toggle')); } },
       { id: 'extension', label: 'Browser capture extension…', icon: 'extensions', group: 'Commands', hint: 'Settings Extensions', run: () => click('#show-extension') },
 
-      // Search and local models.
       { id: 'semantic-toggle', label: isChecked('#settings-semantic') ? 'Turn off semantic search' : 'Turn on semantic search', icon: 'sparkles', group: 'Commands', hint: 'Settings Search & models local AI', run: () => toggleSetting('#settings-semantic') },
       { id: 'visual-model', label: 'Install visual model…', icon: 'sparkles', group: 'Commands', hint: 'Settings Search & models CLIP', run: () => toggleSetting('#settings-visual-model') },
       { id: 'index-pause', label: 'Pause background indexing', icon: 'pauseCircle', group: 'Commands', hint: 'Settings Search & models AI', run: () => api.smartPause(true) },
@@ -106,7 +96,7 @@
       { id: 'model-florence', label: 'Install description model…', icon: 'sparkles', group: 'Commands', hint: 'Settings Search & models Florence', run: async () => { const state = await api.modelState('florence-2'); if (!state.ready) await api.modelDownload('florence-2'); else openPane('search-models'); } }
     ];
     for (const [view, label, icon] of [
-      ['all', 'Library', 'archive'], ['favorites', 'Favourites', 'star'],
+      ['all', 'All files', 'archive'], ['favorites', 'Favourites', 'star'],
       ['tags', 'Tags', 'tag'], ['trash', 'Trash', 'trash'],
       ['image', 'Images', 'image'], ['video', 'Videos', 'video'],
       ['audio', 'Audio', 'audio'], ['pdf', 'Documents', 'file'],
@@ -136,8 +126,6 @@
       if (query.length >= 2) {
         const ids = await api.smartSearch(query);
         ids.forEach((id, index) => score.set(id, ids.length - index));
-        // The gallery can be paged. Pull indexed hits that are not in memory
-        // so palette search still covers the whole library.
         const missing = ids.filter(id => !assetById.has(id)).slice(0, 60);
         if (missing.length) extra = await api.captureAssets(missing);
       }
@@ -197,8 +185,6 @@
       sections.push({ header: 'Colours', custom: swatch });
     }
 
-    // Commands come first: the palette is a command surface, so actions stay
-    // above the file grid while a query is typed.
     if (commandItems.length) sections.push({ header: 'Commands', items: commandItems });
 
     const files = await fileHits(q);
@@ -296,10 +282,6 @@
   }
 
   function render() {
-    // A late async section (visually similar, or a slow file search) must not
-    // steal the selection from someone who has already moved down the list.
-    // If they have not moved, the first result stays selected: it is the one
-    // Enter should run.
     const previous = active > 0 ? entries[active]?.id : null;
     list.replaceChildren();
     entries = [];
@@ -379,10 +361,6 @@
 
   function runEntry(entry) {
     if (!dialog?.open) return;
-    // The dialog's close event is queued, so an rAF scheduled right now would
-    // run before it and the focus restore would steal focus from the action.
-    // Attach to close first: the palette's own listener restores focus, then
-    // the action runs in the next frame and can focus its own target.
     dialog.addEventListener('close', () => {
       requestAnimationFrame(() => safe(async () => { await entry.run(); }));
     }, { once: true });
@@ -454,8 +432,6 @@
       else if (event.key === 'Escape') { event.preventDefault(); dialog.close(); }
       event.stopPropagation();
     });
-    // Restore a recent search before the first paint so the same files stay
-    // in view when the palette is reopened with ⌘K.
     const fresh = rememberedQuery && Date.now() - rememberedAt < 15000;
     if (fresh) {
       input.value = rememberedQuery;
@@ -479,8 +455,6 @@
     if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== 'k') return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    // Closing a preview here matters: the capture-phase handler would
-    // otherwise swallow the app's own handler that closes it.
     if (!dialog?.open && typeof closePreview === 'function' && !$('#preview').hidden) closePreview();
     toggle();
   }, true);

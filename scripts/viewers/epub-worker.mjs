@@ -1,6 +1,3 @@
-// EPUB archives are decompressed in a disposable worker so a crafted DEFLATE
-// stream cannot block the renderer's main thread. The declared size cap still
-// bounds allocation, and the actual decompressed bytes are checked as well.
 import {unzipSync} from 'fflate';
 
 self.onmessage=event=>{

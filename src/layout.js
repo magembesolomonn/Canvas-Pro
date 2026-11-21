@@ -36,7 +36,19 @@ function createJustified(items,width,target=230,ratioFor=a=>a.aspectRatio||1,foo
  flush(false);
  return {mode:'justified',positions,byId,columnItems,rowItems,columns:Math.max(1,columnItems.length),tile:target,gap,pad,height:Math.max(pad,y)+pad,items,width,target};
 }
+function createList(items,width,target=230,ratioFor=a=>a.aspectRatio||1,footerHeight=()=>48){
+ const gap=getGap(),pad=getPad(),available=Math.max(1,width-pad*2);
+ const rowHeight=Math.max(44,Math.min(84,Math.round(target*0.36)));
+ const positions=[],byId=new Map();
+ let y=pad;
+ for(let index=0;index<items.length;index++){
+  const position={index,id:items[index].id,column:0,row:index,x:pad,y,width:available,surfaceHeight:rowHeight,height:rowHeight};
+  positions.push(position);byId.set(position.id,position);y+=rowHeight+gap;
+ }
+ return {mode:'list',positions,byId,columnItems:[positions],rowItems:positions.map(position=>[position]),columns:1,tile:available,gap,pad,height:Math.max(pad,y)+pad,items,width,target};
+}
 function createLayout(mode,items,width,target=230,ratioFor=a=>a.aspectRatio||1,footerHeight){
+ if(mode==='list')return createList(items,width,target,ratioFor,footerHeight);
  return mode==='justified'?createJustified(items,width,target,ratioFor,footerHeight):createColumns(items,width,target,ratioFor,mode==='waterfall'?'waterfall':'masonry',footerHeight);
 }
 function verticalNeighbor(layout,id,step){
@@ -58,5 +70,5 @@ function visibleIndices(layout,scrollTop,height,overscan=400){
  return result.sort((a,b)=>a-b);
 }
 function anchorAt(layout,scrollTop,height){if(!layout)return null;const candidates=visibleIndices(layout,scrollTop,height,0);let best=null;for(const index of candidates){const p=layout.positions[index];if(!best||Math.abs(p.y-scrollTop)<Math.abs(best.y-scrollTop))best=p;}return best?{id:best.id,offset:scrollTop-best.y,width:best.width}:null;}
-const api={createMasonry,createLayout,createJustified,verticalNeighbor,visibleIndices,anchorAt};if(typeof module!=='undefined')module.exports=api;else root.AssetLayout=api;
+const api={createMasonry,createLayout,createJustified,createList,verticalNeighbor,visibleIndices,anchorAt};if(typeof module!=='undefined')module.exports=api;else root.AssetLayout=api;
 })(globalThis);

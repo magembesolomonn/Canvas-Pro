@@ -2,8 +2,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-// Run once. Keep the private key outside the repository and embed only the
-// printed public key in electron/update-signing.cjs.
 const target = process.argv[2] || path.join(__dirname, '../audits/update-signing.key');
 if (fs.existsSync(target) && !process.argv.includes('--force')) {
   console.error('Refusing to overwrite an existing key. Pass --force to replace it.');

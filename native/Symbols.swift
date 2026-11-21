@@ -1,9 +1,5 @@
 import AppKit
 
-// Two modes:
-//   canvas-symbols <output-directory>   — batch-render the fallback PNG set
-//   canvas-symbols --render <name> <pointSize> <weight> <scale> <out.png>
-//                                       — render one symbol for the app at runtime
 
 let args = CommandLine.arguments
 
@@ -41,7 +37,6 @@ func renderSymbol(symbolName: String, pointSize: CGFloat, weight: NSFont.Weight,
     NSGraphicsContext.current = context
     NSColor.clear.setFill()
     NSRect(x: 0, y: 0, width: rep.size.width, height: rep.size.height).fill(using: .copy)
-    // Keep the symbol inside the canvas without clipping ascenders/descenders.
     let box = min(rep.size.width, rep.size.height) * 0.92
     let factor = min(box / image.size.width, box / image.size.height)
     let width = image.size.width * factor, height = image.size.height * factor
@@ -87,7 +82,7 @@ symbols["heading"]="textformat.size.larger"
 symbols["toggle"]="switch.2"
 symbols["table"]="tablecells"
 symbols["library"]="rectangle.stack"
-symbols["viewOptions"]="rectangle.3.group"
+symbols["viewOptions"]="line.3.horizontal.decrease"
 symbols["findSimilar"]="sparkle.magnifyingglass"
 symbols["plusMagnifier"]="plus.magnifyingglass"
 symbols["minusMagnifier"]="minus.magnifyingglass"

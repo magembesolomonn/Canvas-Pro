@@ -8,8 +8,6 @@ require('../electron/main.cjs');
 
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function poll(check){
- // The same patience as the canvas suite: a busy machine needs more than
- // five seconds to open the editor.
  for(let i=0;i<600;i++){const value=await check();if(value)return value;await wait(20);}
  throw Error('Navigation test timed out');
 }
@@ -28,9 +26,6 @@ async function poll(check){
  if(win.webContents.isLoading())await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
  const run=code=>win.webContents.executeJavaScript(code);
  const loaded=()=>run('catalogKey===JSON.stringify(catalogQuery())&&!catalogLoading');
- // Switching views restores the saved scroll position asynchronously, so the
- // value read straight after `loaded` can still be the pre-restore one. Wait
- // for the position to stop moving before asserting on it.
  const settledScroll=async()=>{
   let previous=null;
   for(let i=0;i<120;i++){
@@ -86,9 +81,6 @@ async function poll(check){
   await click(x+14,y+14,1);
   await click(x+14,y+14,2);
   await poll(()=>run(`CanvasWorkspace.editing?.id==='${itemId}'`));
-  // Re-entering edit mode by double-click puts the caret where the click
-  // landed, so collapse it to the end before typing. Otherwise the text is
-  // inserted at the click point and the "ends with" assertion is a coin flip.
   await run("(()=>{const selection=window.getSelection();selection.selectAllChildren(document.activeElement);selection.collapseToEnd();})()");
   await run("document.execCommand('insertText',false,' edited');document.activeElement.blur()");
   assert.match(await run(`CanvasWorkspace.doc.items.get('${itemId}').data.text`),/ edited$/);
@@ -122,9 +114,6 @@ async function poll(check){
   const placement=items[0]||[...CanvasWorkspace.doc.items.values()].find(item=>item.assetId===target);
   const reveal=async()=>{
    const button=[...$('#inspector').querySelectorAll('button')].find(button=>button.textContent==='Show in library');
-   // Click the real control, then wait for the reveal it starts. The reveal
-   // loads the paged catalogue before selecting, so polling for the result is
-   // the only way to know it finished.
    button.click();
    const deadline=Date.now()+8000;
    while(Date.now()<deadline){

@@ -7,9 +7,6 @@ const root = path.resolve(__dirname, '..');
 const binary = path.join(root, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron');
 if (!fs.existsSync(binary)) throw new Error('Run npm install and node node_modules/electron/install.js first.');
 
-// RunAsNode stays enabled because the native messaging host launches this
-// binary with ELECTRON_RUN_AS_NODE=1. Everything else that can be disabled
-// without breaking the unpacked app or the web preview is disabled here.
 flipFuses(binary, {
   version: FuseVersion.V1,
   [FuseV1Options.RunAsNode]: true,

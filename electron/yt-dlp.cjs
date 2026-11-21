@@ -1,8 +1,5 @@
 const fs=require('node:fs'),path=require('node:path'),zlib=require('node:zlib'),crypto=require('node:crypto'),{spawn,execFile}=require('node:child_process'),{pipeline}=require('node:stream/promises'),{Readable,Transform}=require('node:stream');
 
-// Both helpers are pinned to a version and a byte-for-byte checksum. The app
-// verifies the checksum on every launch and again after each download, so a
-// changed or truncated binary is never executed.
 const YTDLP_VERSION='2026.10.26';
 const YTDLP='yt-dlp_macos';
 const YTDLP_URL=`https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/${YTDLP}`;
@@ -72,7 +69,6 @@ function redditURL(value){
     const u=new URL(value);
     if(u.hostname==='v.redd.it'||u.hostname==='redd.it') return u.href;
     if(!/(^|\.)reddit\.com$/i.test(u.hostname)) return '';
-    // prefer the post/comments permalink; yt-dlp resolves it to best A/V
     if(/\/comments\/[a-z0-9]+/i.test(u.pathname)){u.hash='';u.search='';return u.href;}
     return u.href;
   }catch{return '';}
@@ -167,8 +163,6 @@ class YtDlp {
     if(isYT) base.splice(6,0,'--extractor-args','youtube:player_client=visionos,default');
     if(this.jsRuntime) base.push('--js-runtimes', this.jsRuntime);
     if(ffmpeg) base.push('--ffmpeg-location', ffmpeg);
-    // Best quality available, always MP4: prefer H.264 (avc1) video + AAC audio merged to MP4
-    // for maximum quality with broad compatibility. Falls back to best available if needed.
     const attempts=ffmpeg
       ? [['-f','bv*[ext=mp4][vcodec^=avc1]+ba[ext=m4a][acodec^=mp4a]/bv*[vcodec^=avc1]+ba[acodec^=mp4a]/bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b','--merge-output-format','mp4','-o','%(title).200B [%(id)s].%(ext)s'],
          ['-f','b[ext=mp4]/bv*+ba/best','-o','%(title).200B [%(id)s].%(ext)s']]

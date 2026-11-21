@@ -1,6 +1,3 @@
-// The picture that is saved must be the original file, not the small copy the
-// page happens to show. A regression test for the "saves a low resolution
-// picture" report.
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {originalImage,largestImage,pageVideoMedia}=require('../chrome-extension/social-core.js');
@@ -26,8 +23,6 @@ function fakeDocument({scripts=[],videos=[],meta={},links=[]}={}){
 function videoElement(){return {nodeType:1,tagName:'VIDEO',parentElement:null,querySelectorAll:()=>[]};}
 
 test('a Twitter picture is asked for at its original size',()=>{
-  // Twitter always names a size in the address, so the upgrade must replace
-  // that name rather than look for a missing one.
   const url=originalImage('https://pbs.twimg.com/media/Abc123.jpg?format=jpg&name=small');
   assert.equal(url,'https://pbs.twimg.com/media/Abc123.jpg?format=jpg&name=orig');
   const medium=originalImage('https://pbs.twimg.com/media/Abc123.jpg?format=jpg&name=medium');

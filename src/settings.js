@@ -1,10 +1,6 @@
-// Settings controller: a two-pane preferences window in the macOS System
-// Settings idiom — a searchable rail on the left, one focused pane on the right.
 (function () {
   'use strict';
 
-  // The single source of truth for the in-app shortcut reference. The command
-  // palette and the Settings pane used to keep separate lists that disagreed.
   const SHORTCUTS = [
     ['⌘ K', 'Open command palette'],
     ['⌘ F', 'Search the library'],
@@ -12,7 +8,7 @@
     ['Space', 'Preview the selected file'],
     ['← →', 'Move through the library'],
     ['⌘I', 'Toggle file details'],
-    ['⌘B / ⌘S', 'Toggle the sidebar'],
+    ['⌘S', 'Toggle the sidebar'],
     ['⌘O', 'Import files'],
     ['⌘V', 'Paste files from the clipboard'],
     ['⌘C', 'Copy the selected files'],
@@ -70,16 +66,28 @@
       search.addEventListener('input', () => this.filter(search.value));
       search.addEventListener('keydown', event => {
         if (event.key !== 'Enter') return;
-        const first = this.navItems.find(item => !item.hidden);
+        const first = $('#settings-nav').querySelector('.settings-nav-item:not([hidden])');
         if (first) this.show(first.dataset.settingsPane);
       });
 
+      $('#reveal-library-folder').onclick = () => safe(() => api.showLibrary());
+      $('#library-backup').onclick = async () => {
+        const button = $('#library-backup');
+        button.disabled = true;
+        $('#backup-status').textContent = 'Preparing backup…';
+        try {
+          await api.workbench('backup');
+          await this.syncBackup();
+        } catch (error) {
+          $('#backup-status').textContent = error.message;
+        } finally {
+          button.disabled = false;
+        }
+      };
       this.buildShortcuts();
       this.buildLicenses();
       this.wireAppearance();
       this.wireRadioKeys('#settings-theme', '[data-theme]');
-      // The switches describe the resolved appearance, so they follow a theme
-      // change made from this pane without waiting for it to be reopened.
       api.onAppearance(state => {
         const pane = this.pane('appearance');
         if (pane && !pane.hidden) this.syncAppearance(state);
@@ -106,8 +114,6 @@
       return this.panes.get(name) || null;
     },
 
-    // A radiogroup promises arrow-key navigation and one tab stop. The native
-    // buttons already handle click/Enter/Space; this adds the missing arrows.
     wireRadioKeys(selector, itemSelector) {
       const group = $(selector);
       if (!group) return;
@@ -136,7 +142,7 @@
     open(name) {
       const dialog = $('#settings-dialog');
       if (!dialog.open) dialog.showModal();
-      if (name) this.show(name);
+      this.show(name || this.currentPane);
       const search = $('#settings-search');
       if (search) search.value = '';
       this.filter('');
@@ -157,8 +163,6 @@
       this.refresh(name);
     },
 
-    // The rail filters as you type and jumps straight to the first match.
-    // Rows count as matches too, so “health” finds the Media pane.
     filter(query) {
       const needle = query.trim().toLowerCase();
       let first = null;
@@ -177,8 +181,6 @@
         group.hidden = !visible;
       }
       if (needle && first) this.show(first.dataset.settingsPane);
-      // With no matches the rail is empty but the old pane stayed on screen
-      // with no explanation, which looked like a broken search.
       let empty = $('#settings-no-results');
       if (!empty && needle && !first) {
         empty = document.createElement('p');
@@ -190,10 +192,23 @@
       if (empty) empty.hidden = !needle || !!first;
     },
 
+    async syncBackup() {
+      const {backup} = await api.workbench('state');
+      $('#backup-status').textContent = backup ? new Date(backup.at).toLocaleString() + ' · ' + backup.path : 'No backup recorded for this library.';
+    },
+
     refresh(name) {
+      if (name === 'library') {
+        safe(async () => {
+          const { name, root } = await api.libraryLocation();
+          $('#current-library-name').textContent = name;
+          $('#current-library-path').textContent = root;
+        });
+        if (!$('#library-backup').disabled) safe(() => this.syncBackup());
+      }
       if (name === 'appearance') this.syncAppearance();
       if (name === 'galleries') this.syncLayouts();
-      if (name === 'search-models') this.syncExperimental();
+      if (name === 'search-models') safe(() => this.syncExperimental());
       if (name === 'about') this.syncVersion();
     },
 
@@ -271,8 +286,11 @@
     },
 
     syncLayouts() {
-      for (const button of document.querySelectorAll('#settings-layouts [data-layout]'))
-        button.setAttribute('aria-checked', String(button.dataset.layout === galleryLayout));
+      for (const button of document.querySelectorAll('#settings-layouts [data-layout]')) {
+        const active = button.dataset.layout === galleryLayout;
+        button.setAttribute('aria-checked', String(active));
+        button.tabIndex = active ? 0 : -1;
+      }
       const names = $('#settings-file-names');
       if (names) names.checked = showFileNamesEnabled();
     },
@@ -290,17 +308,17 @@
       };
     },
 
-    syncExperimental() {
+    async syncExperimental() {
       const semantic = $('#settings-semantic');
       const visual = $('#settings-visual-model');
-      const ready = SmartSearch.visualModelReady;
+      const ready = (await api.modelState('clip')).ready;
       semantic.checked = SmartSearch.enabled;
       visual.checked = ready;
-      visual.disabled = !semantic.checked && !ready;
-      $('#settings-visual-row').classList.toggle('is-muted', !semantic.checked && !ready);
+      visual.disabled = ready;
+      $('#settings-visual-row').classList.toggle('is-muted', false);
       $('#settings-visual-note').textContent = ready
         ? 'The visual model is installed on this Mac.'
-        : 'Runs entirely on your Mac. Images are never uploaded.';
+        : 'Download the visual model (156 MB) for image similarity and tag suggestions.';
     },
 
 
@@ -351,8 +369,6 @@
       if (this.updating) return;
       const button = $('#settings-check-updates'), status = $('#settings-update-status'), bar = $('#settings-update-progress');
       const updateApi = this.updateApi || api;
-      // The command palette can start this flow with Settings closed, so the
-      // in-pane status line is not enough: mirror every step into a toast.
       const toast = message => { if (typeof notify === 'function') notify(message); };
       this.updating = true;
       this.pendingUpdateVersion = '';

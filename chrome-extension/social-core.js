@@ -25,13 +25,10 @@
  }
  function platformFor(value){try{const host=new URL(value).hostname;return platforms.find(p=>host===p||host.endsWith('.'+p))||null;}catch{return null;}}
  function direct(value){try{const u=new URL(value);return /^https?:$/.test(u.protocol)&&! /\.(m3u8|mpd|m4s|ts)(?:$)/i.test(u.pathname)?u.href:null;}catch{return null;}}
- // The page shows a resized copy. The original file is asked for instead, so
- // what is saved is full quality and not the thumbnail.
  function originalImage(value){
   const url=direct(value); if(!url) return null;
   try{const parsed=new URL(url);if(/(?:^|\.)pbs\.twimg\.com$/i.test(parsed.hostname)&&parsed.pathname.startsWith('/media/'))parsed.searchParams.set('name','orig');return parsed.href;}catch{return url;}
  }
- // The largest picture the page offers, not the small one it happens to show.
  function largestImage(element){
   if(!element) return null;
   const candidates=[];
@@ -74,10 +71,6 @@
   const url=direct(value); if(!url)return '';
   try{return VIDEO_FILE.test(new URL(url).pathname)?url:'';}catch{return '';}
  }
- // Streaming players (Media Source Extensions) show a <video> whose source is a
- // blob: address that nothing outside the page can download. Many of them still
- // publish the real file in declarative metadata, so read that instead of
- // guessing. Cosmetic: no site name appears here.
  function videoObjects(scope){
   const found=[];
   for(const script of (scope||document).querySelectorAll('script[type="application/ld+json"]')){
@@ -102,9 +95,6 @@
   return {kind:'video',mediaUrl,poster:direct(typeof value.thumbnailUrl==='string'?value.thumbnailUrl:''),
    width:Number(value.width)||0,height:Number(value.height)||0,title:typeof value.name==='string'?value.name.slice(0,160):''};
  }
- // A feed can show dozens of players, so a page-level answer is only trusted
- // when the pointer's own container identifies exactly one video. With no
- // container and several videos, saying nothing beats saving the wrong clip.
  function pageVideoMedia(element){
   if(element&&element.nodeType===1){
    let node=element;
@@ -119,7 +109,6 @@
   const all=videoObjects(document).map(videoFromObject).filter(Boolean);
   if(all.length===1)return all[0];
   if(all.length>1)return null;
-  // One player on the page means the player's own metadata is unambiguous.
   if(element&&document.querySelectorAll('video').length!==1)return null;
   const meta=name=>document.querySelector(`meta[property="${name}"],meta[name="${name}"]`)?.getAttribute('content')||'';
   const poster=direct(meta('og:image')||meta('twitter:image'));
@@ -131,7 +120,6 @@
    const mediaUrl=videoFile(link.getAttribute('href'));
    if(mediaUrl)return {kind:'video',mediaUrl,poster,width:0,height:0,title:''};
   }
-  // A page can also keep the file in a plain attribute instead of a script.
   const scope=element?.closest?.('figure,article,[data-testid]')||document;
   for(const node of scope.querySelectorAll('[src],[data-src],[data-video-url],[data-mp4],[data-file],[href],[content]')){
    for(const attr of ['src','data-src','data-video-url','data-mp4','data-file','href','content']){
@@ -150,7 +138,6 @@
    if(shadowHit?.matches('img,video'))candidates.add(shadowHit);
   }
   if(!candidates.size){
-   // An overlay can be the only hit when the slide itself ignores pointer events.
    let scope=hits[0]?.parentElement;
    for(let depth=0;scope&&depth<4&&!candidates.size;depth++,scope=scope.parentElement){
     if(scope.matches('body,main'))break;
@@ -176,7 +163,6 @@
    if(video){
     let resolved=instagramVideoForPoster(element.poster);
     if(!resolved&&!element.poster){
-     // Some Instagram players put the cover beside the video instead of on it.
      const nearby=[...(element.parentElement?.querySelectorAll('img')||[])].filter(image=>{
       const bounds=image.getBoundingClientRect();
       return Math.abs(bounds.left-box.left)<4&&Math.abs(bounds.top-box.top)<4&&
@@ -262,7 +248,6 @@
   const roots=[post];for(let i=0;i<roots.length&&i<300;i++){for(const e of roots[i].querySelectorAll('*'))if(e.shadowRoot)roots.push(e.shadowRoot);}const query=selector=>roots.flatMap(root=>[...root.querySelectorAll(selector)]);const videos=query('video'),hasVideo=videos.length>0||post.getAttribute('post-type')==='video'||!!post.querySelector('shreddit-player,[data-testid="videoPlayer"],[data-testid="videoComponent"]');for(const video of videos){const extra={width:video.videoWidth,height:video.videoHeight,...(Number.isFinite(video.duration)?{duration:video.duration}:{}),poster:video.poster||''};const resolved=direct(video.currentSrc||video.src)?null:instagramVideoForPoster(video.poster);
    add(direct(video.currentSrc||video.src)||resolved?.mediaUrl,'video',{...extra,...(resolved?.audioUrl?{audioUrl:resolved.audioUrl}:{})});for(const source of video.querySelectorAll('source'))add(source.src,'video',extra);}
   for(const e of query('[data-video-url],[video-url],[content-href]')){const value=e.getAttribute('data-video-url')||e.getAttribute('video-url')||e.getAttribute('content-href');if(/\.(mp4|webm|mov)(?:[?#]|$)/i.test(value||''))add(value,'video');}
-  // Structured metadata is used only within this post, never another feed item.
   for(const script of query('script[type="application/ld+json"]'))try{const queue=[JSON.parse(script.textContent)];let count=0;while(queue.length&&count++<5000){const value=queue.shift();if(!value||typeof value!=='object')continue;for(const [key,child]of Object.entries(value)){if(typeof child==='object')queue.push(child);else if(typeof child==='string'&&/^(contentUrl|video_url|url)$/.test(key)&&/\.(mp4|webm|mov)(?:[?#]|$)/i.test(child))add(child,'video');}}}catch{}
   const posters=new Set(videos.map(video=>direct(video.poster)).filter(Boolean));
   for(const image of query('img')){const bounds=image.getBoundingClientRect();if(/avatar|profile|emoji|profile_images/i.test((image.alt||'')+' '+image.src)||bounds.width>0&&bounds.width<70||bounds.height>0&&bounds.height<60||image.naturalWidth&&image.naturalWidth<90||image.naturalHeight&&image.naturalHeight<70)continue;if(posters.has(direct(image.currentSrc||image.src)))continue;addImage(image,{alt:image.alt||'',width:image.naturalWidth,height:image.naturalHeight});}

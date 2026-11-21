@@ -1,4 +1,3 @@
-// Release regressions. All writes use fresh temporary libraries.
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');const {spawnSync}=require('node:child_process');const root=path.resolve(__dirname,'../..');
 function run(runtime,name){const result=spawnSync(runtime,[path.join(__dirname,name)],{cwd:root,encoding:'utf8',timeout:60000});if(result.error)throw result.error;if(result.status!==0)throw Error('Diagnostic harness failed: '+result.stdout+'\n'+result.stderr);return result.stdout;}
 const imported=JSON.parse(run(process.execPath,'import-reproduction.cjs'));

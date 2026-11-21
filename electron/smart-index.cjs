@@ -2,18 +2,11 @@ const VISUAL_EXTENSIONS="'jpg','jpeg','jfif','jpe','png','webp','gif','avif','he
 const fs=require('node:fs'),path=require('node:path');
 const {execFile}=require('node:child_process'),{promisify}=require('node:util');const execute=promisify(execFile);
 const {expand,moodWords,meaninglessName,proposedName}=require('./smart-language.cjs');
-// macOS can compare sentences on its own. The native helper turns a piece of
-// text into the vector that comparison uses, so documents and notes can be
-// searched in plain language without downloading a model.
 const TEXT_MODEL='natural-language-en-v1';
 const TEXT_CHUNKS=12;
-// A document is understood in pieces: one vector for the whole file would
-// average a note about files and a note about tomatoes into nothing.
 function textChunks(text){
   const value=String(text||'');
   if(!value.trim())return [];
-  // Sentences first: a paragraph that mixes two subjects is two things, and
-  // only one of them is what the reader is looking for.
   const sentences=[];
   for(const paragraph of value.split(/\n\s*\n/)){
     const clean=paragraph.replace(/\s+/g,' ').trim();
@@ -21,7 +14,6 @@ function textChunks(text){
     for(const sentence of clean.split(/(?<=[.!?])\s+(?=[A-Z0-9"'(\u201c])/))
       if(sentence.trim())sentences.push(sentence.trim());
   }
-  // Then small pieces of a few sentences each.
   const parts=[];
   let current='';
   for(const sentence of sentences){
@@ -48,14 +40,11 @@ async function embedText(text){
     const values=JSON.parse(stdout);
     if(!Array.isArray(values)||!values.length)return null;
     textDimensions=values.length;
-    // The comparison is a dot product, so the vector is normalised once.
     return normalise(values);
   }catch(error){
     return null;
   }
 }
-// Several texts in one call: a document is a dozen pieces, and a dozen
-// processes for it is a dozen times the work.
 async function embedTexts(texts){
   const lines=texts.map(text=>String(text||'').replace(/\s+/g,' ').trim()).filter(Boolean);
   if(!lines.length)return [];
@@ -69,9 +58,6 @@ async function embedTexts(texts){
   }
 }
 const MODEL='clip-vit-base-patch32-q8-v1';
-// Stored vectors are 512 little-endian floats. Reading them through DataView
-// costs one method call per component; a Float32Array view is direct access.
-// SQLite buffers can begin at any byte offset, so copy when unaligned.
 function floatVector(bytes){
   if(!bytes||bytes.byteLength!==2048)return null;
   if(bytes.byteOffset%4===0)return new Float32Array(bytes.buffer,bytes.byteOffset,512);
@@ -94,7 +80,6 @@ class SmartIndex{
   }catch{}
   this.schedule();this.onWork();
  }
- // Coalesce bookkeeping for many changed assets into one transaction.
  flushTextQueue(){
   if(!this.textQueue.size)return;
   const ids=[...this.textQueue].slice(0,50);
@@ -119,16 +104,12 @@ class SmartIndex{
      model=patch.model||MODEL;
      if(model===MODEL){delete summary.visualRetry;delete summary.visualAttempts;}
    }
-   // Text embeddings live beside the visual vector instead of in it: a
-   // non-CLIP model in `vector` is invisible to visual search but still
-   // blocks visual indexing. Keeping `vector` free lets that work proceed.
    if(patch.text_vector){
      if(!Array.isArray(patch.text_vector)||patch.text_vector.length!==512||patch.text_vector.some(v=>!Number.isFinite(v)))throw Error('Invalid index vector.');
      textVector=Buffer.from(new Float32Array(patch.text_vector).buffer);
    }
    this.db.prepare('INSERT INTO asset_analysis(id,summary,text,vector,model,version,text_vector) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET summary=excluded.summary,text=excluded.text,vector=excluded.vector,model=excluded.model,version=excluded.version,text_vector=excluded.text_vector').run(
      id,JSON.stringify(summary),patch.text===undefined?old?.text||'':String(patch.text).slice(0,50000),vector,model,patch.version??old?.version??0,textVector);
-   // Embedding writes and retry bookkeeping cannot change the searchable text.
    if(old&&patch.text===undefined&&Object.keys(patch.summary||{}).every(key=>key==='visualRetry'||key==='visualAttempts'))return summary;
    const result=this.indexText(id);
    this.onUpdate({id,smart:result});
@@ -176,7 +157,6 @@ class SmartIndex{
        }
      }
      if(this.closed||signal?.aborted)return;
-     // The meaning of a document, as macOS understands it.
      let textVector=null;
      if(!error&&extracted){
       const chunks=textChunks(extracted);
@@ -186,7 +166,6 @@ class SmartIndex{
        this.putChunks(id,vectors);
       }
      }
-     // A file called image.jpeg gets a real name, chosen from what is in it.
      let renamed='',originalName='';
      if(meaninglessName(a.name)){
       const proposed=proposedName(a,extracted,labels);
@@ -203,7 +182,6 @@ class SmartIndex{
        state:error?'unavailable':'indexed',error,analyzedAt:Date.now(),
        ...(originalName?{originalName}:{})
      },version:1,...(textVector?{text_vector:textVector}:{})});
-     // Tell the window about the new name so the card shows it at once.
      if(renamed)this.onUpdate({id,smart:this.indexText(id),name:renamed});
    }catch(error){
      if(!this.closed&&!signal?.aborted){
@@ -216,8 +194,9 @@ class SmartIndex{
   const statement=this.db.prepare('INSERT INTO asset_chunks(id,chunk,vector,model) VALUES(?,?,?,?)');
   vectors.forEach((vector,chunk)=>statement.run(id,chunk,Buffer.from(new Float32Array(vector).buffer),TEXT_MODEL));
  }
- async search(query,vector){
+ async search(query,vector,isCancelled=()=>false){
    const tokens=expand(query),scores=new Map();
+   if(isCancelled())return [];
    if(tokens.length){
      const match=tokens.map(group=>'('+group.map(term=>'"'+term+'"*').join(' OR ')+')').join(' OR ');
      for(const row of this.db.prepare('SELECT f.id,bm25(smart_fts) rank FROM smart_fts f JOIN assets a ON a.id=f.id WHERE smart_fts MATCH ? AND a.trash=0 ORDER BY rank LIMIT 1500').all(match)){
@@ -233,7 +212,7 @@ class SmartIndex{
        JOIN assets a ON a.id=s.id WHERE s.rowid>? AND s.rowid<=?
        AND s.model=? AND s.vector IS NOT NULL AND a.trash=0 ORDER BY s.rowid LIMIT ?`);
      let cursor=0;
-     while(!this.closed&&cursor<lastRow){
+     while(!this.closed&&!isCancelled()&&cursor<lastRow){
        const rows=select.all(cursor,lastRow,MODEL,batchSize);
        for(const row of rows){
          const values=floatVector(row.vector);
@@ -251,16 +230,16 @@ class SmartIndex{
        await new Promise(resolve=>setImmediate(resolve));
      }
    }
-   // The sentence, understood: compare the words with the documents that
-   // macOS embedded. This is what makes a whole sentence findable in a file.
-   const understood=await this.understand(query);
+   if(isCancelled())return [];
+   const words=String(query||'').trim().split(/\s+/).filter(Boolean);
+   const understood=words.length>1?await this.understand(query):null;
    if(understood){
      const batchSize=400;
      const lastRow=this.db.prepare('SELECT MAX(rowid) AS id FROM asset_chunks WHERE model=?').get(TEXT_MODEL).id;
      const select=this.db.prepare(`SELECT rowid AS cursor,id,vector FROM asset_chunks
        WHERE rowid>? AND rowid<=? AND model=? ORDER BY rowid LIMIT ?`);
      let cursor=0;
-     while(!this.closed&&cursor<lastRow){
+     while(!this.closed&&!isCancelled()&&cursor<lastRow){
        const rows=select.all(cursor,lastRow,TEXT_MODEL,batchSize);
        for(const row of rows){
          const values=floatVector(row.vector);
@@ -273,7 +252,6 @@ class SmartIndex{
          const similarity=dot/Math.sqrt(norm||1);
          if(similarity<.25)continue;
          const current=scores.get(row.id)||0;
-         // The best piece of a file is what matches, not the sum of them.
          scores.set(row.id,Math.max(current,similarity));
        }
        if(rows.length<batchSize)break;
@@ -283,16 +261,11 @@ class SmartIndex{
    }
    return [...scores].sort((a,b)=>b[1]-a[1]).slice(0,1500).map(([id])=>id);
  }
- // The meaning of the query, as macOS understands it. Nothing is embedded
- // when the library holds no documents, so the cost is only paid when it
- // helps.
  async understand(query){
    const count=this.db.prepare('SELECT COUNT(*) n FROM asset_chunks WHERE model=?').get(TEXT_MODEL).n;
    if(!count)return null;
    return await embedText(query);
  }
- // A caption is one sentence about a picture. It is stored beside the rest
- // of what is known about the file, so its words can be found by a search.
  caption(id,text){
   const value=String(text||'').trim().slice(0,400);
   if(!value)return null;
@@ -300,8 +273,6 @@ class SmartIndex{
   try{
    const a=this.library.asset(id);
    const summary={...(this.info(id)||{}),caption:value};
-   // Use the description model output to give meaningless/generic names a
-   // human-readable title (without touching intentional names).
    if(meaninglessName(a.name)){
     const proposed=proposedName(a,value,[]);
     if(proposed&&proposed!==a.name&&proposed.length<=120){

@@ -6,9 +6,6 @@ test('recovery rejects wrong bytes and restores the exact original without losin
 test('backup contains a consistent database, originals and presentation settings',()=>fixture(async({lib,tools,id,dir})=>{lib.update(id,{notes:'Important'});tools.icon('canvas:a',{type:'symbol',value:'star'});const dest=path.join(dir,'Backup.canvaslibrary');await tools.backup(dest);const restored=new Library(dest);try{assert.equal(restored.asset(id).notes,'Important');assert.equal(fs.readFileSync(restored.file(id),'utf8'),'Keep my original and metadata');assert.equal(new Workbench(restored).icons()['canvas:a'].value,'star');}finally{restored.close();}await assert.rejects(tools.backup(path.join(lib.root,'nested')),/outside/);assert.ok(tools.pref('lastBackup').at);}));
 async function importCopy(lib,dir,name,contents){const source=path.join(dir,name);fs.writeFileSync(source,contents);return (await lib.importFile(source)).imported;}
 test('duplicate review clusters fingerprints, keeps the annotated copy and leaves files alone',()=>fixture(async({lib,tools,id,dir})=>{
-  // Three versions of one picture: the first differs by one bit from the
-  // second and the second by one bit from the third, so only transitivity can
-  // put them in one group. The fourth is a different picture.
   const second=await importCopy(lib,dir,'second.txt','A second version');
   const third=await importCopy(lib,dir,'third.txt','A third version, with a note');
   const other=await importCopy(lib,dir,'other.txt','An unrelated picture');
@@ -35,7 +32,6 @@ test('duplicate review forgets a dismissed group until the library changes',()=>
   const [group]=(await tools.duplicates()).groups;
   tools.dismissDuplicates(group.members.map(m=>m.id));
   assert.deepEqual((await tools.duplicates()).groups,[]);
-  // A third copy forms a different group, so the subject can be reviewed again.
   const third=await importCopy(lib,dir,'third.txt','A later copy');
   lib.setPhash(third,'0f0f0f0f0f0f0f0c');
   const again=(await tools.duplicates()).groups;
@@ -51,8 +47,6 @@ test('duplicate review compares only non-empty fingerprints and reports pending 
   const result=await tools.duplicates();
   assert.deepEqual(result.groups,[]);
   assert.equal(result.total,1);
-  // The .txt files are outside the fingerprint formats, so only real pictures
-  // are ever queued; a NULL fingerprint is pending work.
   assert.equal(result.pending,0);
   lib.db.prepare("UPDATE assets SET ext='jpg' WHERE id=?").run(unchecked);
   assert.equal((await tools.duplicates()).pending,1);
@@ -77,4 +71,26 @@ test('legacy captures and collection rules survive opening the library', () => f
   } finally {
     reopened.close();
   }
+}));
+
+test('restoring a backup preserves board references and captured file metadata',()=>fixture(async({lib,tools,id,dir})=>{
+  const {CanvasStore}=require('../electron/canvas-store.cjs');
+  const boards=new CanvasStore(lib);
+  const board=boards.create('Client references');
+  boards.addAssets(board.id,[id]);
+  lib.update(id,{tags:['packaging'],notes:'Use this direction'});
+  lib.setCaptureMetadata(id,{kind:'image',pageUrl:'https://example.com/reference'});
+  const backup=path.join(dir,'Client backup.canvaslibrary');
+  await tools.backup(backup);
+  const copy=path.join(dir,'Restored.canvaslibrary');
+  fs.cpSync(backup,copy,{recursive:true});
+  const restored=new Library(copy);
+  try{
+    const item=new CanvasStore(restored).get(board.id).items[0];
+    const asset=restored.page().assets.find(asset=>asset.id===item.assetId);
+    assert.deepEqual(asset.tags,['packaging']);
+    assert.equal(asset.notes,'Use this direction');
+    assert.equal(asset.captureMetadata.pageUrl,'https://example.com/reference');
+    assert.deepEqual(fs.readFileSync(restored.file(asset.id)),fs.readFileSync(lib.file(id)));
+  }finally{restored.close();}
 }));

@@ -1,4 +1,3 @@
-// Runs in the Instagram page to observe post data the page has already requested.
 (()=>{
  const isPostData=value=>{
   try{

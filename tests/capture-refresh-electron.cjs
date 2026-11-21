@@ -1,5 +1,3 @@
-// Reproduces the reported behaviour: a browser capture is written to the
-// library, but the running window must show it without being restarted.
 process.env.ASSET_TEST_MODE='1';
 process.env.AGAGWU_DATA_DIR='/private/tmp/canvas-capture-refresh-'+Date.now();
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
@@ -44,7 +42,6 @@ require('../electron/main.cjs');
   }
   assert.equal(job.state,'complete',JSON.stringify(job));
   assert.equal(job.imported,1,JSON.stringify(job));
-  // The window must show the capture on its own, in the gallery itself.
   let shown=0,rendered=0,count='';
   for(let i=0;i<60;i++){
     const state=await win.webContents.executeJavaScript(`(()=>{const a=assets.find(x=>x.name&&x.name.startsWith('Refresh probe'));const cards=[...document.querySelectorAll('.card')].map(c=>c.textContent||'');return {inList:a?1:0,rendered:cards.some(t=>t.includes('Refresh probe'))?1:0,count:document.querySelector('#count')?document.querySelector('#count').textContent:''};})()`);

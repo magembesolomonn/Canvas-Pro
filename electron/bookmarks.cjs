@@ -4,9 +4,6 @@ const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const run=promisify(execFile);
 const {classifyURL}=require('./bookmark-types.cjs');
-// Bumped whenever extraction starts finding more on a page that used to be a
-// plain link. Previews saved by an older extractor are upgraded on demand when
-// the reader opens them, never in bulk at launch.
 const EXTRACTOR_VERSION=10;
 function smartPage(html,url){return new Promise((resolve,reject)=>{const worker=new Worker(path.join(__dirname,'page-worker.cjs'),{workerData:{html,url},resourceLimits:{maxOldGenerationSizeMb:128}});const timeout=setTimeout(()=>{worker.terminate();reject(Error('Page extraction timed out'));},10000);worker.once('message',value=>{clearTimeout(timeout);worker.terminate();value.error?reject(Error(value.error)):resolve(value);});worker.once('error',error=>{clearTimeout(timeout);worker.terminate();reject(error);});});}
 
@@ -238,8 +235,6 @@ class Bookmarks{
    if(asset.trash||info?.type!=='social'||info.url!==asset.url||!source)return new Response(null,{status:404});
    return this.publicImage([source],signal,8);
  }
- // The cover is normally saved to disk during enrichment. If that download
- // failed, the card can still borrow the page's own feature image.
  async webImage(id,signal){
    const {asset,info}=this.cached(id);
    if(asset.trash||info?.url!==asset.url||!['webpage','article'].includes(info?.type)||!info.imageURL)return new Response(null,{status:404});

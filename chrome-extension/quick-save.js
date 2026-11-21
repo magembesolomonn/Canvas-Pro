@@ -1,28 +1,19 @@
 (()=>{
   const canUseRuntime=()=>{try{return !!(globalThis.chrome?.runtime?.id && globalThis.chrome?.runtime?.sendMessage);}catch{return false;}};
   const contextInvalidated=e=>/Extension context invalidated/i.test(String(e?.message||e||''));
-  // An older copy of this script may still be attached to a page that was open
-  // when the extension was updated. Its context is dead, so its calls reject
-  // with "Extension context invalidated". Those rejections are noise once this
-  // copy is running, so they are silenced instead of surfacing as errors.
   const quiet=event=>{const message=String(event?.message||event?.reason||event||'');if(/Extension context invalidated/i.test(message)){event.preventDefault?.();event.stopImmediatePropagation?.();return true;}return false;};
   window.addEventListener('error',quiet,true);
   window.addEventListener('unhandledrejection',quiet,true);
-  // The newest copy takes over: it bumps the generation and rebinds its
-  // handlers, so an older copy in the same page stops taking action.
   const generation=(globalThis.__canvasQuickSaveGeneration||0)+1;
   globalThis.__canvasQuickSaveGeneration=generation;
   try{document.documentElement.setAttribute('data-canvas-quick-save',String(generation));}catch{}
   const current=()=>globalThis.__canvasQuickSaveGeneration===generation;
   const abs=v=>{try{return v?new URL(v,location.href).href:''}catch{return ''}};
-  // An empty attribute resolves to the page itself, which is never the file.
   const direct=u=>{try{if(!u) return '';const url=new URL(u,location.href);return /^https?:$/.test(url.protocol)&&url.href!==location.href?url.href:''}catch{return ''}};
   function youtubeWatchURL(value){try{const u=new URL(value||location.href,location.href);if(u.hostname==='youtu.be'){const id=u.pathname.slice(1).split('/')[0];return id?'https://www.youtube.com/watch?v='+id:'';}if(!/(^|\.)youtube\.com$/i.test(u.hostname))return '';if(u.pathname==='/watch'&&u.searchParams.get('v'))return 'https://www.youtube.com/watch?v='+u.searchParams.get('v');const m=u.pathname.match(/^\/(shorts|live|embed)\/([^/?#]+)/);return m?'https://www.youtube.com/watch?v='+m[2]:'';}catch{return '';}}
   function extractableVideoURL(value){try{const u=new URL(value||location.href,location.href),h=u.hostname.toLowerCase();const yt=youtubeWatchURL(u.href);if(yt)return yt;if((/(^|\.)reddit\.com$/i.test(h)||h==='redd.it')&&/\/comments\/[a-z0-9]+/i.test(u.pathname)){u.hash='';u.search='';return u.href;}if(h==='v.redd.it')return u.href;if(/(^|\.)facebook\.com$/i.test(h)||h==='fb.watch'||h==='fb.com'||/(^|\.)fb\.com$/i.test(h)){u.hash='';return u.href;}return '';}catch{return '';}}
   function extractableItem(el){const u=extractableVideoURL(location.href);if(!u)return null;return {kind:'video',mediaUrl:u,pageUrl:u,title:document.title,poster:originalURL(el?.poster||''),width:el?.videoWidth||0,height:el?.videoHeight||0,element:el};}
   function youtubeItem(el){return extractableItem(el);}
-  // The page shows a resized copy of the picture. The original file is asked
-  // for instead, so what is saved is full quality and not the thumbnail.
   function originalURL(value){
     const url=abs(value); if(!url) return '';
     try{
@@ -31,7 +22,6 @@
       return parsed.href;
     }catch{return url;}
   }
-  // The largest picture the page offers, not the small one it happens to show.
   function largestSource(img){
     if(!img) return '';
     const candidates=[];
@@ -89,9 +79,6 @@
     }
     return '';
   }
-  // A <video> that plays a blob: address is a streaming player; the page keeps
-  // the real file in its metadata instead. Ask the shared resolver, which knows
-  // how to read VideoObject/og:video without site-specific rules.
   function pageVideo(el){
     const core=globalThis.CanvasSocialCore;
     let resolved;
@@ -125,9 +112,6 @@
     for(const s of selectors){ const el=target?.closest?.(s); if(el) return el; }
     return target?.closest?.('[role="article"]');
   }
-  // The element directly under the pointer decides what is saved. The first
-  // picture or video found in the pointer's own path is the one that was
-  // clicked, even when the other kind sits nearby.
   function pickMedia(target,point,preferVideo=false){
     const path=(typeof target?.composedPath==='function'?target.composedPath():[target]).filter(Boolean);
     const candidates=[...path];
@@ -147,8 +131,6 @@
         if(info&&!imgInfo) imgInfo={kind:'image', mediaUrl:info.url, displayURL:info.displayURL, title:info.alt||document.title, alt:info.alt||'', width:info.width, height:info.height, element:info.element, poster:info.url};
       }
     }
-    // The first media element in the pointer's path is the one that was
-    // clicked. A picture under the cursor beats a video that lies behind it.
     const first=candidates.find(el=>el?.tagName==='IMG'||el?.tagName==='VIDEO');
     if(first?.tagName==='IMG'&&imgInfo) return imgInfo;
     if(first?.tagName==='VIDEO'&&videoEl){
@@ -165,8 +147,6 @@
     return imgInfo;
   }
 
-  // A real thumbnail of the thing being saved, drawn in this page so the toast
-  // can show the image or a video frame instead of a generic icon.
   async function makeThumbnail(item){
     const el=item?.element;
     try{
@@ -187,7 +167,7 @@
         canvas.getContext('2d').drawImage(el,0,0,canvas.width,canvas.height);
         return canvas.toDataURL('image/jpeg',0.72);
       }
-    }catch{ /* a cross-origin picture cannot be read back */ }
+    }catch{  }
     return '';
   }
 
@@ -204,9 +184,6 @@
     }catch{}
   }
 
-  // Alt+Right-click on a video opens this instead of saving blind, because a
-  // player can offer more than one thing worth keeping. It is the extension's
-  // own surface: the browser's menu cannot act on a blob: source.
   let menuHost=null, menuCleanup=null;
   function closeMenu(){
     if(!menuHost)return;
@@ -228,7 +205,6 @@
     const x=Math.max(8,Math.min(event.clientX??8,innerWidth-width-8));
     const y=Math.max(8,Math.min(event.clientY??8,innerHeight-height-8));
     const root=host.shadowRoot;
-    // It grows from the pointer, not from its own centre.
     const originX=Math.max(0,Math.min(width,(event.clientX??x)-x));
     const originY=Math.max(0,Math.min(height,(event.clientY??y)-y));
     root.innerHTML=`<style>
@@ -282,25 +258,17 @@
     const url=videoURL(el);
     return (url?videoItem(el,url):null)||pageVideo(el)||extractableItem(el)||{kind:'video',missing:true,element:el};
   }
-  // The focused media of the last right-click, for the browser's own context
-  // menu entry, which cannot see blob: sources.
   let lastMedia=null;
   document.addEventListener('contextmenu',e=>{
     if(!e.isTrusted)return;
     lastMedia={url:location.href,at:Date.now(),item:pickMedia(e.target,{x:e.clientX,y:e.clientY})};
   },true);
 
-  // The worker asks the page to show progress; this script is on every page.
-  // The card it draws is the single toast for a capture, so this script does
-  // not add a second one.
   chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     if(message?.type!=='capture-activity')return;
     try{ if(typeof canvasCaptureActivity==='function') canvasCaptureActivity(message.job||{},null); }catch{}
     respond({ok:true});
   });
-  // Supported social hosts keep their own focused-media handler, which knows
-  // about post galleries. Everywhere else this is the only one, and it is what
-  // lets the browser's context menu resolve a streaming video.
   if(!globalThis.CanvasSocialCore?.platformFor?.(location.href)){
     chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       if(message?.type!=='focused-media')return;
@@ -308,7 +276,6 @@
       if(lastMedia&&lastMedia.url===location.href&&Date.now()-lastMedia.at<120000){item=lastMedia.item;lastMedia=null;}
       if(!item&&document.querySelectorAll('video').length===1)item=recentVideo(null);
       if(!item)return respond(null);
-      // The DOM node is only useful inside this page; the worker needs addresses.
       const {element,...rest}=item;
       respond({...rest,pageUrl:rest.pageUrl||location.href,pageTitle:rest.pageTitle||document.title});
       return true;
@@ -326,13 +293,10 @@
     let response=null;
     try{ response=await chrome.runtime.sendMessage({type:'social-save', post:data}); }
     catch(e){
-      // The message never reached the worker, so nothing was reported on the
-      // page. Say so here, once.
       if(contextInvalidated(e)) toast('Reload this page to reconnect', false,'','The extension was reloaded');
       else toast('Could not save this post', false,'',String(e?.message||e||''));
       return true;
     }
-    // A refusal from the worker is already on the page as its own card.
     return true;
   }
 
@@ -344,33 +308,26 @@
     if(!item?.mediaUrl) return;
     const thumbnail=await makeThumbnail(item);
     try{
-      // The worker saves the file and shows one toast for it in this page.
       const response=await chrome.runtime.sendMessage({type:'quick-save', item:{...item, thumbnail, pageUrl:location.href, pageTitle:document.title}});
-      if(!response?.ok) return; // the worker already reported the failure
+      if(!response?.ok) return;
     }catch(e){
       if(contextInvalidated(e)) toast('Reload this page to reconnect', false,'','The extension was reloaded');
       else toast('Could not save', false,thumbnail,String(e?.message||e||''));
     }
   }
 
-  // Alt + Right-click (or Alt + click) saves immediately. The browser's own
-  // "save the page" behaviour is suppressed so the extension handles it.
   let lastHandled=0, lastPoint='';
   async function quickSaveFromEvent(e){
     if(!e.altKey||!e.isTrusted) return false;
     const point=`${e.clientX||0}:${e.clientY||0}`;
     const now=Date.now();
-    if(point===lastPoint && now-lastHandled<800) return true; // one gesture, one save
+    if(point===lastPoint && now-lastHandled<800) return true;
     lastPoint=point; lastHandled=now;
     if(!canUseRuntime()){ toast('Reload this page to reconnect', false,'','The extension was reloaded'); e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.(); return true; }
     const at={x:e.clientX??0,y:e.clientY??0},social=!!globalThis.CanvasSocialCore?.platformFor?.(location.href);
-    // The pointer may land on the card around a player rather than on the
-    // player itself. Only for the Alt gesture: a drag must not pick the page's
-    // only video just because it happens to exist.
     const item=pickMedia(e.target,at,true)||(social?null:recentVideo(e.target));
     if(item){
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
-      // Right-click offers a choice; a left-click saves what is under it.
       if(e.type==='contextmenu'&&item.kind==='video'){ showVideoMenu(item.mediaUrl?item:(extractableItem(item.element)||item),e); return true; }
       await saveItem(item, e.target);
       return true;
@@ -385,12 +342,9 @@
     return false;
   }
   const guard=e=>{ if(!current()) return; quickSaveFromEvent(e).catch(()=>{}); };
-  // A right-click reaches us through contextmenu; listening to the mouse-down
-  // as well would save before the menu could be shown.
   window.addEventListener('contextmenu',guard,true);
   window.addEventListener('click',e=>{ if(e.altKey && e.button===0) guard(e); },true);
 
-  // Drag and drop saver overlay
   let host=null, inside=0, dragItem=null;
   function mount(){
     if(host||!document.documentElement) return host;

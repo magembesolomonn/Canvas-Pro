@@ -1,4 +1,3 @@
-// Exercise the real sidebar without touching a user's library or window settings.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -11,8 +10,6 @@ let win;
 const run = code => win.webContents.executeJavaScript(code);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
-  // A busy machine needs longer than three seconds to settle the sidebar and let
-  // its toolbar settle.
   for (let i=0; i<400; i++) { if (await check()) return; await pause(20); }
   console.error(await run("JSON.stringify({mode:document.body.className,hover:$('.sidebar-hover-pill').outerHTML,focus:document.activeElement.id})"));
   throw Error('Sidebar check timed out');
@@ -27,8 +24,6 @@ function key(keyCode,modifiers=[]) {
   win.webContents.setBackgroundThrottling(false);
   if(win.webContents.isLoading()) await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
   await until(()=>run("!!$('#navigation button') && !$('.sidebar-active-pill').hidden"));
-  // The sections follow one another with an even gap, and Collections sits
-  // right after the Library.
   const sectionSpacing = await run("(()=>{const library=$('#navigation').getBoundingClientRect(),collections=$('[data-section=collections] > summary').getBoundingClientRect(),canvas=$('[data-section=canvas] > summary').getBoundingClientRect();return {libraryGap:collections.top-library.bottom,sectionGap:canvas.top-collections.bottom};})()");
   assert.ok(sectionSpacing.libraryGap < 36, `Collections is too far from the Library: ${sectionSpacing.libraryGap}px`);
   assert.ok(sectionSpacing.sectionGap < 36, `The section after Collections is too far: ${sectionSpacing.sectionGap}px`);
@@ -43,8 +38,6 @@ function key(keyCode,modifiers=[]) {
   key('B',['meta']);
   await until(()=>run("document.body.classList.contains('hide-sidebar')"));
   await pause(240);
-  // The gallery takes back the space the hidden sidebar was using and runs to
-  // the edge of the window.
   assert.equal(await run("$('main').getBoundingClientRect().left"),0);
   assert.equal(await run("$('.sidebar').inert"),true);
   assert.equal(await run("getComputedStyle($('.sidebar')).visibility"),'hidden');
@@ -52,7 +45,6 @@ function key(keyCode,modifiers=[]) {
   await run("$('#show-sidebar').click()");
   await until(()=>run("!document.body.classList.contains('hide-sidebar')"));
   await pause(240);
-  // ⌘B and ⌘S both toggle the sidebar.
   key('B',['meta']);
   await until(()=>run("document.body.classList.contains('hide-sidebar') && $('.sidebar').inert"));
   key('B',['meta']);

@@ -1,5 +1,3 @@
-// Capture the library in both appearances, so the design can be compared
-// with the reference.
 process.env.ASSET_TEST_MODE='1';
 process.env.AGAGWU_DATA_DIR='/private/tmp/canvas-shot-'+Date.now();
 const fs=require('node:fs'),path=require('node:path');
@@ -23,7 +21,6 @@ const out=process.argv[2]||'/private/tmp/canvas-library.png';
   await js("refresh();setView('all')");
   await new Promise(r=>setTimeout(r,900));
   fs.writeFileSync(out.replace(/\.png$/,'-library.png'),(await win.webContents.capturePage()).toPNG());
-  // Light appearance.
   await js("api.appearanceSet({theme:'light'})");
   await new Promise(r=>setTimeout(r,600));
   const light=await js(`(()=>{const s=getComputedStyle($('.sidebar')),m=getComputedStyle($('main')),c=getComputedStyle(document.body);return {sidebar:s.backgroundColor,work:m.backgroundColor,window:c.backgroundColor};})()`);

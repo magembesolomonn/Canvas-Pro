@@ -1,16 +1,10 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 
-// The models the app can download.
-//
-// Each one lives in its own folder inside the app's model directory and is
-// verified file by file, so a download that stops half way is resumed rather
-// than restarted, and a file that changed upstream is refused.
 class LocalModel{
  constructor({root,fetcher,onProgress=()=>{}}){
   this.root=root;this.fetcher=fetcher;this.onProgress=onProgress;
   this.models=new Map();
  }
- // Register a model: its manifest, and the name the app knows it by.
  define(name,manifest){
   this.models.set(name,{name,manifest,progress:{state:'idle',bytes:0,total:manifest.files.reduce((sum,file)=>sum+file.size,0)},task:null,controller:null});
   return this;
@@ -26,7 +20,6 @@ class LocalModel{
   });
   return {...entry.progress,ready,name,model:manifest.title||name,repository:manifest.repository};
  }
- // The file the worker asked for: '/clip/config.json' or '/florence-2/…'.
  file(relative){
   const path_=String(relative||'').replace(/^\//,'');
   const slash=path_.indexOf('/');
